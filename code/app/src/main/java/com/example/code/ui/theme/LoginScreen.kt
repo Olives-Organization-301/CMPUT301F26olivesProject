@@ -1,3 +1,8 @@
 package com.example.code.ui.theme
 
-class LoginScreen(){}
+import androidx.compose.runtime.Composable
+
+@Composable
+fun LoginScreen(){
+
+}
