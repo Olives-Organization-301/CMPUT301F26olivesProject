@@ -1,4 +1,4 @@
-package com.example.code
+package com.example.code.ui.theme
 
 import androidx.navigation.NavController
 
