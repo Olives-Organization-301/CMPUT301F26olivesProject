@@ -47,7 +47,7 @@ fun SearchScreen(navController: NavController) {
     // TODO: DELETE this once we connect it to a Database
     val campsitePlaceholder = remember { listOf("Campsite1", "Campsite2", "Campsite3") }
 
-    // Column Wrapping the Search/Card Screens and
+    // Column Wrapping the Search/Card Screens and Menu bar
     Column(modifier = Modifier.fillMaxSize()) {
 
         // Padded area for search screen and campsites: search field + list
