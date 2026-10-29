@@ -11,7 +11,7 @@ fun CampsiteNavController() {
     val navController = rememberNavController()
 
     NavHost(navController = navController, startDestination = "searchScreen") {
-        composable("searchScreen") { searchScreen(navController) }
-        composable("campsiteDetails") { campsiteDetailsScreen(navController) }
+        composable("searchScreen") { SearchScreen(navController) }
+        composable("campsiteDetails") { CampsiteDetailsScreen(navController) }
     }
 }
