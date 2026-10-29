@@ -4,6 +4,7 @@ package com.example.code.classes
  * Use: import com.example.code.classes.Administrator to use it in main files
  *
  */
+
 class Administrator(
     username: String,
     email: String,
