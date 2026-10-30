@@ -42,7 +42,7 @@ import androidx.navigation.NavController
  *
  */
 @Composable
-fun SearchScreen(navController: NavController) {
+fun MainSearchScreen(navController: NavController) {
     var searchString by remember { mutableStateOf("") }
     // TODO: DELETE this once we connect it to a Database
     val campsitePlaceholder = remember { listOf("Campsite1", "Campsite2", "Campsite3") }

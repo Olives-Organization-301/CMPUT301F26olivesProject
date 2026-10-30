@@ -9,9 +9,9 @@ abstract class User(
     private var email: String,
     private val userID: UInt
 ) {
-//    fun getUsername(): String = username
-//    fun getEmail(): String = email
-//    fun getUserID(): UInt = userID
+//    abstract fun getUsername(): String
+//    abstract fun getEmail(): String
+//    abstract fun getUserID(): UInt
 
 
 }
