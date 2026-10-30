@@ -210,13 +210,14 @@ private fun HomeButton(
 }
 
 
+@Preview(name = "Light Mode", showBackground = true, widthDp = 360, heightDp = 720)
 @Composable
-private fun LoginScreenLightPreview() {
+fun LoginScreenLightPreview() {
     LoginScreenContent(darkTheme = false)
 }
 
-@Preview(showBackground = true, widthDp = 360, heightDp = 720)
+@Preview(name = "Dark Mode", showBackground = true, widthDp = 360, heightDp = 720)
 @Composable
-private fun LoginScreenDarkPreview() {
+fun LoginScreenDarkPreview() {
     LoginScreenContent(darkTheme = true)
 }
