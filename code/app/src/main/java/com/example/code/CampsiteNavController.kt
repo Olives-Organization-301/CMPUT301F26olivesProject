@@ -10,7 +10,15 @@ fun CampsiteNavController() {
     val navController = rememberNavController()
 
     NavHost(navController = navController, startDestination = "searchScreen") {
+        // MAIN ENTRY POINT
+
+        // ENTRANT SCREENS
         composable("searchScreen") { SearchScreen(navController) }
         composable("campsiteDetails") { CampsiteDetailsScreen(navController) }
+
+        // CAMPSITE OWNER SCREENS
+
+
+        // ADMIN SCREENS
     }
 }
