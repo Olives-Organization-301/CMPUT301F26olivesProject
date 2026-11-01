@@ -72,8 +72,8 @@ fun LoginScreen(
     darkTheme: Boolean = isSystemInDarkTheme()
 ) {
     LoginScreenContent(
-        onSignUp = { navController.navigate("searchScreen") },//takes you to the campsite search screen for now, there will be a login screen soon
-        onLogIn = { navController.navigate("searchScreen") },
+        onSignUp = { navController.navigate("mainSearchScreen") },
+        onLogIn = { navController.navigate("mainSearchScreen") },
         onPrivacyPolicy = {},
         darkTheme = darkTheme
     )
