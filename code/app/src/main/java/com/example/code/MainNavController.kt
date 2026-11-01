@@ -10,7 +10,7 @@ fun CampsiteNavController() {
     val navController = rememberNavController()
 
     NavHost(navController = navController, startDestination = "loginScreen") {
-        // MAIN ENTRY POINT
+        // MAIN ENTRY POINTs
         composable("loginScreen") { LoginScreen(navController) }
 
         // ENTRANT SCREENS
