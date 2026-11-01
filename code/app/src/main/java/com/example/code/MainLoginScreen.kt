@@ -42,7 +42,7 @@ private data class HomeColors(//Holds all the color tokens for the login screen
     val secondaryText: Color
 )
 
-private val LightColors = HomeColors(//sets the colors for light mode and dark mode
+private val LightColors = HomeColors(//sets the colors for light mode and dark modes
     gradient = listOf(Color(0xFFFFF8EE), Color(0xFFFDE8CB)),
     title = Color(0xFF2B1B17),
     subtitle = Color(0xFF7A6A62),
@@ -72,8 +72,8 @@ fun LoginScreen(
     darkTheme: Boolean = isSystemInDarkTheme()
 ) {
     LoginScreenContent(
-        onSignUp = { navController.navigate("searchScreen") },//takes you to the campsite search screen for now, there will be a login screen soon
-        onLogIn = { navController.navigate("searchScreen") },
+        onSignUp = { navController.navigate("mainSearchScreen") },
+        onLogIn = { navController.navigate("mainSearchScreen") },
         onPrivacyPolicy = {},
         darkTheme = darkTheme
     )
