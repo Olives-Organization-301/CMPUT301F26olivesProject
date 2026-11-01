@@ -1,5 +1,6 @@
 package com.example.code
 
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
@@ -210,14 +211,13 @@ private fun HomeButton(
 }
 
 
-@Preview(name = "Light Mode", showBackground = true, widthDp = 360, heightDp = 720)
 @Composable
-fun LoginScreenLightPreview() {
+private fun LoginScreenLightPreview() {
     LoginScreenContent(darkTheme = false)
 }
 
-@Preview(name = "Dark Mode", showBackground = true, widthDp = 360, heightDp = 720)
+@Preview(showBackground = true, widthDp = 360, heightDp = 720)
 @Composable
-fun LoginScreenDarkPreview() {
+private fun LoginScreenDarkPreview() {
     LoginScreenContent(darkTheme = true)
 }
