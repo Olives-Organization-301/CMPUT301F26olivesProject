@@ -9,7 +9,7 @@ import androidx.navigation.compose.rememberNavController
 fun CampsiteNavController() {
     val navController = rememberNavController()
 
-    NavHost(navController = navController, startDestination = "profileScreen") {
+    NavHost(navController = navController, startDestination = "campsiteOwnerMainScreen") {
         // MAIN ENTRY POINT
 
         // ENTRANT SCREENS
@@ -27,7 +27,7 @@ fun CampsiteNavController() {
         */
 
         // CAMPSITE OWNER SCREENS
-
+        composable("campsiteOwnerMainScreen"){campsiteOwnerMainScreen(navController)}
 
         // ADMIN SCREENS
 
