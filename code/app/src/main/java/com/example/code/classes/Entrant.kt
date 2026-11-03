@@ -3,7 +3,7 @@ package com.example.code.classes
 class Entrant(
     username: String,
     email: String,
-    userID: UInt
+    userID: String
 ): User(username, email, userID) {
 
     private var activeCampsites = mutableListOf<Campsite>()
