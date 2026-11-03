@@ -43,7 +43,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.window.Dialog
 import java.text.SimpleDateFormat
@@ -51,7 +50,9 @@ import java.util.Locale
 import java.util.Calendar
 import java.util.Date
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.ui.window.DialogProperties
+import com.example.code.classes.PreviewCampsite
 
 
 /** # Search Screen
@@ -66,8 +67,10 @@ import androidx.compose.ui.window.DialogProperties
 fun campsiteOwnerMainScreen(navController: NavController) {
     var searchString by remember { mutableStateOf("") }
     var showAdd by remember {mutableStateOf(false)}
+    var showEdit by remember {mutableStateOf<PreviewCampsite?>(null)}
+    val format = remember { SimpleDateFormat("MMM d, yyyy",Locale.getDefault()) }
     // TODO: DELETE this once we connect it to a Database
-    val campsitePlaceholder = remember { listOf("Campsite1", "Campsite2") }
+    val previewCampsites = remember { mutableStateListOf(PreviewCampsite(name = "Campsite1", location = "Location1",startMillis = null, endMillis = null)) }
 
     // Column Wrapping the Search/Card Screens and Menu bar
     Column(modifier = Modifier.fillMaxSize()) {
@@ -97,7 +100,7 @@ fun campsiteOwnerMainScreen(navController: NavController) {
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     contentPadding = PaddingValues(vertical = 12.dp)
                 ) {
-                    items(campsitePlaceholder) { campsite ->
+                    items(previewCampsites) { preview->
                         /*
                     * Card Button is used to Turn have the Card UI that we desire
                     * Each Campsite has a little box dedicated to itself
@@ -130,10 +133,10 @@ fun campsiteOwnerMainScreen(navController: NavController) {
                                 )
                                 Spacer(Modifier.width(12.dp))
                                 Column {
-                                    Text(campsite)
-                                    Text("Location")
-                                    Text("Lottery Date Entry")
-                                    Text("Lottery Date End")
+                                    Text(preview.name)
+                                    Text(preview.location)
+                                    Text("Entry: " + (preview.startMillis?.let { format.format(Date(it)) } ?: "Not set"))
+                                    Text("End: " + (preview.endMillis?.let { format.format(Date(it)) } ?: "Not set"))
 
                                 }
 
@@ -143,7 +146,7 @@ fun campsiteOwnerMainScreen(navController: NavController) {
                                     verticalArrangement = Arrangement.spacedBy(8.dp),
                                     horizontalAlignment = Alignment.End
                                 ) {
-                                    Button(onClick = { }) { Text("  Edit  ", maxLines = 1) }
+                                    Button(onClick = { showEdit = preview }) { Text("  Edit  ", maxLines = 1) }
                                     Button(onClick = { }) { Text("Lottery", maxLines = 1) }
                                 }
 
@@ -176,7 +179,28 @@ fun campsiteOwnerMainScreen(navController: NavController) {
         }
     }
     if(showAdd){
-        AddCampsite(onDismiss = {showAdd = false})
+        AddEditCampsite(
+            title = "Add Campsite",
+            initial = null,
+            onDismiss = {showAdd = false},
+            onSave = { newCampsite ->
+                previewCampsites.add(newCampsite)
+                showAdd = false
+            }
+        )
+    }
+
+    showEdit?.let{ current ->
+        AddEditCampsite(
+            title = "Edit Campsite",
+            initial = current,
+            onDismiss = {showEdit = null},
+            onSave = {updated ->
+                val i = previewCampsites.indexOfFirst {it === current }
+                if( i>= 0) previewCampsites[i] = updated
+                showEdit = null
+            }
+        )
     }
 }
 
@@ -184,18 +208,24 @@ fun campsiteOwnerMainScreen(navController: NavController) {
 Implementation of owner screen as outlined in the figma. Search screen was used as reference.
 AddCampsite, pickdate, and parts of campsiteOwnerMainScreen UI were developed using claude 3.5 in
 this chat: https://claude.ai/share/140477f9-42aa-4b16-8189-dad57b7d8afb
+Prompt: "How do I change this so that the delete and edit buttons are on top of each other at the end of each card"
  */
 @Composable
-fun AddCampsite(onDismiss: () -> Unit){
-    var name by remember {mutableStateOf("")}
-    var location by remember {mutableStateOf("")}
+fun AddEditCampsite(
+    title: String,
+    initial: PreviewCampsite?,
+    onDismiss: () -> Unit,
+    onSave: (PreviewCampsite) -> Unit){
+
+    var name by remember {mutableStateOf(initial?.name ?: "")}
+    var location by remember {mutableStateOf(initial?.location ?: "")}
     var startMillis by remember { mutableStateOf<Long?>(null)}
     var endMillis by remember { mutableStateOf<Long?>(null)}
     val context = LocalContext.current
     val format = remember { SimpleDateFormat("MMM d, yyyy",Locale.getDefault()) }
 
     val startText = startMillis?.let {format.format(Date(it))} ?:"Not set"
-    val endText = startMillis?.let {format.format(Date(it))} ?:"Not set"
+    val endText = endMillis?.let {format.format(Date(it))} ?:"Not set"
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -214,11 +244,22 @@ fun AddCampsite(onDismiss: () -> Unit){
                         Icon(Icons.Filled.Close, contentDescription = "Close")
                     }
                     Text(
-                        text = "Add Campsite",
+                        text = title,
                         style = MaterialTheme.typography.titleLarge,
                         modifier = Modifier.weight(1f)
                     )
-                    TextButton(onClick = { onDismiss() }) {
+                    TextButton(onClick = {
+                        onSave(
+                            PreviewCampsite(
+                                name = name,
+                                location = location,
+                                startMillis = startMillis,
+                                endMillis = endMillis
+                            )
+                        )
+                    },
+                        enabled = name.isNotBlank()
+                    ) {
                         Text("Save")
                     }
                 }
@@ -266,6 +307,8 @@ fun AddCampsite(onDismiss: () -> Unit){
     }
 
 }
+
+
 
 fun pickDate(context: Context, minMillis: Long?, onPicked: (Long) -> Unit){
     val cal = Calendar.getInstance()
