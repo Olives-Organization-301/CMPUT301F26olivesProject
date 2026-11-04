@@ -37,12 +37,22 @@ class Campsite(
     fun getEndDate(): LocalDateTime = endDate
 
     fun generateFinalList() {
-        var i = maxOccupancy
-        while (i != 0) {
-            val randomInd = Random.nextInt(0, waitingList.lastIndex)
-            finalList.add(waitingList[randomInd])
-            waitingList.removeAt(waitingList.lastIndex)
-            i -= 1
+        var capacity = maxOccupancy
+
+        //if more capacity than entrants, all entrants make the final list
+        if(waitingList.size <= capacity){
+            finalList = waitingList.toMutableList() // use .toMutableList() to create a copy instead of an alias
+            waitingList.clear()
+        } else {
+            while (capacity != 0) {
+                // use .size instead of .lastInt because the until value in kotlin ranges is exclusive
+                val randomInd = Random.nextInt(0, waitingList.size)
+
+                // add random entrant to final list, and remove from waitlist
+                finalList.add(waitingList[randomInd])
+                waitingList.removeAt(randomInd)
+                capacity -= 1
+            }
         }
     }
 
