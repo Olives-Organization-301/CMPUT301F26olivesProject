@@ -5,13 +5,10 @@ package com.example.code.classes
  *
  */
 abstract class User(
-    protected var username: String,
-    private var email: String,
-    private val userID: UInt
+    var username: String,
+    var email: String,
+    private val userID: String
 ) {
-//    abstract fun getUsername(): String
-//    abstract fun getEmail(): String
-//    abstract fun getUserID(): UInt
-
+    fun getUserID(): String { return userID }
 
 }
