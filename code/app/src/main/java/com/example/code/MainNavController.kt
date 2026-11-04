@@ -28,7 +28,7 @@ fun CampsiteNavController() {
         */
 
         // CAMPSITE OWNER SCREENS
-
+        composable("campsiteOwnerMainScreen"){campsiteOwnerMainScreen(navController)}
 
         // ADMIN SCREENS
 
