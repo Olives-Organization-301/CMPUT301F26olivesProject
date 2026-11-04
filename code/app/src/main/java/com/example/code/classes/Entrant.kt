@@ -9,6 +9,8 @@ class Entrant(
     private var activeCampsites = mutableListOf<Campsite>()
     private var waitingListCampsites = mutableListOf<Campsite>()
 
+    private var campsiteLists = mapOf<String, Campsite>()
+
     fun addActiveCampsite(campsite: Campsite) {
         activeCampsites.add(campsite)
     }

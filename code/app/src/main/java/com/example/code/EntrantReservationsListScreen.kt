@@ -41,7 +41,10 @@ import androidx.navigation.NavController
 
 // Conversation: https://claude.ai/share/4dfdf023-c5f7-4f56-b9f3-f9e8bb4d5756
 @Composable
-fun ReservationsListScreen(navController: NavController) {
+fun ReservationsListScreen(
+    navController: NavController,
+
+) {
     // TODO: DELETE these temporary variables once we connect it to a Database
     val campsitePlaceholder = remember { mutableStateListOf("Campsite1", "Campsite2", "Campsite3") }
     val myLists = remember {
@@ -172,7 +175,9 @@ fun ReservationsListScreen(navController: NavController) {
                             Text(
                                 text = "✕",
                                 fontSize = 22.sp,
-                                modifier = Modifier.clickable { campsitePlaceholder.remove(campsite) }
+                                modifier = Modifier.clickable {
+                                    campsitePlaceholder.remove(campsite)
+                                }
                             )
                             Text(
                                 text = if (starred) "★" else "☆",

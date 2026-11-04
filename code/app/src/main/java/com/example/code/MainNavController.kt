@@ -1,12 +1,18 @@
 package com.example.code
 
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.compose.runtime.Composable
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.example.code.classes.Campsite
 
+@RequiresApi(Build.VERSION_CODES.O)
 @Composable
-fun CampsiteNavController() {
+fun CampsiteNavController(
+    campsiteDatabase: MutableList<Campsite>,
+) {
     val navController = rememberNavController()
 
     NavHost(navController = navController, startDestination = "loginScreen") {
@@ -14,8 +20,8 @@ fun CampsiteNavController() {
         composable("loginScreen") { LoginScreen(navController) }
 
         // ENTRANT SCREENS
-        composable("mainSearchScreen") { MainSearchScreen(navController) }
-        composable("campsiteDetails") { CampsiteDetailsScreen(navController) }
+        composable("mainSearchScreen") { MainSearchScreen(navController, campsiteDatabase) }
+        composable("campsiteDetails") { CampsiteDetailsScreen(navController, campsiteDatabase, "1") }
         composable("reservationsListScreen") { ReservationsListScreen(navController) }
         composable("profileScreen") { ProfileScreen(navController) }
         /* TODO: There should be only 4 Entrants Screens.

@@ -31,6 +31,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.example.code.classes.Campsite
 
 // TODO: DELETE these colours. We want colour choices to be in ui.Theme
 private val ScreenBackground = Color(0xFFFDF8F3)
@@ -39,7 +40,11 @@ private val ImagePlaceholder = Color(0xFFE6DFD8)
 
 // Conversation: https://claude.ai/chat/073b54ab-b55c-4752-a1ab-e436a65fdb6a
 @Composable
-fun CampsiteDetailsScreen(navController: NavController) {
+fun CampsiteDetailsScreen(
+    navController: NavController,
+    campsiteDatabase: MutableList<Campsite>,
+    campsiteID: String,
+) {
 
     // Entire Interface
     // Wrap the Join Buttons

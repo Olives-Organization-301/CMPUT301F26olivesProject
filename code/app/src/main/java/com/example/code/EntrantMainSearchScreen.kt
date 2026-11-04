@@ -1,5 +1,7 @@
 package com.example.code
 
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -32,20 +34,41 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import com.example.code.classes.Campsite
+import java.time.LocalDateTime
 
 /** # Search Screen
  *  Implementation of the Entrants' Main Screen as seen in the Figma.
  *
  *  Prototype was gained from this conversation with Claude Sonnet 5.0:
  *  https://claude.ai/chat/fa52c57a-03b0-486b-b988-87d2f36ff18a
+ *  https://claude.ai/chat/e0b977ee-8243-4d21-b3ca-40ef221146a9 (The Searching stuff)
  *  Prompt: "How do I Correctly pad this Main screen? How do I make the Cards?"
  *
  */
+@RequiresApi(Build.VERSION_CODES.O)
 @Composable
-fun MainSearchScreen(navController: NavController) {
+fun MainSearchScreen(navController: NavController, campsiteDatabase: MutableList<Campsite>) {
     var searchString by remember { mutableStateOf("") }
-    // TODO: DELETE this once we connect it to a Database
-    val campsitePlaceholder = remember { listOf("Campsite1", "Campsite2", "Campsite3") }
+
+    // TODO: Add an actual filter
+    val fromDate: LocalDateTime? = LocalDateTime.parse("2024-02-15T16:48:59")
+    val selectedCountry by remember { mutableStateOf("") }
+
+    val visibleCampsites = remember(campsiteDatabase.toList(), searchString) {
+        campsiteDatabase
+            .asSequence() // Android-style feature
+            .filter { campsite ->
+                (selectedCountry == "" || campsite.getCoordinates().getCountry() == selectedCountry) &&
+                        (fromDate == null || campsite.getStartDate() >= fromDate)
+            }
+            // Sort by Levenshtein Distance
+            .map { it to levenshteinDist(searchString, it.getName()) }
+            .sortedBy { (_, dist) -> dist }
+            .take(100) // Show 100 campsites
+            .map { (campsite, _) -> campsite }
+            .toList() // Turn it back to campsite
+    }
 
     // Column Wrapping the Search/Card Screens and Menu bar
     Column(modifier = Modifier.fillMaxSize()) {
@@ -73,7 +96,7 @@ fun MainSearchScreen(navController: NavController) {
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 contentPadding = PaddingValues(vertical = 12.dp)
             ) {
-                items(campsitePlaceholder) { campsite ->
+                items(visibleCampsites) { campsite ->
                     /*
                     * Card Button is used to Turn have the Card UI that we desire
                     * Each Campsite has a little box dedicated to itself
@@ -81,6 +104,9 @@ fun MainSearchScreen(navController: NavController) {
                     * Before the Campsite data is listed in its size
                      */
                     Card(
+                        onClick = {
+                            navController.navigate("campsiteDetails")
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(120.dp),
@@ -106,10 +132,10 @@ fun MainSearchScreen(navController: NavController) {
                             )
                             Spacer(Modifier.width(12.dp))
                             Column {
-                                Text(campsite)
-                                Text("Location")
-                                Text("Lottery Date Entry")
-                                Text("Lottery Date End")
+                                Text(campsite.getName())
+                                Text(campsite.getCoordinates().getCountry())
+                                Text(campsite.getStartDate().toString())
+                                Text(campsite.getEndDate().toString())
                             }
                         }
                     }
@@ -127,9 +153,46 @@ fun MainSearchScreen(navController: NavController) {
                 .padding(8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Button(onClick = { }, modifier = Modifier.weight(1f)) { Text("List", maxLines = 1) }
-            Button(onClick = { }, modifier = Modifier.weight(1f)) { Text("Alerts", maxLines = 1) }
-            Button(onClick = { }, modifier = Modifier.weight(1f)) { Text("Account", maxLines = 1) }
+            Button(onClick = {
+                navController.navigate("reservationsListScreen")
+            },
+                modifier = Modifier.weight(1f)) {
+                Text("List", maxLines = 1)
+            }
+            Button(onClick = {
+
+            },
+                modifier = Modifier.weight(1f)) {
+                Text("Alerts", maxLines = 1)
+            }
+            Button(onClick = {
+                navController.navigate("profileScreen")
+            },
+                modifier = Modifier.weight(1f)) {
+                Text("Account", maxLines = 1)
+            }
         }
     }
+}
+
+fun levenshteinDist(a: String, b: String): Int {
+    val aLength = a.length + 1
+    val bLength = b.length + 1
+    val levArr = Array(aLength) { IntArray(bLength) }
+    val cost: (Char, Char) -> Int = { x, y -> if (x == y) 0 else 1 }
+
+    for (i in 0 until aLength) { levArr[i][0] = i }
+    for (j in 0 until bLength) { levArr[0][j] = j }
+
+    for (i in 1 until aLength) {
+        for (j in 1 until bLength) {
+            levArr[i][j] = minOf(
+                levArr[i - 1][j] + 1,
+                levArr[i][j - 1] + 1,
+                levArr[i - 1][j - 1] + cost(a[i - 1], b[j - 1])
+            )
+        }
+    }
+
+    return levArr[a.length][b.length]
 }
