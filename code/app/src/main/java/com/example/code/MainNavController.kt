@@ -24,6 +24,7 @@ fun CampsiteNavController(
         composable("campsiteDetails") { CampsiteDetailsScreen(navController, campsiteDatabase, "1") }
         composable("reservationsListScreen") { ReservationsListScreen(navController) }
         composable("profileScreen") { ProfileScreen(navController) }
+        composable("entrantAlerts") {EntrantAlertsScreen(navController)}
         /* TODO: There should be only 4 Entrants Screens.
             QR Screen, Map Screen, Date Selections, Edit Profile, Policy and Filter Settings should
             be Popups instead when toggled.
