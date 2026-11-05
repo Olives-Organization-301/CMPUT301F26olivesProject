@@ -1,11 +1,21 @@
 package com.example.code
-import androidx.compose.runtime.mutableStateListOf
-import com.google.firebase.Firebase
-import com.google.firebase.firestore.firestore
-import com.example.code.classes.Administrator
+import com.google.firebase.firestore.DocumentId
 
-class DatabaseAdmins {
-    private val db = Firebase.firestore
-    private val entrantsRef = db.collection("administrators")
-    private val _campsites = mutableListOf<Administrator>()
+/**
+ * Repository for the "Admins" Firestore collection.
+ *
+ * To use it, create an instance and call add, update, delete
+ * The Admin model is stored in each document. The id field is filled
+ * automatically with the document ID.
+ */
+// Class was built with the help of Claude
+
+class DatabaseAdmins : FirestoreRepository<DatabaseAdmins.Admin>("Admins", DatabaseAdmins.Admin::class.java) {
+
+    data class Admin(
+        @DocumentId val id: String = "",
+        val name: String = "",
+        val email: String = "",
+        val password: String = ""
+    )
 }

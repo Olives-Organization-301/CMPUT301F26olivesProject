@@ -1,27 +1,22 @@
 package com.example.code
-import androidx.compose.runtime.mutableStateListOf
-import com.google.firebase.Firebase
-import com.google.firebase.firestore.firestore
-import com.example.code.classes.Entrant
+import com.google.firebase.firestore.DocumentId
 
+/**
+ * Repository for the "Entrants" Firestore collection.
+ *
+ * To use it, create an instance and call add, update, delete
+ * The Entrant model is stored in each document. The id field is filled
+ * automatically with the document ID.
+ */
 
-class DatabaseEntrants {
-    private val db = Firebase.firestore
-    private val entrantsRef = db.collection("entrants")
-    private val _entrants = mutableStateListOf<Entrant>()
+// Class was built with the help of Claude
 
-    val entrants: List<Entrant> get() = _entrants
+class DatabaseEntrants : FirestoreRepository<DatabaseEntrants.Entrant>("Entrants", DatabaseEntrants.Entrant::class.java) {
 
-    fun addEntrant(entrant: Entrant) {
-        entrantsRef.document(entrant.getUserID()).set(entrant)
-    }
-
-    fun updateEntrantUsername(entrant: Entrant, newUsername: String) {
-        entrantsRef.document(entrant.username).set(newUsername)
-    }
-
-    fun deleteEntrant(entrant: Entrant) {
-        entrantsRef.document(entrant.getUserID()).delete()
-    }
-
+    data class Entrant(
+        @DocumentId val id: String = "",
+        val name: String = "",
+        val email: String = "",
+        val password: String = ""
+    )
 }

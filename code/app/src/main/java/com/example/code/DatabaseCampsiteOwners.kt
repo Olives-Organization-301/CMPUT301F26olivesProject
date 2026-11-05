@@ -1,11 +1,21 @@
 package com.example.code
-import androidx.compose.runtime.mutableStateListOf
-import com.google.firebase.Firebase
-import com.google.firebase.firestore.firestore
-import com.example.code.classes.CampsiteOwner
+import com.google.firebase.firestore.DocumentId
 
-class DatabaseCampsiteOwners {
-    private val db = Firebase.firestore
-    private val entrantsRef = db.collection("campsiteOwners")
-    private val _campsites = mutableListOf<CampsiteOwner>()
+/**
+ * Repository for the "CampsiteOwners" Firestore collection.
+ *
+ * To use it, create an instance and call add, update, delete
+ * The CampsiteOwner model is stored in each document. The id field is filled
+ * automatically with the document ID.
+ */
+// Class was built with the help of Claude
+class DatabaseCampsiteOwners : FirestoreRepository<DatabaseCampsiteOwners.CampsiteOwner>("CampsiteOwners", DatabaseCampsiteOwners.CampsiteOwner::class.java) {
+
+    data class CampsiteOwner(
+        @DocumentId val id: String = "",
+        val name: String = "",
+        val email: String = "",
+        val password: String = "",
+        val phone: String = ""
+    )
 }
