@@ -160,7 +160,7 @@ fun MainSearchScreen(navController: NavController, campsiteDatabase: MutableList
                 Text("List", maxLines = 1)
             }
             Button(onClick = {
-
+                navController.navigate("entrantAlerts")
             },
                 modifier = Modifier.weight(1f)) {
                 Text("Alerts", maxLines = 1)
