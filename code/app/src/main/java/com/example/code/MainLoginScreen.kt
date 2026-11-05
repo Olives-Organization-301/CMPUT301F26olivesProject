@@ -1,7 +1,5 @@
 package com.example.code
 
-import android.app.AlertDialog
-import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
