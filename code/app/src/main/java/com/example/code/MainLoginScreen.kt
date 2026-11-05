@@ -1,5 +1,7 @@
 package com.example.code
 
+import android.app.AlertDialog
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
@@ -22,6 +24,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.google.firebase.Firebase
+import com.google.firebase.auth.auth
 
 /** # Search Screen
  *  Implementation of the Entrants' Login screen as seen in the Figma.
@@ -72,8 +76,8 @@ fun LoginScreen(
     darkTheme: Boolean = isSystemInDarkTheme()
 ) {
     LoginScreenContent(
-        onSignUp = { navController.navigate("mainSearchScreen") },
-        onLogIn = { navController.navigate("mainSearchScreen") },
+        onSignUp = { signIn(navController) },
+        onLogIn = { signIn(navController) },
         onPrivacyPolicy = {},
         darkTheme = darkTheme
     )
@@ -206,6 +210,16 @@ private fun HomeButton(
         )
     ) {
         Text(text = label, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+fun signIn(navController: NavController){
+    if(Firebase.auth.currentUser == null){
+        Firebase.auth.signInAnonymously().addOnSuccessListener {
+            navController.navigate("mainSearchScreen")
+        }
+    } else {
+        navController.navigate("mainSearchScreen")
     }
 }
 
