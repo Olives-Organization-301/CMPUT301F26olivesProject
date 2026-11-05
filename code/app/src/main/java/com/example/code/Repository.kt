@@ -4,7 +4,7 @@ package com.example.code
  * to which FireBase repository implements
  * **/
 
-// Interface was built with the help of Claude
+// Interface was built with the help of Claude : https://claude.ai/chat/6b55aa79-e6e7-49f3-bdb6-21e1a4a4dd95
 
 interface Repository<T : Any>{
     suspend fun add(item: T): String

@@ -16,7 +16,7 @@ import kotlinx.coroutines.tasks.await
  * coroutine starts at the line after await()
  * **/
 
-// Class was built with the help of Claude
+// Class was built with the help of Claude : https://claude.ai/chat/6b55aa79-e6e7-49f3-bdb6-21e1a4a4dd95
 abstract class FirestoreRepository<T : Any>(
     collectionPath: String,
     private val itemClass: Class<T>
