@@ -50,7 +50,16 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 
-// Conversation: https://claude.ai/share/4dfdf023-c5f7-4f56-b9f3-f9e8bb4d5756
+/**
+ *  ReservationListScreen: Where the Entrant can use past and present campsites, and delete them
+ *  From Lists
+ *  I used Sonnet 5.0 to integrate the backend and
+ *  Prompt: "Can you make the GUI based on the given Image?"
+ *  Conversation: https://claude.ai/share/4dfdf023-c5f7-4f56-b9f3-f9e8bb4d5756
+ *
+ *  Prompt: "Can you itnegrate the database with the frontend?"
+ *  Conversation: https://claude.ai/share/b0990579-fe55-4946-828d-1830efc58118
+ */
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun ReservationsListScreen(
@@ -180,6 +189,11 @@ fun ReservationsListScreen(
 
 }
 
+/** The Main Function that puts the Campsite Card
+ * Used Sonnet 5.0 in order to get the card
+ * Prompt: "Can you make the card its own function?"
+ * Conversation: https://claude.ai/share/b0990579-fe55-4946-828d-1830efc58118
+ */
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun CampsiteCard(

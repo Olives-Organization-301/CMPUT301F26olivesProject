@@ -9,6 +9,9 @@ import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.firestore
 
+/** Database of Entrants, representing the Entrants' screens
+ *
+ */
 class DatabaseEntrants() {
     private val db = Firebase.firestore
     private val entrantsRef = db.collection("Entrants")
@@ -47,5 +50,24 @@ class DatabaseEntrants() {
         entrant.removeCampsite(listKey, campsiteID)   // keep the in-memory copy in sync
         entrantsRef.document(entrant.getUserID())
             .update(FieldPath.of("campsiteLists", listKey), FieldValue.arrayRemove(campsiteID))
+    }
+
+    init {
+        entrantsRef.addSnapshotListener { snapshots, error ->
+            if (error != null) {
+                android.util.Log.e("DB", "entrants listener failed", error)
+                return@addSnapshotListener
+            }
+            if (snapshots == null) return@addSnapshotListener
+            _entrants.clear()
+            _entrants.addAll(snapshots.documents.map { doc ->
+                Entrant(
+                    doc.getString("username") ?: "",
+                    doc.getString("email") ?: "",
+                    doc.getString("userID") ?: doc.id
+                )
+            })
+            android.util.Log.d("DB", "Entrants loaded: ${_entrants.size}")
+        }
     }
 }

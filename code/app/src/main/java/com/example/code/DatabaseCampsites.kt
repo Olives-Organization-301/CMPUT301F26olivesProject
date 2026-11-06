@@ -9,12 +9,35 @@ import com.google.firebase.firestore.firestore
 import java.time.LocalDateTime
 import kotlin.random.Random
 
-class DatabaseCampsites {
+/** Database of Campsites
+ * represents every Campsite cached by the system, regardless of owner
+ * Since every campsite class has its owner, use
+ */
+class DatabaseCampsites() {
     private val db = Firebase.firestore
     private val campsitesRef = db.collection("campsites")
     private val _campsites = mutableStateListOf<Campsite>()
 
     val campsites: List<Campsite> get() = _campsites
+
+    init {
+        campsitesRef.addSnapshotListener { snapshots, error ->
+            if (error != null) {
+                android.util.Log.e("DB", "campsites listener failed", error)
+                return@addSnapshotListener
+            }
+            if (snapshots == null) return@addSnapshotListener
+            _campsites.clear()
+            snapshots.documents.forEach { doc ->
+                searchCampsite(doc.id) { campsite ->
+                    if (campsite != null && _campsites.none { it.campsiteID == campsite.campsiteID }) {
+                        _campsites.add(campsite)
+                    }
+                    android.util.Log.d("DB", "Campsites loaded: ${_campsites.size}")
+                }
+            }
+        }
+    }
 
     // Generate a unique numeric string ID between 1 and 1,000,000 without repetition
     fun generateUniqueCampsiteID(onResult: (String) -> Unit) {
@@ -181,9 +204,14 @@ class DatabaseCampsites {
                     }
                 }
                 onResult(list)
+
             }
             .addOnFailureListener {
                 onResult(emptyList())
             }
+
+
+
+        }
     }
-}
+

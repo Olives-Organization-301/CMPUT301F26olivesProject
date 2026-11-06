@@ -5,6 +5,9 @@ import com.example.code.classes.CampsiteOwner
 import com.google.firebase.Firebase
 import com.google.firebase.firestore.firestore
 
+/** Database used to let campsite owners persist in the database
+ *
+ */
 class DatabaseCampsiteOwners {
     private val db = Firebase.firestore
     private val campsiteOwnersRef = db.collection("CampsiteOwners")
@@ -33,6 +36,7 @@ class DatabaseCampsiteOwners {
         campsiteOwnersRef.document(campsiteOwner.getUserID()).delete()
     }
 
+    // Search for campsite Owners
     fun searchCampsiteOwner(ownerID: String, onResult: (CampsiteOwner?) -> Unit) {
         campsiteOwnersRef.document(ownerID).get()
             .addOnSuccessListener { doc ->
@@ -77,5 +81,24 @@ class DatabaseCampsiteOwners {
             .addOnFailureListener {
                 onResult(null)
             }
+    }
+
+    init {
+        campsiteOwnersRef.addSnapshotListener { snapshots, error ->
+            if (error != null) {
+                android.util.Log.e("DB", "owners listener failed", error)
+                return@addSnapshotListener
+            }
+            if (snapshots == null) return@addSnapshotListener
+            _campsiteOwners.clear()
+            _campsiteOwners.addAll(snapshots.documents.map { doc ->
+                CampsiteOwner(
+                    doc.getString("username") ?: "",
+                    doc.getString("email") ?: "",
+                    doc.getString("userID") ?: doc.id
+                )
+            })
+            android.util.Log.d("DB", "Owners loaded: ${_campsiteOwners.size}")
+        }
     }
 }
