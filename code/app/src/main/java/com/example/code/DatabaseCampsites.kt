@@ -56,6 +56,19 @@ class DatabaseCampsites {
         }
     }
 
+    fun updateCampsiteRating(campsite: Campsite, newRating: Float) {
+        try {
+            val index = _campsites.indexOfFirst { it.campsiteID == campsite.campsiteID }
+            if (index != -1) {
+                campsite.setRating(newRating)
+                _campsites[index] = campsite
+            }
+            campsitesRef.document(campsite.campsiteID).update("rating", newRating)
+        } catch (e: Exception) {
+            // Catch exception
+        }
+    }
+
     fun deleteCampsite(campsite: Campsite) {
         try {
             _campsites.removeAll { it.campsiteID == campsite.campsiteID }
@@ -74,7 +87,7 @@ class DatabaseCampsites {
                         val ownerID = doc.getString("ownerID") ?: doc.getString("OwnerID") ?: ""
                         val maxOcc = doc.getLong("maxOccupancy")?.toInt() ?: 4
                         val price = doc.getDouble("price")?.toFloat() ?: 50.0f
-                        val rating = doc.getDouble("rating")?.toFloat() ?: 5.0f
+                        val rating = if (doc.contains("rating") && doc.get("rating") != null) doc.getDouble("rating")?.toFloat() else null
                         val capacity = doc.getLong("capacity")?.toInt() ?: 4
                         val coordMap = doc.get("coordinates") as? Map<*, *>
                         val country = coordMap?.get("country") as? String ?: "Canada"
@@ -136,7 +149,7 @@ class DatabaseCampsites {
                             val name = doc.getString("name") ?: "Campsite"
                             val maxOcc = doc.getLong("maxOccupancy")?.toInt() ?: 4
                             val price = doc.getDouble("price")?.toFloat() ?: 50.0f
-                            val rating = doc.getDouble("rating")?.toFloat() ?: 5.0f
+                            val rating = if (doc.contains("rating") && doc.get("rating") != null) doc.getDouble("rating")?.toFloat() else null
                             val capacity = doc.getLong("capacity")?.toInt() ?: 4
                             val coordMap = doc.get("coordinates") as? Map<*, *>
                             val country = coordMap?.get("country") as? String ?: "Canada"

@@ -41,7 +41,7 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.example.code.classes.AppState
 import com.example.code.classes.CampsiteOwner
-
+// UI was built with the help of Claude : https://claude.ai/share/1c03451a-fc15-4299-b3cf-86965896ee5a
 private val ScreenBackground = Color(0xFFFEF9F3)
 private val FieldBackground = Color(0xFFF0E0D0)
 private val ButtonBlue = Color(0xFF274690)
