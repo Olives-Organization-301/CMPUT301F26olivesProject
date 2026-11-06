@@ -4,11 +4,9 @@ import com.example.code.classes.Campsite
 import com.google.firebase.Firebase
 import com.google.firebase.firestore.firestore
 
-class DatabaseCampsites(ownerId: String) {
+class DatabaseCampsites() {
     private val db = Firebase.firestore
-    private val campsitesRef = db.collection("CampsiteOwners")
-        .document(ownerId)
-        .collection("campsites")
+    private val campsitesRef = db.collection("campsites")
     private val _campsites = mutableStateListOf<Campsite>()
 
     val campsites: List<Campsite> get() = _campsites
