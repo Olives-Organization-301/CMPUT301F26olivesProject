@@ -13,7 +13,7 @@ class Campsite(
     private var price: Float,
     private var rating: Float,
     private var capacity: String,
-    private val campsiteID: String,
+    public val campsiteID: String,
     private var coordinates: Coordinates,
     private var startDate: LocalDateTime,
     private var endDate: LocalDateTime,
@@ -55,8 +55,6 @@ class Campsite(
             }
         }
     }
-
-
 
 
 
