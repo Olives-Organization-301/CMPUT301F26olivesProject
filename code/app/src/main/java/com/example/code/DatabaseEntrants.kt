@@ -17,8 +17,7 @@ class DatabaseEntrants() {
     }
 
     fun updateEntrantUsername(entrant: Entrant, newUsername: String) {
-        entrant.username = newUsername
-        entrantsRef.document(entrant.getUserID()).update("username", newUsername)
+        entrantsRef.document(entrant.username).set(newUsername)
     }
 
     fun deleteEntrant(entrant: Entrant) {

@@ -22,4 +22,15 @@ class DatabaseCampsites() {
     fun deleteCampsite(campsite: Campsite) {
         campsitesRef.document(campsite.campsiteID).delete()
     }
+
+    fun searchCampsite(campsiteID: String, onResult: (Campsite?) -> Unit) {
+        campsitesRef.document(campsiteID).get()
+            .addOnSuccessListener { doc ->
+                // toObject returns null if the document doesn't exist
+                onResult(doc.toObject(Campsite::class.java))
+            }
+            .addOnFailureListener {
+                onResult(null)
+            }
+    }
 }
