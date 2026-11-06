@@ -36,4 +36,8 @@ class DatabaseEntrants() {
                 onResult(null)
             }
     }
+
+    fun updateEntrant(entrant: Entrant) {
+        entrantsRef.document(entrant.getUserID()).set(entrant)
+    }
 }

@@ -229,9 +229,9 @@ fun ProfileScreen(
                 current.email = email
                 current.phoneNumber = phone
                 current.description = description
+                appState.entrants.updateEntrant(current)
                 refreshTick++
                 showEditDialog = false
-                // TODO: persist to Firebase
             },
             onDeleteProfile = {
                 appState.entrants.deleteEntrant(entrant!!)
