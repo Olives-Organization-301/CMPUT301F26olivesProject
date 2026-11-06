@@ -16,11 +16,20 @@ class DatabaseCampsiteOwners {
     }
 
     fun updateCampsiteOwnerUsername(campsiteOwner : CampsiteOwner, newUsername: String) {
-        campsiteOwner.username = newUsername
         campsiteOwnersRef.document(campsiteOwner.getUserID()).update("username", newUsername)
     }
 
     fun deleteCampsiteOwner(campsiteOwner : CampsiteOwner) {
         campsiteOwnersRef.document(campsiteOwner .getUserID()).delete()
+    }
+
+    fun searchCampsiteOwner(ownerID: String, onResult: (CampsiteOwner?) -> Unit) {
+        campsiteOwnersRef.document(ownerID).get()
+            .addOnSuccessListener { doc ->
+                onResult(doc.toObject(CampsiteOwner::class.java))
+            }
+            .addOnFailureListener {
+                onResult(null)
+            }
     }
 }
