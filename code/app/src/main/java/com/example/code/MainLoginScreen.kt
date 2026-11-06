@@ -6,6 +6,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -22,6 +26,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.example.code.classes.AppState
+import com.example.code.classes.Entrant
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
 
@@ -67,18 +73,43 @@ private val DarkColors = HomeColors(
 )
 
 private val Pink = Color(0xFFE91E63)
-
+//band aid login fix for now
 @Composable
 fun LoginScreen(
     navController: NavController,
+    appState: AppState,
     darkTheme: Boolean = isSystemInDarkTheme()
 ) {
+    var showRoleDialog by remember { mutableStateOf(false) }
+
     LoginScreenContent(
-        onSignUp = { signIn(navController) },
-        onLogIn = { signIn(navController) },
-        onPrivacyPolicy = {},
+        onSignUp = {showRoleDialog = true},
+        onLogIn = {showRoleDialog = true},
         darkTheme = darkTheme
     )
+
+    if(showRoleDialog){
+        AlertDialog(
+            onDismissRequest = {showRoleDialog = false},
+            confirmButton = {},
+            title = { Text("Continue as")},
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(
+                        "Admin" to "AdminMainSearchScreen",
+                        "Entrant" to "mainSearchScreen",
+                        "Owner" to "campsiteOwnerLogin"
+                    ).forEach { (label, route) ->
+                        Button(
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = {showRoleDialog = false; navController.navigate(route)}
+                        ){ Text(label)}
+                    }
+                }
+            }
+        )
+    }
+
 }
 
 @Composable
@@ -211,9 +242,12 @@ private fun HomeButton(
     }
 }
 
-fun signIn(navController: NavController){
+fun signIn(navController: NavController, appState: AppState){
     if(Firebase.auth.currentUser == null){
         Firebase.auth.signInAnonymously().addOnSuccessListener {
+            val uid = Firebase.auth.uid
+            val newEntrant = Entrant(uid!!.take(6), "", uid, "7", "")
+            appState.entrants.addEntrant(newEntrant)
             navController.navigate("mainSearchScreen")
 
             // CHANGE BACK TO MAIN SEARCH SCREEN AFTER TESTING

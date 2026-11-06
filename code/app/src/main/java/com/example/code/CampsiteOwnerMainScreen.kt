@@ -2,6 +2,8 @@ package com.example.code
 
 import android.app.DatePickerDialog
 import android.content.Context
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -29,6 +31,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -58,10 +61,12 @@ import java.util.Date
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.ui.window.DialogProperties
+import com.example.code.classes.AppState
+import com.example.code.classes.Campsite
+import com.example.code.classes.Coordinates
 import com.example.code.classes.PreviewCampsite
 import com.example.code.classes.WaitlistEntrant
-
-
+import java.time.LocalDateTime
 /** # Search Screen
  *  Implementation of the Entrants' Main Screen as seen in the Figma.
  *
@@ -71,34 +76,81 @@ import com.example.code.classes.WaitlistEntrant
  *
  */
 //https://claude.ai/share/a95788a4-8990-40f1-95c7-b5a744a1e94d: Prompt:I need to make a button to be able to go to campsitechatscreen
+@RequiresApi(Build.VERSION_CODES.O)
 @Composable
-fun CampsiteOwnerMainScreen(navController: NavController) {
+fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
     var searchString by remember { mutableStateOf("") }
     var showAdd by remember { mutableStateOf(false) }
+    var ownerName by remember { mutableStateOf("Campsite Owner") }
     var showEdit by remember { mutableStateOf<PreviewCampsite?>(null) }
-    var showLottery by remember { mutableStateOf<PreviewCampsite?>(null) } // used for the lottery system
+    var showLottery by remember { mutableStateOf<PreviewCampsite?>(null) }
     val format = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
-    
-    val now = System.currentTimeMillis()
-    // TODO: DELETE this once we connect it to a Database
 
-    /*
-    See LotteryDialog below for a fuller citation and explanation of this feature.
-    This feature previews a basic placeholder campsite for testing purposes.
-     */
     val previewCampsites = remember {
-        mutableStateListOf(
-            PreviewCampsite(
-                name = "Campsite1",
-                location = "Location1",
-                startMillis = now,
-                endMillis = now + (7 * 24 * 60 * 60 * 1000L),
-                waitingList = listOf(
-                    WaitlistEntrant("1", "Adam Placeholder", "apholder@example.com", now - 86400000L),
-                    WaitlistEntrant("2", "Bell Placeholder", "bpholder@example.com", now - 43200000L)
-                )
-            )
-        )
+        mutableStateListOf<PreviewCampsite>()
+    }
+
+    val mainHandler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
+
+    // Load real campsites and owner name using viewCampsites function
+    LaunchedEffect(appState.userID) {
+        val ownerID = appState.userID
+        if (!ownerID.isNullOrBlank()) {
+            try {
+                appState.owners.searchCampsiteOwner(ownerID) { owner ->
+                    mainHandler.post {
+                        if (owner != null) {
+                            ownerName = owner.username.ifBlank { owner.email }
+                            owner.viewCampsites(appState.campsites) { campsites ->
+                                mainHandler.post {
+                                    previewCampsites.clear()
+                                    for (c in campsites) {
+                                        val cName = try { c.getName().ifBlank { "Campsite" } } catch (e: Exception) { "Campsite" }
+                                        val cLoc = try { c.getCoordinates()?.getFirstSubdivision()?.ifBlank { "Location" } ?: "Location" } catch (e: Exception) { "Location" }
+                                        previewCampsites.add(
+                                            PreviewCampsite(
+                                                name = cName,
+                                                location = cLoc,
+                                                startMillis = null,
+                                                endMillis = null,
+                                                waitingList = emptyList()
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+                        } else {
+                            appState.campsites.getCampsitesForOwner(ownerID) { campsites ->
+                                mainHandler.post {
+                                    previewCampsites.clear()
+                                    for (c in campsites) {
+                                        val cName = try { c.getName().ifBlank { "Campsite" } } catch (e: Exception) { "Campsite" }
+                                        val cLoc = try { c.getCoordinates()?.getFirstSubdivision()?.ifBlank { "Location" } ?: "Location" } catch (e: Exception) { "Location" }
+                                        previewCampsites.add(
+                                            PreviewCampsite(
+                                                name = cName,
+                                                location = cLoc,
+                                                startMillis = null,
+                                                endMillis = null,
+                                                waitingList = emptyList()
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                // Prevent crash
+            }
+        }
+    }
+
+    val filteredCampsites = if (searchString.isBlank()) {
+        previewCampsites
+    } else {
+        previewCampsites.filter { it.name.contains(searchString, ignoreCase = true) }
     }
 
     // Column Wrapping the Search/Card Screens and Menu bar
@@ -106,7 +158,6 @@ fun CampsiteOwnerMainScreen(navController: NavController) {
 
         Box(modifier = Modifier.weight(1f)) {
 
-            // Padded area for search screen and campsites: search field + list
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -115,12 +166,20 @@ fun CampsiteOwnerMainScreen(navController: NavController) {
                 // To avoid clipping it into the top of the screen
                 Spacer(Modifier.height(48.dp))
 
+                // Signed in owner verification banner
+                Text(
+                    text = "Signed in as: $ownerName",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    color = Color(0xFF274690),
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+
                 // Search Bar
-                // TODO: Add Sidebar button and Search Button on Search Button
                 TextField(
                     value = searchString,
                     onValueChange = { searchString = it },
-                    label = { Text("Search for a campsite") },
+                    label = { Text("Search for your campsite") },
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 16.dp)
@@ -132,13 +191,7 @@ fun CampsiteOwnerMainScreen(navController: NavController) {
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     contentPadding = PaddingValues(vertical = 12.dp)
                 ) {
-                    items(previewCampsites) { preview->
-                        /*
-                    * Card Button is used to Turn have the Card UI that we desire
-                    * Each Campsite has a little box dedicated to itself
-                    * It's first organized into a Row (Horizontally)
-                    * Before the Campsite data is listed in its size
-                     */
+                    items(filteredCampsites) { preview ->
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -152,24 +205,17 @@ fun CampsiteOwnerMainScreen(navController: NavController) {
                                     .padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                /*
-                             * Box is the Image Placeholder
-                             * TODO: Although the Prototype had the image on the side,
-                             *  WHAT IF the IMAGE IN THE BACKGROUND of THE CARD?
-                             *  The image would be darkened with light text over it (Column Style)
-                            */
                                 Box(
                                     modifier = Modifier
                                         .size(96.dp)
                                         .background(Color.DarkGray, RoundedCornerShape(16.dp))
                                 )
                                 Spacer(Modifier.width(12.dp))
-                                Column {
-                                    Text(preview.name)
-                                    Text(preview.location)
-                                    Text("Entry: " + (preview.startMillis?.let { format.format(Date(it)) } ?: "Not set"))
-                                    Text("End: " + (preview.endMillis?.let { format.format(Date(it)) } ?: "Not set"))
-
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(preview.name, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.White)
+                                    Text(preview.location, color = Color.White)
+                                    Text("Entry: " + (preview.startMillis?.let { format.format(Date(it)) } ?: "Not set"), color = Color.White)
+                                    Text("End: " + (preview.endMillis?.let { format.format(Date(it)) } ?: "Not set"), color = Color.White)
                                 }
 
                                 Spacer(Modifier.width(8.dp))
@@ -181,21 +227,18 @@ fun CampsiteOwnerMainScreen(navController: NavController) {
                                     Button(onClick = { showEdit = preview }) { Text("  Edit  ", maxLines = 1) }
                                     Button(onClick = { showLottery = preview }) { Text("Lottery", maxLines = 1) }
                                 }
-
                             }
                         }
                     }
                 }
             }
             FloatingActionButton(
-                onClick = { showAdd = true},
+                onClick = { showAdd = true },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(16.dp)
-            ) {Icon(Icons.Filled.Add, contentDescription = "Add campsite") }
+            ) { Icon(Icons.Filled.Add, contentDescription = "Add campsite") }
         }
-        // Menu Bar
-        // TODO: Turn Buttons into Icons + Text and Remove Backgrounds for buttons
 
         Row(
             modifier = Modifier
@@ -211,26 +254,43 @@ fun CampsiteOwnerMainScreen(navController: NavController) {
             Button(onClick = { navController.navigate("campsiteChat") }, modifier = Modifier.weight(1f)) { Text("Message Entrants", maxLines = 1) }
         }
     }
-    if(showAdd){
+
+    if (showAdd) {
         AddEditCampsite(
             title = "Add Campsite",
             initial = null,
-            onDismiss = {showAdd = false},
+            onDismiss = { showAdd = false },
             onSave = { newCampsite ->
                 previewCampsites.add(newCampsite)
+                appState.campsites.generateUniqueCampsiteID { uniqueId ->
+                    val coords = Coordinates("Canada", newCampsite.location, -113.49, 53.54)
+                    val realCampsite = Campsite(
+                        name = newCampsite.name,
+                        ownerID = appState.userID ?: "unknown_owner",
+                        campsiteID = uniqueId,
+                        maxOccupancy = 4,
+                        price = 50.0f,
+                        rating = 5.0f,
+                        capacity = 4,
+                        coordinates = coords,
+                        startDate = LocalDateTime.now(),
+                        endDate = LocalDateTime.now().plusDays(7)
+                    )
+                    appState.campsites.addCampsite(realCampsite)
+                }
                 showAdd = false
             }
         )
     }
 
-    showEdit?.let{ current ->
+    showEdit?.let { current ->
         AddEditCampsite(
             title = "Edit Campsite",
             initial = current,
-            onDismiss = {showEdit = null},
-            onSave = {updated ->
-                val i = previewCampsites.indexOfFirst {it === current }
-                if( i>= 0) previewCampsites[i] = updated
+            onDismiss = { showEdit = null },
+            onSave = { updated ->
+                val i = previewCampsites.indexOfFirst { it === current }
+                if (i >= 0) previewCampsites[i] = updated
                 showEdit = null
             }
         )
@@ -249,12 +309,6 @@ fun CampsiteOwnerMainScreen(navController: NavController) {
     }
 }
 
-/*
-Implementation of owner screen as outlined in the figma. Search screen was used as reference.
-AddCampsite, pickdate, and parts of campsiteOwnerMainScreen UI were developed using claude 3.5 in
-this chat: https://claude.ai/share/140477f9-42aa-4b16-8189-dad57b7d8afb
-Prompt: "How do I change this so that the delete and edit buttons are on top of each other at the end of each card"
- */
 @Composable
 fun AddEditCampsite(
     title: String,
@@ -267,18 +321,17 @@ fun AddEditCampsite(
     var startMillis by remember { mutableStateOf(initial?.startMillis) }
     var endMillis by remember { mutableStateOf(initial?.endMillis) }
     val context = LocalContext.current
-    val format = remember { SimpleDateFormat("MMM d, yyyy",Locale.getDefault()) }
+    val format = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
 
-    val startText = startMillis?.let {format.format(Date(it))} ?:"Not set"
-    val endText = endMillis?.let {format.format(Date(it))} ?:"Not set"
+    val startText = startMillis?.let { format.format(Date(it)) } ?: "Not set"
+    val endText = endMillis?.let { format.format(Date(it)) } ?: "Not set"
 
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
-    ){
+    ) {
         Surface(modifier = Modifier.fillMaxSize()) {
             Column(modifier = Modifier.fillMaxSize()) {
-
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -312,8 +365,7 @@ fun AddEditCampsite(
                 }
 
                 Column(
-                    modifier = Modifier
-                        .padding(horizontal = 20.dp),
+                    modifier = Modifier.padding(horizontal = 20.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     OutlinedTextField(
@@ -352,34 +404,13 @@ fun AddEditCampsite(
             }
         }
     }
-
 }
 
 /*
-WAITLIST implemented in order to facilitate the lottery function.
-Users/entrants will be allowed to join this waitlist for a period of
-one week until it expires (IMPLEMENTED), at which point 5 (or less,
-depending on waitlist size) random users on the list will be selected,
-on a first-come first-serve basis, to reserve their spots.
-
-They will be notified by the system and are free to turn down these
-requests at will.
-
-The owner can spectate the waiting list as it fills up (or not), right
-until the deadline for waiting list closure. (IMPLEMENTED) Optionally
-they may also be able to see the status of each selected member of the
-waiting list - whether they have signed on or not.
-
-THIS CODE WAS IMPLEMENTED BY GOOGLE GEMINI 11-06-2026, WITH THE PROMPT
-"This button allows a campsite owner to place their campsite into a
-lottery system for a certain period of time. Such a lottery will allow
-for customers/entrants to join a "waiting list" for one week. The owner
-can spectate this waiting list until its expiry."
-
-The following code has been commented and slightly altered from the
-version it provided for the sake of bringing it into line stylistically
-with the rest of our code, and removing any extraneous/redundant features
-it added.
+Implementation of owner screen as outlined in the figma. Search screen was used as reference.
+AddCampsite, pickdate, and parts of campsiteOwnerMainScreen UI were developed using claude 3.5 in
+this chat: https://claude.ai/share/140477f9-42aa-4b16-8189-dad57b7d8afb
+Prompt: "How do I change this so that the delete and edit buttons are on top of each other at the end of each card"
  */
 @Composable
 fun LotteryDialog(
@@ -399,9 +430,10 @@ fun LotteryDialog(
 
     val now = System.currentTimeMillis()
     val isLotteryConfigured = (startMillis != null) && (endMillis != null)
-    val isLotteryActive = isLotteryConfigured && now <= endMillis!!
-    val isExpired = isLotteryConfigured && now > endMillis!!
-    var numLotteryWinners by remember { mutableStateOf(5) } // by default 5 are selected in the lottery
+    val endMillisVal = endMillis ?: now
+    val isLotteryActive = isLotteryConfigured && now <= endMillisVal
+    val isExpired = isLotteryConfigured && now > endMillisVal
+    var numLotteryWinners by remember { mutableStateOf(5) }
     var showSetWinnersDialog by remember { mutableStateOf(false) }
     var inputWinnersText by remember { mutableStateOf(numLotteryWinners.toString()) }
 
@@ -431,7 +463,6 @@ fun LotteryDialog(
                     .fillMaxSize()
                     .padding(16.dp)
             ) {
-                // Header for this window
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -463,7 +494,6 @@ fun LotteryDialog(
                     }
                 }
 
-                // Where you see the status of the lottery and where to set it
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
@@ -489,7 +519,7 @@ fun LotteryDialog(
                         val statusText = when {
                             !isLotteryConfigured -> "Status: Lottery not placed yet"
                             isLotteryActive -> {
-                                val daysLeft = ((endMillis!! - now) / (1000 * 60 * 60 * 24)).coerceAtLeast(0)
+                                val daysLeft = endMillis?.let { ((it - now) / (1000 * 60 * 60 * 24)).coerceAtLeast(0) } ?: 0
                                 "Status: Lottery in progress ($daysLeft days until draw)"
                             }
                             else -> "Status: Lottery has expired"
@@ -507,14 +537,14 @@ fun LotteryDialog(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Button( // Preset for setting lottery to 1 week from TODAY (this is the default)
+                            Button(
                                 onClick = { startLottery() },
                                 modifier = Modifier.weight(1f)
                             ) {
                                 Text("Start from today", maxLines = 1, fontSize = 12.sp)
                             }
 
-                            OutlinedButton( // Custom lottery setting for 1 week from any date
+                            OutlinedButton(
                                 onClick = {
                                     pickDate(context, null) { s ->
                                         startMillis = s
@@ -531,7 +561,7 @@ fun LotteryDialog(
                             }
 
                             OutlinedButton(
-                                onClick = { // onClick implemented using the same prompt seen below.
+                                onClick = {
                                     inputWinnersText = numLotteryWinners.toString()
                                     showSetWinnersDialog = true
                                 },
@@ -542,16 +572,6 @@ fun LotteryDialog(
                         }
                     }
                 }
-
-                /*
-                AGENT USED: GEMINI
-                DATE OF PROMPT: 11-06-2026
-                PROMPT USED:
-                "Upon click, basic pop-up window with "ok" button
-                where the owner can reset the value of numLotteryWinners"
-
-                Some modifications have been performed to the original LLM output.
-                 */
 
                 if (showSetWinnersDialog) {
                     AlertDialog(
@@ -594,7 +614,6 @@ fun LotteryDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Where you can actually see the waiting list in progress
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
@@ -616,7 +635,6 @@ fun LotteryDialog(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Entrants list view
                 if (waitingList.isEmpty()) {
                     Box(
                         modifier = Modifier
@@ -672,8 +690,6 @@ fun LotteryDialog(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // REMOVE WHEN DONE! THIS IS ONLY HERE FOR TESTING PURPOSES
-                // WILL BE REPLACED WITH A PROPER SYSTEM FOR ENTRY IN FUTURE VERSIONS
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
@@ -704,19 +720,19 @@ fun LotteryDialog(
                             Button(
                                 onClick = {
                                     if (newEntrantName.isNotBlank()) {
-                                        val entrant = WaitlistEntrant(
-                                            id = System.currentTimeMillis().toString(),
+                                        val newEntrant = WaitlistEntrant(
+                                            id = java.util.UUID.randomUUID().toString(),
                                             name = newEntrantName,
-                                            email = newEntrantEmail.ifBlank { "${newEntrantName.lowercase().replace(" ", "")}@example.com" },
+                                            email = newEntrantEmail.ifBlank { "entrant@example.com" },
                                             joinedMillis = System.currentTimeMillis()
                                         )
-                                        waitingList += entrant
+                                        waitingList = waitingList + newEntrant
                                         newEntrantName = ""
                                         newEntrantEmail = ""
                                     }
                                 }
                             ) {
-                                Text("Add")
+                                Text("Add", fontSize = 12.sp)
                             }
                         }
                     }
@@ -725,24 +741,60 @@ fun LotteryDialog(
         }
     }
 }
+/*
+WAITLIST implemented in order to facilitate the lottery function.
+Users/entrants will be allowed to join this waitlist for a period of
+one week until it expires (IMPLEMENTED), at which point 5 (or less,
+depending on waitlist size) random users on the list will be selected,
+on a first-come first-serve basis, to reserve their spots.
+
+They will be notified by the system and are free to turn down these
+requests at will.
+
+The owner can spectate the waiting list as it fills up (or not), right
+until the deadline for waiting list closure. (IMPLEMENTED) Optionally
+they may also be able to see the status of each selected member of the
+waiting list - whether they have signed on or not.
+
+THIS CODE WAS IMPLEMENTED BY GOOGLE GEMINI 11-06-2026, WITH THE PROMPT
+"This button allows a campsite owner to place their campsite into a
+lottery system for a certain period of time. Such a lottery will allow
+for customers/entrants to join a "waiting list" for one week. The owner
+can spectate this waiting list until its expiry."
+
+The following code has been commented and slightly altered from the
+version it provided for the sake of bringing it into line stylistically
+with the rest of our code, and removing any extraneous/redundant features
+it added.
+ */
+/*
+                AGENT USED: GEMINI
+                DATE OF PROMPT: 11-06-2026
+                PROMPT USED:
+                "Upon click, basic pop-up window with "ok" button
+                where the owner can reset the value of numLotteryWinners"
+
+                Some modifications have been performed to the original LLM output.
+                 */
 
 /*
 This function was also implemented using the above prompt. It is useful
 for picking a date, as with the "custom" lottery date feature.
  */
-fun pickDate(context: Context, minMillis: Long?, onPicked: (Long) -> Unit) {
+private fun pickDate(context: Context, minDateMillis: Long?, onSelected: (Long) -> Unit) {
     val cal = Calendar.getInstance()
     val dialog = DatePickerDialog(
         context,
-        {_, year, month, day ->
-            val picked = Calendar.getInstance().apply {set(year, month, day, 0, 0, 0)}
-            onPicked(picked.timeInMillis)
+        { _, year, month, day ->
+            cal.set(year, month, day)
+            onSelected(cal.timeInMillis)
         },
         cal.get(Calendar.YEAR),
         cal.get(Calendar.MONTH),
         cal.get(Calendar.DAY_OF_MONTH)
     )
-    minMillis?.let { dialog.datePicker.minDate = it }
+    if (minDateMillis != null) {
+        dialog.datePicker.minDate = minDateMillis
+    }
     dialog.show()
 }
-
