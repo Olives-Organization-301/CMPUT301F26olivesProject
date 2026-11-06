@@ -36,10 +36,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.example.code.classes.AppState
 
 // Conversation: https://claude.ai/share/b857df9c-812a-4adb-b696-38a5266149f7
 @Composable
-fun ProfileScreen(navController: NavController) {
+fun ProfileScreen(
+    navController: NavController,
+    appState: AppState
+) {
     val campsitePlaceholder = remember { mutableStateListOf("Campsite1", "Campsite2", "Campsite3") }
     var showEditDialog by remember { mutableStateOf(false) }
 

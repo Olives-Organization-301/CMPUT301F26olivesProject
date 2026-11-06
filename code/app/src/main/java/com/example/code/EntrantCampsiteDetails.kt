@@ -24,9 +24,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -40,8 +37,8 @@ import com.example.code.classes.AppState
 import com.example.code.classes.Campsite
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
-import androidx.compose.runtime.setValue
 import com.example.code.classes.CampsiteOwner
+import com.example.code.classes.Entrant
 
 // TODO: DELETE these colours. We want colour choices to be in ui.Theme
 private val ScreenBackground = Color(0xFFFDF8F3)
@@ -55,6 +52,19 @@ fun CampsiteDetailsScreen(
     navController: NavController,
     appState: AppState,
 ) {
+    val entrant by produceState<Entrant?>(
+        initialValue = null,
+        key1 = appState.userID
+    ) {
+        val id = appState.userID
+        if (id == null) {
+            value = null
+        } else {
+            appState.entrants.searchEntrant(id) { found ->
+                value = found
+            }
+        }
+    }
 
     val chosenCampsite by produceState<Campsite?>(
         initialValue = null,
@@ -150,7 +160,7 @@ fun CampsiteDetailsScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             // Owner + dates
-            Text(campsite?.getOwnerID() ?: "", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Text(owner?.username ?: "", fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Text(
                 "Lottery Begin Date: ${campsite?.getStartDate()?.toLocalDate() ?: ""}",
                 fontWeight = FontWeight.Medium,
@@ -201,7 +211,10 @@ fun CampsiteDetailsScreen(
             ) {
                 Button(
                     onClick = {
-                        campsite.removeEntrant(appState.userID!!)
+                        if (entrant != null) {
+                            entrant!!.removeCampsite("Active_Campsites", appState.viewingCampsiteID!!)
+                            campsite.removeEntrant(appState.userID!!)
+                        }
                     },
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(containerColor = ButtonPurple)
@@ -214,6 +227,7 @@ fun CampsiteDetailsScreen(
                 Button(
                     onClick = {
                         if (appState.userID != null && campsite != null) {
+                            entrant!!.addCampsite("Waiting_List", appState.viewingCampsiteID!!)
                             campsite.addEntrant(appState.userID!!)
                         }
                     },
@@ -226,7 +240,8 @@ fun CampsiteDetailsScreen(
                 }
                 Button(
                     onClick = {
-                        if (appState.userID != null && campsite != null) {
+                        if (appState.userID != null && campsite != null && entrant != null) {
+                            entrant!!.addCampsite("Active_Campsites", appState.viewingCampsiteID!!)
                             campsite.addActiveLotteryEntrant(appState.userID!!)
                         }
                     },

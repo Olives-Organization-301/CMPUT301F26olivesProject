@@ -38,12 +38,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.example.code.classes.AppState
 
 // Conversation: https://claude.ai/share/4dfdf023-c5f7-4f56-b9f3-f9e8bb4d5756
 @Composable
 fun ReservationsListScreen(
     navController: NavController,
-
+    appState: AppState
 ) {
     // TODO: DELETE these temporary variables once we connect it to a Database
     val campsitePlaceholder = remember { mutableStateListOf("Campsite1", "Campsite2", "Campsite3") }
