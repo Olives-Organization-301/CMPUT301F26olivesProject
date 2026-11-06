@@ -7,8 +7,7 @@ package com.example.code.classes
 abstract class User(
     var username: String,
     var email: String,
-    private val userID: String
+    private val userID: String,
 ) {
-    fun getUserID(): String { return userID }
-
+    fun getUserID(): String = userID
 }
