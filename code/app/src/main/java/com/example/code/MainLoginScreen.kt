@@ -22,6 +22,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.google.firebase.Firebase
+import com.google.firebase.auth.auth
 
 /** # Search Screen
  *  Implementation of the Entrants' Login screen as seen in the Figma.
@@ -42,7 +44,7 @@ private data class HomeColors(//Holds all the color tokens for the login screen
     val secondaryText: Color
 )
 
-private val LightColors = HomeColors(//sets the colors for light mode and dark mode
+private val LightColors = HomeColors(//sets the colors for light mode and dark modes
     gradient = listOf(Color(0xFFFFF8EE), Color(0xFFFDE8CB)),
     title = Color(0xFF2B1B17),
     subtitle = Color(0xFF7A6A62),
@@ -72,8 +74,8 @@ fun LoginScreen(
     darkTheme: Boolean = isSystemInDarkTheme()
 ) {
     LoginScreenContent(
-        onSignUp = { navController.navigate("searchScreen") },//takes you to the campsite search screen for now, there will be a login screen soon
-        onLogIn = { navController.navigate("searchScreen") },
+        onSignUp = { signIn(navController) },
+        onLogIn = { signIn(navController) },
         onPrivacyPolicy = {},
         darkTheme = darkTheme
     )
@@ -209,14 +211,25 @@ private fun HomeButton(
     }
 }
 
+fun signIn(navController: NavController){
+    if(Firebase.auth.currentUser == null){
+        Firebase.auth.signInAnonymously().addOnSuccessListener {
+            navController.navigate("mainSearchScreen")
+        }
+    } else {
+        navController.navigate("mainSearchScreen")
+    }
+}
 
+
+@Preview(name = "Light Mode", showBackground = true, widthDp = 360, heightDp = 720)
 @Composable
-private fun LoginScreenLightPreview() {
+fun LoginScreenLightPreview() {
     LoginScreenContent(darkTheme = false)
 }
 
-@Preview(showBackground = true, widthDp = 360, heightDp = 720)
+@Preview(name = "Dark Mode", showBackground = true, widthDp = 360, heightDp = 720)
 @Composable
-private fun LoginScreenDarkPreview() {
+fun LoginScreenDarkPreview() {
     LoginScreenContent(darkTheme = true)
 }

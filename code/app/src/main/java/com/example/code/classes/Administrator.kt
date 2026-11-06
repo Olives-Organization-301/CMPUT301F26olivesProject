@@ -8,7 +8,7 @@ package com.example.code.classes
 class Administrator(
     username: String,
     email: String,
-    userID: UInt
+    userID: String
 ): User(username, email, userID) {
 
 

@@ -1,5 +1,8 @@
 package com.example.code.classes
 
+import java.time.LocalDateTime
+import kotlin.random.Random
+
 /**
  *
  */
@@ -10,7 +13,10 @@ class Campsite(
     private var price: Float,
     private var rating: Float,
     private var capacity: String,
-    private var coordinates: Coordinates
+    private val campsiteID: String,
+    private var coordinates: Coordinates,
+    private var startDate: LocalDateTime,
+    private var endDate: LocalDateTime,
 ) {
     private var description: String = ""
 
@@ -19,14 +25,35 @@ class Campsite(
     private var finalList = mutableListOf<Entrant>()
     private var rules = mutableListOf<String>()
 
-    fun getCoords(): Coordinates = coordinates
+    fun getCoordinates(): Coordinates = coordinates
+
+    fun getName(): String = name
 
     fun addEntrant(entrant: Entrant) {
         waitingList.add(entrant)
     }
 
-    fun generateFinalList() {
+    fun getStartDate(): LocalDateTime = startDate
+    fun getEndDate(): LocalDateTime = endDate
 
+    fun generateFinalList() {
+        var capacity = maxOccupancy
+
+        //if more capacity than entrants, all entrants make the final list
+        if(waitingList.size <= capacity){
+            finalList = waitingList.toMutableList() // use .toMutableList() to create a copy instead of an alias
+            waitingList.clear()
+        } else {
+            while (capacity != 0) {
+                // use .size instead of .lastInt because the until value in kotlin ranges is exclusive
+                val randomInd = Random.nextInt(0, waitingList.size)
+
+                // add random entrant to final list, and remove from waitlist
+                finalList.add(waitingList[randomInd])
+                waitingList.removeAt(randomInd)
+                capacity -= 1
+            }
+        }
     }
 
 
