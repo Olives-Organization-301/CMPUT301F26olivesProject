@@ -1,11 +1,11 @@
 package com.example.code.classes
 
 class Entrant(
-    username: String,
-    email: String,
-    userID: String,
-    phoneNumber: String,
-    description: String,
+    username: String = "",
+    email: String = "",
+    userID: String = "",
+    val phoneNumber: String = "",
+    val description: String = "",
 ): User(username, email, userID) {
 
     // Use Maps so User can add their own Custom lists
