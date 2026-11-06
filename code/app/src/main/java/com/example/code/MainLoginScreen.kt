@@ -73,7 +73,7 @@ fun LoginScreen(
 ) {
     LoginScreenContent(
         onSignUp = { navController.navigate("mainSearchScreen") },
-        onLogIn = { navController.navigate("mainSearchScreen") },
+        onLogIn = { navController.navigate("AdminMainSearchScreen") },
         onPrivacyPolicy = {},
         darkTheme = darkTheme
     )

@@ -37,6 +37,7 @@ fun CampsiteNavController(
         composable("campsiteOwnerMainScreen"){campsiteOwnerMainScreen(navController)}
 
         // ADMIN SCREENS
+        composable("AdminMainSearchScreen"){AdminMainSearchScreen(navController)}
 
     }
 }
