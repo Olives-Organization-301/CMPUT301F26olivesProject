@@ -77,8 +77,8 @@ fun LoginScreen(
     darkTheme: Boolean = isSystemInDarkTheme()
 ) {
     LoginScreenContent(
-        onSignUp = { signIn(navController, appState) },
-        onLogIn = { signIn(navController, appState) },
+        onSignUp = { navController.navigate("mainSearchScreen") },
+        onLogIn = { navController.navigate("AdminMainSearchScreen") },
         onPrivacyPolicy = {},
         darkTheme = darkTheme
     )
@@ -218,7 +218,7 @@ fun signIn(navController: NavController, appState: AppState){
     if(Firebase.auth.currentUser == null){
         Firebase.auth.signInAnonymously().addOnSuccessListener {
             val uid = Firebase.auth.uid
-            val newEntrant = Entrant(uid!!.take(6), "", uid)
+            val newEntrant = Entrant(uid!!.take(6), "", uid, "7", "")
             appState.entrants.addEntrant(newEntrant)
             navController.navigate("mainSearchScreen")
 

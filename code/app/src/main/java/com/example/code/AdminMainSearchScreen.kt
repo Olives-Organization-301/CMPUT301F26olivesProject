@@ -47,44 +47,41 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.window.Dialog
-import java.text.SimpleDateFormat
-import java.util.Locale
 import java.util.Calendar
-import java.util.Date
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
-import com.example.code.classes.PreviewCampsite
 import kotlinx.coroutines.selects.select
 import kotlin.contracts.SimpleEffect
+import com.example.code.classes.AppState
+import com.example.code.classes.Campsite
 
 
-/** # Search Screen
- *  Implementation of the Entrants' Main Screen as seen in the Figma.
- *
- *  Prototype was gained from this conversation with Claude Sonnet 5.0:
- *  https://claude.ai/chat/fa52c57a-03b0-486b-b988-87d2f36ff18a
- *  Prompt: "How do I Correctly pad this Main screen? How do I make the Cards?"
- *
- */
-data class Profile(val name: String, val role: String)
+
+data class Profile(val id: String, val name: String, val role: String)
 data class PendingRemoval(val message: String, val onConfirm: () -> Unit)
 @Composable
-fun AdminMainSearchScreen(navController: NavController) {
+fun AdminMainSearchScreen(navController: NavController, appState: AppState) {
     var searchString by remember { mutableStateOf("") }
     var selectedTop by remember { mutableStateOf("Campsites")}
-    val format = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
     var pendingRemoval by remember {mutableStateOf<PendingRemoval?>(null)}
-    // TODO: DELETE this once we connect it to a Database
-    val previewCampsites = remember { mutableStateListOf(PreviewCampsite(name = "Campsite1", location = "Location1",startMillis = null, endMillis = null)) }
-    val profiles = remember {
-        mutableStateListOf(
-            Profile("Owner Name", "Campsite Owner"),
-            Profile("Entrant Name", "Entrant"),
-            Profile("Entrant2", "Entrant")
-        )
+
+    val campsiteDb = appState.campsites
+    val entrantDb = appState.entrants
+    val ownerDb = appState.owners
+
+    val profiles = ownerDb.campsiteOwners.map {Profile(it.getUserID(), it.username, "Campsite Owner")} +
+            entrantDb.entrants.map{ Profile(it.getUserID(), it.username, "Entrant")}
+
+    fun deleteProfile(profile: Profile){
+        if(profile.role == "Campsite Owner"){
+            ownerDb.campsiteOwners.firstOrNull {it.getUserID() == profile.id}
+                ?.let {ownerDb.deleteCampsiteOwner(it)}
+        } else {
+            entrantDb.entrants.firstOrNull{it.getUserID() == profile.id}
+                ?.let{entrantDb.deleteEntrant(it)}
+        }
     }
 
     val askRemove: (String, () -> Unit) -> Unit = { message, action ->
@@ -118,32 +115,26 @@ fun AdminMainSearchScreen(navController: NavController) {
                         profiles = profiles.filter { it.name.contains(query, ignoreCase = true) },
                         onRemoveProfile = { profile ->
                             askRemove("Remove \"${profile.name}\" for violating app policy?") {
-                                profiles.remove(
-                                    profile
-                                )
+                                deleteProfile(profile)
                             }
                         },
                         onRemoveOwner = { profile ->
                             askRemove("Remove \"${profile.name}\" for violating app policy?") {
-                                profiles.remove(
-                                    profile
-                                )
+                                deleteProfile(profile)
                             }
                         },
                         modifier = Modifier.weight(1f)
                     )
 
                     "Campsites" -> CampsitesTab(
-                        campsites = previewCampsites.filter { it.name.contains(query, ignoreCase = true) },
-                        format = format,
+                        campsites = campsiteDb.campsites.filter {it.getName().contains(query, ignoreCase = true)},
                         onRemove = { campsite ->
-                            askRemove("Remove the campsite \"${campsite.name}\" ?") {
-                                previewCampsites.remove(
-                                    campsite
-                                )
+                            askRemove("Remove the campsite \"${campsite.getName()}\"?"){
+                                campsiteDb.deleteCampsite(campsite)
                             }
                         },
                         modifier = Modifier.weight(1f)
+
                     )
 
                 }
@@ -271,9 +262,8 @@ fun UserDatabaseTab(
 
 @Composable
 fun CampsitesTab(
-    campsites: List<PreviewCampsite>,
-    format: SimpleDateFormat,
-    onRemove: (PreviewCampsite) -> Unit,
+    campsites: List<Campsite>,
+    onRemove: (Campsite) -> Unit,
     modifier: Modifier = Modifier
 ){
     LazyColumn(
@@ -283,13 +273,13 @@ fun CampsitesTab(
     ){
         if(campsites.isEmpty()) item {EmptyState("No campsites found")}
         items(campsites){ campsite ->
-            CampsiteCard(campsite, format, onRemove = { onRemove(campsite)})
+            CampsiteCard(campsite, onRemove = { onRemove(campsite)})
         }
     }
 }
 
 @Composable
-fun CampsiteCard(preview: PreviewCampsite, format: SimpleDateFormat, onRemove: () -> Unit){
+fun CampsiteCard(campsite: Campsite,  onRemove: () -> Unit){
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -309,10 +299,8 @@ fun CampsiteCard(preview: PreviewCampsite, format: SimpleDateFormat, onRemove: (
             )
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)){
-                Text(preview.name)
-                Text(preview.location)
-                Text("Entry: " + (preview.startMillis?.let { format.format(Date(it)) } ?: "Not set"))
-                Text("End: " + (preview.endMillis?.let { format.format(Date(it)) } ?: "Not set"))
+                Text(campsite.getName())
+                Text(campsite.getCoordinates().getCountry())
             }
             RemoveButton(onClick = onRemove)
         }
