@@ -11,7 +11,7 @@ class Entrant(
 ): User(username, email, userID) {
 
     // Use Maps so User can add their own Custom lists
-    private var campsiteLists = mutableMapOf<String, MutableList<String>>(
+    var campsiteLists: MutableMap<String, MutableList<String>> = mutableMapOf(
         "Active_Campsites" to mutableListOf(),
         "Past_Campsites" to mutableListOf(),
         "Waiting_List" to mutableListOf()

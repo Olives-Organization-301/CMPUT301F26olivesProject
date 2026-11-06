@@ -165,8 +165,10 @@ fun ReservationsListScreen(
                     campsiteData = campsiteCache[campsite],
                     dateFormatter = dateFormatter,
                     onRemove = {
-                        entrant?.removeCampsite(selectedList, campsite) // update the real Entrant
-                        displayedCampsites.remove(campsite)             // update the UI
+                        entrant?.let {
+                            appState.entrants.removeEntrantCampsite(it, selectedList, campsite)
+                        }
+                        displayedCampsites.remove(campsite)
                     }
                 )
             }

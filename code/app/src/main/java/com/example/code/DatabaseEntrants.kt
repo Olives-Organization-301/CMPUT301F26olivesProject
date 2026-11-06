@@ -4,6 +4,8 @@ import com.example.code.classes.Campsite
 import com.example.code.classes.Entrant
 import com.google.firebase.Firebase
 import com.google.firebase.firestore.DocumentId
+import com.google.firebase.firestore.FieldPath
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.firestore
 
 class DatabaseEntrants() {
@@ -39,5 +41,11 @@ class DatabaseEntrants() {
 
     fun updateEntrant(entrant: Entrant) {
         entrantsRef.document(entrant.getUserID()).set(entrant)
+    }
+
+    fun removeEntrantCampsite(entrant: Entrant, listKey: String, campsiteID: String) {
+        entrant.removeCampsite(listKey, campsiteID)   // keep the in-memory copy in sync
+        entrantsRef.document(entrant.getUserID())
+            .update(FieldPath.of("campsiteLists", listKey), FieldValue.arrayRemove(campsiteID))
     }
 }
