@@ -16,6 +16,25 @@ class DatabaseCampsites {
 
     val campsites: List<Campsite> get() = _campsites
 
+    init {
+        campsitesRef.addSnapshotListener { snapshots, error ->
+            if (error != null) {
+                android.util.Log.e("DB", "campsites listener failed", error)
+                return@addSnapshotListener
+            }
+            if (snapshots == null) return@addSnapshotListener
+            _campsites.clear()
+            snapshots.documents.forEach { doc ->
+                searchCampsite(doc.id) { campsite ->
+                    if (campsite != null && _campsites.none { it.campsiteID == campsite.campsiteID }) {
+                        _campsites.add(campsite)
+                    }
+                    android.util.Log.d("DB", "Campsites loaded: ${_campsites.size}")
+                }
+            }
+        }
+    }
+
     // Generate a unique numeric string ID between 1 and 1,000,000 without repetition
     fun generateUniqueCampsiteID(onResult: (String) -> Unit) {
         val randomId = Random.nextInt(1, 1000000).toString()
@@ -181,9 +200,14 @@ class DatabaseCampsites {
                     }
                 }
                 onResult(list)
+
             }
             .addOnFailureListener {
                 onResult(emptyList())
             }
+
+
+
+        }
     }
-}
+

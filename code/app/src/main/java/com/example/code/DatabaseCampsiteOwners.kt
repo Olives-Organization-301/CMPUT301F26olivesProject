@@ -78,4 +78,23 @@ class DatabaseCampsiteOwners {
                 onResult(null)
             }
     }
+
+    init {
+        campsiteOwnersRef.addSnapshotListener { snapshots, error ->
+            if (error != null) {
+                android.util.Log.e("DB", "owners listener failed", error)
+                return@addSnapshotListener
+            }
+            if (snapshots == null) return@addSnapshotListener
+            _campsiteOwners.clear()
+            _campsiteOwners.addAll(snapshots.documents.map { doc ->
+                CampsiteOwner(
+                    doc.getString("username") ?: "",
+                    doc.getString("email") ?: "",
+                    doc.getString("userID") ?: doc.id
+                )
+            })
+            android.util.Log.d("DB", "Owners loaded: ${_campsiteOwners.size}")
+        }
+    }
 }
