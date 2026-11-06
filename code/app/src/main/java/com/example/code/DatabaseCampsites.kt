@@ -33,4 +33,17 @@ class DatabaseCampsites() {
                 onResult(null)
             }
     }
+
+    init {
+        campsitesRef.addSnapshotListener { snapshots, error ->
+            if(error != null){
+                android.util.Log.e("DB", "campsite listener failed", error)
+                return@addSnapshotListener
+            }
+            if(snapshots == null) return@addSnapshotListener
+            _campsites.clear()
+            _campsites.addAll(snapshots.toObjects(Campsite::class.java))
+            android.util.Log.d("DB", "Campsites loaded: ${_campsites.size}")
+        }
+    }
 }

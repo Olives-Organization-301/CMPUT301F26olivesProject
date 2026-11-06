@@ -7,16 +7,16 @@ import kotlin.random.Random
  *
  */
 class Campsite(
-    private val name: String,
-    private val ownerID: String,
-    val campsiteID: String,
-    private var maxOccupancy: Int,
-    private var price: Float,
-    private var rating: Float,
-    private var capacity: Int,
-    private var coordinates: Coordinates,
-    private var startDate: LocalDateTime,
-    private var endDate: LocalDateTime,
+    private val name: String = "",
+    private val ownerID: String = "",
+    val campsiteID: String = "",
+    private var maxOccupancy: Int = 1,
+    private var price: Float = 0f,
+    private var rating: Float = 0f,
+    private var capacity: Int = 1,
+    private var coordinates: Coordinates = Coordinates(),
+    private var startDate: LocalDateTime = LocalDateTime.now(),
+    private var endDate: LocalDateTime = LocalDateTime.now(),
 ) {
     private var description: String = ""
     private var waitingList = mutableListOf<String>()

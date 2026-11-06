@@ -6,9 +6,9 @@ package com.example.code.classes
  */
 
 class Administrator(
-    username: String,
-    email: String,
-    userID: String
+    username: String = "",
+    email: String = "",
+    userID: String = ""
 ): User(username, email, userID) {
 
 
