@@ -31,8 +31,9 @@ fun CampsiteNavController(
         composable("entrantAlerts") {EntrantAlertsScreen(navController)}
 
         // CAMPSITE OWNER SCREENS
-        composable("campsiteOwnerMainScreen"){campsiteOwnerMainScreen(navController)}
-
+        composable("campsiteOwnerLogin") { CampsiteOwnerLoginScreen(navController) }
+        composable("campsiteOwnerMainScreen"){ CampsiteOwnerMainScreen(navController) }
+        composable("campsiteChat"){CampsiteChatScreen(navController)}
         // ADMIN SCREENS
 
     }
