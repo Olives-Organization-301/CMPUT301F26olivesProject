@@ -16,7 +16,8 @@ class DatabaseCampsiteOwners {
     }
 
     fun updateCampsiteOwnerUsername(campsiteOwner : CampsiteOwner, newUsername: String) {
-        campsiteOwnersRef.document(campsiteOwner.getUserID()).update("username", newUsername)
+        campsiteOwner.username = newUsername
+        campsiteOwnersRef.document(campsiteOwner.getUserID()).set(campsiteOwner)
     }
 
     fun deleteCampsiteOwner(campsiteOwner : CampsiteOwner) {
