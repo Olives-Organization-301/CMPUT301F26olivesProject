@@ -9,7 +9,7 @@ class DatabaseCampsiteOwners {
     private val campsiteOwnersRef = db.collection("CampsiteOwners")
     private val _campsiteOwners = mutableStateListOf<CampsiteOwner>()
 
-    val entrants: List<CampsiteOwner> get() = _campsiteOwners
+    val campsiteOwners: List<CampsiteOwner> get() = _campsiteOwners
 
     fun addCampsiteOwner(campsiteOwner : CampsiteOwner) {
         campsiteOwnersRef.document(campsiteOwner .getUserID()).set(campsiteOwner )

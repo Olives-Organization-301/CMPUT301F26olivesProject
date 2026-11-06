@@ -52,6 +52,7 @@ fun CampsiteDetailsScreen(
     navController: NavController,
     appState: AppState,
 ) {
+
     val entrant by produceState<Entrant?>(
         initialValue = null,
         key1 = appState.userID
@@ -60,7 +61,7 @@ fun CampsiteDetailsScreen(
         if (id == null) {
             value = null
         } else {
-            appState.entrants.searchEntrant(id) { found ->
+            appState.entrants.searchEntrants(id) { found ->
                 value = found
             }
         }
