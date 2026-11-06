@@ -15,6 +15,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import com.example.code.classes.AppState
 import com.example.code.classes.Campsite
 import com.example.code.ui.theme.CodeTheme
 
@@ -25,8 +26,8 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             CodeTheme {
-                val campsiteDatabase = remember { mutableStateListOf<Campsite>() }
-                CampsiteNavController(campsiteDatabase)
+                val appState = AppState()
+                CampsiteNavController(appState)
             }
         }
     }

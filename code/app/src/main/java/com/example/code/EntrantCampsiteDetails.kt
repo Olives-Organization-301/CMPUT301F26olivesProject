@@ -1,5 +1,7 @@
 package com.example.code
 
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -22,6 +24,9 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -31,7 +36,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.example.code.classes.AppState
 import com.example.code.classes.Campsite
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.setValue
+import com.example.code.classes.CampsiteOwner
 
 // TODO: DELETE these colours. We want colour choices to be in ui.Theme
 private val ScreenBackground = Color(0xFFFDF8F3)
@@ -39,12 +49,42 @@ private val ButtonPurple = Color(0xFF6750A4)
 private val ImagePlaceholder = Color(0xFFE6DFD8)
 
 // Conversation: https://claude.ai/chat/073b54ab-b55c-4752-a1ab-e436a65fdb6a
+@RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun CampsiteDetailsScreen(
     navController: NavController,
-    campsiteDatabase: MutableList<Campsite>,
-    campsiteID: String,
+    appState: AppState,
 ) {
+
+    val chosenCampsite by produceState<Campsite?>(
+        initialValue = null,
+        key1 = appState.viewingCampsiteID
+    ) {
+        val id = appState.viewingCampsiteID
+        if (id == null) {
+            value = null
+        } else {
+            appState.campsites.searchCampsite(id) { found ->
+                value = found
+            }
+        }
+    }
+
+    val campsite = chosenCampsite
+
+    val owner by produceState<CampsiteOwner?>(
+        initialValue = null,
+        key1 = campsite?.getOwnerID()
+    ) {
+        val ownerID = campsite?.getOwnerID()
+        if (ownerID == null) {
+            value = null
+        } else {
+            appState.owners.searchCampsiteOwner(ownerID) { found ->
+                value = found
+            }
+        }
+    }
 
     // Entire Interface
     // Wrap the Join Buttons
@@ -61,15 +101,15 @@ fun CampsiteDetailsScreen(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 18.dp)
         ) {
+            // Header title
             Text(
-                text = "Campsite Name",
+                text = campsite?.getName() ?: "Loading...",
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.align(Alignment.Center)
             )
             // Use IconButton in order to Make the X Icon
             IconButton(
-                // TODO: just have this go back to SearchScreen
                 onClick = { navController.popBackStack() },
                 modifier = Modifier.align(Alignment.CenterEnd)
             ) {
@@ -109,22 +149,40 @@ fun CampsiteDetailsScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // TODO: This should be connected to the ID of the Campsite the User clicked on.
-            Text("Owner Name", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-            Text("Lottery Begin Date: yyyy-mm-dd", fontWeight = FontWeight.Medium, fontSize = 18.sp)
-            Text("Lottery End Date: yyyy-mm-dd", fontWeight = FontWeight.Medium, fontSize = 18.sp)
+            // Owner + dates
+            Text(campsite?.getOwnerID() ?: "", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Text(
+                "Lottery Begin Date: ${campsite?.getStartDate()?.toLocalDate() ?: ""}",
+                fontWeight = FontWeight.Medium,
+                fontSize = 18.sp
+            )
+            Text(
+                "Lottery End Date: ${campsite?.getEndDate()?.toLocalDate() ?: ""}",
+                fontWeight = FontWeight.Medium,
+                fontSize = 18.sp
+            )
+            Text(
+                "Rating: ${campsite?.getRating()?.let { "$it/5" } ?: ""}",
+                fontWeight = FontWeight.Medium,
+                fontSize = 18.sp
+            )
+            Text(
+                "Max Occupancy: ${campsite?.getMaxOccupancy() ?: ""}",
+                fontWeight = FontWeight.Medium,
+                fontSize = 18.sp
+            )
+            Text(
+                "Location: ${campsite?.getCoordinates()?.getCountry() ?: ""}",
+                fontWeight = FontWeight.Medium,
+                fontSize = 18.sp
+            )
 
             Spacer(modifier = Modifier.height(12.dp))
 
+            // Details
             Text("Details:", fontWeight = FontWeight.Bold, fontSize = 16.sp)
             Text(
-                text = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod " +
-                        "tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim " +
-                        "veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea " +
-                        "commodo consequat. Duis aute irure dolor in reprehenderit in voluptate " +
-                        "velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint " +
-                        "occaecat cupidatat non proident, sunt in culpa qui officia deserunt " +
-                        "mollit anim id est laborum.",
+                text = campsite?.getDescription() ?: "",
                 fontSize = 16.sp
             )
 
@@ -138,23 +196,47 @@ fun CampsiteDetailsScreen(
                 .padding(16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Button(
-                onClick = { /* TODO: join waiting list */ },
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColors(containerColor = ButtonPurple)
+            if (campsite != null && appState.userID != null
+                && campsite.entrantInList(appState.userID!!)
             ) {
-                Box(modifier = Modifier.size(18.dp).background(Color.White, CircleShape))
-                Spacer(modifier = Modifier.size(8.dp))
-                Text("Join\nWaiting List", fontSize = 14.sp, textAlign = TextAlign.Center)
-            }
-            Button(
-                onClick = { /* TODO: join active lottery */ },
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColors(containerColor = ButtonPurple)
-            ) {
-                Box(modifier = Modifier.size(18.dp).background(Color.White, CircleShape))
-                Spacer(modifier = Modifier.size(8.dp))
-                Text("Join\nActive Lottery", fontSize = 14.sp, textAlign = TextAlign.Center)
+                Button(
+                    onClick = {
+                        campsite.removeEntrant(appState.userID!!)
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = ButtonPurple)
+                ) {
+                    Box(modifier = Modifier.size(18.dp).background(Color.White, CircleShape))
+                    Spacer(modifier = Modifier.size(8.dp))
+                    Text("Leave\nWaiting List", fontSize = 14.sp, textAlign = TextAlign.Center)
+                }
+            } else {
+                Button(
+                    onClick = {
+                        if (appState.userID != null && campsite != null) {
+                            campsite.addEntrant(appState.userID!!)
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = ButtonPurple)
+                ) {
+                    Box(modifier = Modifier.size(18.dp).background(Color.White, CircleShape))
+                    Spacer(modifier = Modifier.size(8.dp))
+                    Text("Join\nWaiting List", fontSize = 14.sp, textAlign = TextAlign.Center)
+                }
+                Button(
+                    onClick = {
+                        if (appState.userID != null && campsite != null) {
+                            campsite.addActiveLotteryEntrant(appState.userID!!)
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = ButtonPurple)
+                ) {
+                    Box(modifier = Modifier.size(18.dp).background(Color.White, CircleShape))
+                    Spacer(modifier = Modifier.size(8.dp))
+                    Text("Join\nActive Lottery", fontSize = 14.sp, textAlign = TextAlign.Center)
+                }
             }
         }
     }

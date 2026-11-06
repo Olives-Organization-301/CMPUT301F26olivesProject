@@ -1,21 +1,35 @@
 package com.example.code
-import com.google.firebase.firestore.DocumentId
+import androidx.compose.runtime.mutableStateListOf
+import com.example.code.classes.CampsiteOwner
+import com.google.firebase.Firebase
+import com.google.firebase.firestore.firestore
 
-/**
- * Repository for the "CampsiteOwners" Firestore collection.
- *
- * To use it, create an instance and call add, update, delete
- * The CampsiteOwner model is stored in each document. The id field is filled
- * automatically with the document ID.
- */
-// Class was built with the help of Claude : https://claude.ai/chat/6b55aa79-e6e7-49f3-bdb6-21e1a4a4dd95
-class DatabaseCampsiteOwners : FirestoreRepository<DatabaseCampsiteOwners.CampsiteOwner>("CampsiteOwners", DatabaseCampsiteOwners.CampsiteOwner::class.java) {
+class DatabaseCampsiteOwners {
+    private val db = Firebase.firestore
+    private val campsiteOwnersRef = db.collection("CampsiteOwners")
+    private val _campsiteOwners = mutableStateListOf<CampsiteOwner>()
 
-    data class CampsiteOwner(
-        @DocumentId val id: String = "",
-        val name: String = "",
-        val email: String = "",
-        val password: String = "",
-        val phone: String = ""
-    )
+    val entrants: List<CampsiteOwner> get() = _campsiteOwners
+
+    fun addCampsiteOwner(campsiteOwner : CampsiteOwner) {
+        campsiteOwnersRef.document(campsiteOwner .getUserID()).set(campsiteOwner )
+    }
+
+    fun updateCampsiteOwnerUsername(campsiteOwner : CampsiteOwner, newUsername: String) {
+        campsiteOwnersRef.document(campsiteOwner.getUserID()).update("username", newUsername)
+    }
+
+    fun deleteCampsiteOwner(campsiteOwner : CampsiteOwner) {
+        campsiteOwnersRef.document(campsiteOwner .getUserID()).delete()
+    }
+
+    fun searchCampsiteOwner(ownerID: String, onResult: (CampsiteOwner?) -> Unit) {
+        campsiteOwnersRef.document(ownerID).get()
+            .addOnSuccessListener { doc ->
+                onResult(doc.toObject(CampsiteOwner::class.java))
+            }
+            .addOnFailureListener {
+                onResult(null)
+            }
+    }
 }

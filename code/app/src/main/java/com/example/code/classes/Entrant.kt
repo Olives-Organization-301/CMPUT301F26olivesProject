@@ -6,17 +6,18 @@ class Entrant(
     userID: String
 ): User(username, email, userID) {
 
-    private var activeCampsites = mutableListOf<Campsite>()
-    private var waitingListCampsites = mutableListOf<Campsite>()
+    // Use Maps so User can add their own Custom lists
+    private var campsiteLists = mapOf<String, MutableList<String>>(
+        "Active Campsites" to mutableListOf(),
+        "Past Campsites" to mutableListOf()
+    )
 
-    private var campsiteLists = mapOf<String, Campsite>()
-
-    fun addActiveCampsite(campsite: Campsite) {
-        activeCampsites.add(campsite)
+    fun addActiveCampsite(campsiteID: String) {
+        campsiteLists["Active Campsite"]!!.add(campsiteID)
     }
 
-    fun addWaitingListCampsite(campsite: Campsite) {
-        waitingListCampsites.add(campsite)
+    fun addWaitingListCampsite(campsiteID: String) {
+        campsiteLists["Past Campsites"]!!.add(campsiteID)
     }
 
     fun removeActiveCampsite() {
