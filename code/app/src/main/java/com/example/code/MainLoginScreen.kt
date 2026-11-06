@@ -221,9 +221,11 @@ fun signIn(navController: NavController, appState: AppState){
             val newEntrant = Entrant(uid!!.take(6), "", uid)
             appState.entrants.addEntrant(newEntrant)
             navController.navigate("mainSearchScreen")
+
+            // CHANGE BACK TO MAIN SEARCH SCREEN AFTER TESTING
         }
     } else {
-        navController.navigate("mainSearchScreen")
+        navController.navigate("campsiteOwnerMainScreen")
     }
 }
 

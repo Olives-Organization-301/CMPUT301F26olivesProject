@@ -86,6 +86,7 @@ fun MainSearchScreen(
             .map { (campsite, _) -> campsite }
             .toList()
     }
+
     // Column Wrapping the Search/Card Screens and Menu bar
     Column(modifier = Modifier.fillMaxSize()) {
 
@@ -104,6 +105,9 @@ fun MainSearchScreen(
                 .weight(1f)
                 .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
+            // To avoid clipping it into the top of the screen
+            Spacer(Modifier.height(48.dp))
+
             // Search Bar
             // TODO: Add Sidebar button and Search Button on Search Button
             TextField(
