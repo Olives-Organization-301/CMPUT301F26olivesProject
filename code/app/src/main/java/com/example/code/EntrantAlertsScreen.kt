@@ -27,6 +27,9 @@ import androidx.navigation.NavController
 import com.example.code.classes.Alert
 import com.example.code.classes.AppState
 
+/**
+ *
+ */
 @Composable
 fun EntrantAlertsScreen(navController: NavController, appState: AppState){
     val alerts : List<Alert> = appState.alerts.alerts
