@@ -12,21 +12,26 @@ class DatabaseCampsites() {
     val campsites: List<Campsite> get() = _campsites
 
     fun addCampsite(campsite: Campsite) {
+        _campsites.add(campsite)
         campsitesRef.document(campsite.campsiteID).set(campsite)
     }
 
     fun updateCampsiteName(campsite: Campsite, newName: String) {
+        val index = _campsites.indexOfFirst { it.campsiteID == campsite.campsiteID }
+        if (index != -1) {
+            _campsites[index] = campsite
+        }
         campsitesRef.document(campsite.campsiteID).update("name", newName)
     }
 
     fun deleteCampsite(campsite: Campsite) {
+        _campsites.removeAll { it.campsiteID == campsite.campsiteID }
         campsitesRef.document(campsite.campsiteID).delete()
     }
 
     fun searchCampsite(campsiteID: String, onResult: (Campsite?) -> Unit) {
         campsitesRef.document(campsiteID).get()
             .addOnSuccessListener { doc ->
-                // toObject returns null if the document doesn't exist
                 onResult(doc.toObject(Campsite::class.java))
             }
             .addOnFailureListener {
