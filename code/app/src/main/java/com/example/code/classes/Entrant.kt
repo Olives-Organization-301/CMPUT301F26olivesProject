@@ -40,4 +40,9 @@ class Entrant(
 // Prompt: I'm getting the following error while building my project. The error is: Platform declaration clash: The following declarations have the same JVM signature (getCampsiteLists()Ljava/util/Map;): fun &lt;get-campsiteLists&gt;(): MutableMap<String, MutableList<String>> defined in com.example.code.classes.Entrant fun getCampsiteLists(): Map<String, MutableList<String>> defined in com.example.code.classes.Entrant. Fix this issue.
     @JvmName("getCampsiteListsMap")
     fun getCampsiteLists(): Map<String, MutableList<String>> = campsiteLists
+
+    fun rateCampsite(campsite: Campsite, newRating: Float, databaseCampsites: com.example.code.DatabaseCampsites) {
+        campsite.setRating(newRating)
+        databaseCampsites.updateCampsiteRating(campsite, newRating)
+    }
 }
