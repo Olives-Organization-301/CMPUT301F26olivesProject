@@ -60,7 +60,7 @@ fun CampsiteDetailsScreen(
         if (id == null) {
             value = null
         } else {
-            appState.entrants.searchEntrant(id) { found ->
+            appState.entrants.searchEntrants(id) { found ->
                 value = found
             }
         }
