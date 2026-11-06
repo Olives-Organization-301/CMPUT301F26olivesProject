@@ -51,4 +51,23 @@ class DatabaseEntrants() {
         entrantsRef.document(entrant.getUserID())
             .update(FieldPath.of("campsiteLists", listKey), FieldValue.arrayRemove(campsiteID))
     }
+
+    init {
+        entrantsRef.addSnapshotListener { snapshots, error ->
+            if (error != null) {
+                android.util.Log.e("DB", "entrants listener failed", error)
+                return@addSnapshotListener
+            }
+            if (snapshots == null) return@addSnapshotListener
+            _entrants.clear()
+            _entrants.addAll(snapshots.documents.map { doc ->
+                Entrant(
+                    doc.getString("username") ?: "",
+                    doc.getString("email") ?: "",
+                    doc.getString("userID") ?: doc.id
+                )
+            })
+            android.util.Log.d("DB", "Entrants loaded: ${_entrants.size}")
+        }
+    }
 }

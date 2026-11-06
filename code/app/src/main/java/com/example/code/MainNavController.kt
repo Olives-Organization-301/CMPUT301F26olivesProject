@@ -7,7 +7,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.code.classes.AppState
-import com.example.code.classes.Campsite
 
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
@@ -31,12 +30,10 @@ fun CampsiteNavController(
         composable("entrantAlerts") { EntrantAlertsScreen(navController, appState)}
 
         // CAMPSITE OWNER SCREENS
-        composable("campsiteOwnerLogin") { CampsiteOwnerLoginScreen(navController) }
-        // needs fixes ASAP
-        //composable("campsiteOwnerMainScreen"){ CampsiteOwnerMainScreen(navController, appState) }
-        composable("campsiteChat"){CampsiteChatScreen(navController)}
+        composable("campsiteOwnerLogin") { CampsiteOwnerLoginScreen(navController, appState) }
+        composable("campsiteOwnerMainScreen") { CampsiteOwnerMainScreen(navController, appState) }
+        composable("campsiteChat") { CampsiteChatScreen(navController) }
         // ADMIN SCREENS
-        composable("AdminMainSearchScreen"){AdminMainSearchScreen(navController, appState)}
-
+        composable("AdminMainSearchScreen") { AdminMainSearchScreen(navController, appState) }
     }
 }

@@ -19,7 +19,7 @@ data class SearchFilters(
     fun matches(campsite: Campsite): Boolean =
         (country.isBlank() ||
                 campsite.getCoordinates().getCountry().equals(country, ignoreCase = true)) &&
-                (fromDate?.let { campsite.getStartDate() >= it } ?: true) &&
+                (fromDate?.let { f -> campsite.getStartDate()?.let { it >= f } ?: true } ?: true) &&
                 (minGuests?.let { campsite.getMaxOccupancy() >= it } ?: true) &&
                 (maxGuests?.let { campsite.getMaxOccupancy() <= it } ?: true)
 }
