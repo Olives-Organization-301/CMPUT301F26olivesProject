@@ -27,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -37,6 +38,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.example.code.classes.AppState
+import com.example.code.classes.Campsite
+import com.example.code.classes.Entrant
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.text.input.KeyboardType
 
 // Conversation: https://claude.ai/share/b857df9c-812a-4adb-b696-38a5266149f7
 @Composable
@@ -44,8 +52,26 @@ fun ProfileScreen(
     navController: NavController,
     appState: AppState
 ) {
-    val campsitePlaceholder = remember { mutableStateListOf("Campsite1", "Campsite2", "Campsite3") }
+
+    val entrant by produceState<Entrant?>(
+        initialValue = null,
+        key1 = appState.userID
+    ) {
+        val id = appState.userID
+        if (id == null) {
+            value = null
+        } else {
+            appState.entrants.searchEntrant(id) { found ->
+                value = found
+            }
+        }
+    }
+
+    val recentCampsites = entrant?.getCampsiteLists()?.get("Past_Campsites") ?: emptyList()
     var showEditDialog by remember { mutableStateOf(false) }
+    var showPolicyDialog by remember { mutableStateOf(false) }
+    var refreshTick by remember { mutableStateOf(0) }
+    val tick = refreshTick   // read so the screen recomposes after a save
 
     val outline = MaterialTheme.colorScheme.onSurface
 
@@ -98,10 +124,11 @@ fun ProfileScreen(
                     .weight(1f)
                     .padding(horizontal = 16.dp)
             ) {
-                Text("Profile Name")
-                Text("Username")
-                Text("Date of Birth")
-                Text("Email")
+                Text(entrant?.name?.ifBlank { "No name set" } ?: "Loading…")
+                Text("@${entrant?.username ?: ""}")
+                Text(entrant?.dateOfBirth?.ifBlank { "No date of birth" } ?: "")
+                Text(entrant?.email ?: "")
+                Text(entrant?.phoneNumber?.ifBlank { "No phone number" } ?: "")
             }
 
             // Cancel Box
@@ -120,11 +147,7 @@ fun ProfileScreen(
         Spacer(Modifier.height(16.dp))
 
         Text("About Me", fontWeight = FontWeight.Bold)
-        Text(
-            "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor " +
-                    "incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis " +
-                    "nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat."
-        )
+        Text(entrant?.description?.ifBlank { "No description yet." } ?: "")
 
         Spacer(Modifier.height(24.dp))
 
@@ -137,11 +160,14 @@ fun ProfileScreen(
                 .weight(1f)
                 .fillMaxWidth()
         ) {
-            items(campsitePlaceholder) { campsite ->
+            items(recentCampsites) { campsite ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { /* TODO: navigate to campsite details */ }
+                        .clickable {
+                            appState.viewingCampsiteID = campsite
+                            navController.navigate("campsiteDetails")
+                        }
                         .padding(vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -179,7 +205,7 @@ fun ProfileScreen(
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Button(
-                onClick = {},
+                onClick = { showPolicyDialog = true },
                 modifier = Modifier.weight(1f)
             ) { Text("View User Policy") }
 
@@ -191,32 +217,200 @@ fun ProfileScreen(
     }
 
     // Edit User popup (Delete Profile lives here now)
-    if (showEditDialog) {
-        AlertDialog(
-            onDismissRequest = { showEditDialog = false },
-            title = { Text("Edit User Profile") },
-            text = {
-                Column {
-                    // TODO: editable fields (name, username, about me, ...)
-                    Text("Profile fields go here.")
-
-                    Spacer(Modifier.height(24.dp))
-
-                    Button(
-                        onClick = { /* TODO: confirm + delete profile */ },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.error
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text("Delete Profile") }
-                }
+    val current = entrant
+    if (showEditDialog && current != null) {
+        EditProfileDialog(
+            entrant = current,
+            onDismiss = { showEditDialog = false },
+            onSave = { name, username, dob, email, phone, description ->
+                current.name = name
+                current.username = username
+                current.dateOfBirth = dob
+                current.email = email
+                current.phoneNumber = phone
+                current.description = description
+                refreshTick++
+                showEditDialog = false
+                // TODO: persist to Firebase
             },
-            confirmButton = {
-                TextButton(onClick = { showEditDialog = false }) { Text("Save") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showEditDialog = false }) { Text("Cancel") }
+            onDeleteProfile = {
+                appState.entrants.deleteEntrant(entrant!!)
+                showEditDialog = false
+                appState.userID = null
+                navController.navigate("loginScreen")
             }
         )
     }
+
+    if (showPolicyDialog) {
+        PolicyDialog(onDismiss = { showPolicyDialog = false })
+    }
+}
+
+@Composable
+fun PolicyDialog(
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("User Policy") },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                PolicySection(
+                    title = "1. Accounts",
+                    body = "You must provide accurate information when creating your profile. " +
+                            "You are responsible for all activity under your account and for " +
+                            "keeping your login details private."
+                )
+                PolicySection(
+                    title = "2. Reservations",
+                    body = "Campsite reservations are held for you once confirmed. If you cannot " +
+                            "attend, cancel at least 48 hours in advance so the spot can be " +
+                            "offered to someone on the waiting list. Repeated no-shows may " +
+                            "limit your ability to book."
+                )
+                PolicySection(
+                    title = "3. Respect the Campsite",
+                    body = "Leave no trace: pack out all garbage, follow posted fire restrictions, " +
+                            "and keep noise down between 10 PM and 7 AM. Damage to campsite " +
+                            "property may result in fees or account suspension."
+                )
+                PolicySection(
+                    title = "4. Conduct",
+                    body = "Harassment, discrimination, or unsafe behaviour toward other campers " +
+                            "or staff is not tolerated and may result in removal from the platform."
+                )
+                PolicySection(
+                    title = "5. Your Data",
+                    body = "We store your name, contact details, and campsite history to run the " +
+                            "service. We do not sell your personal information. You can edit or " +
+                            "delete your profile at any time from your profile page."
+                )
+                PolicySection(
+                    title = "6. Changes",
+                    body = "This policy may be updated from time to time. Continued use of the " +
+                            "app means you accept the current version."
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        }
+    )
+}
+
+@Composable
+private fun PolicySection(title: String, body: String) {
+    Column {
+        Text(title, fontWeight = FontWeight.Bold)
+        Text(body, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+@Composable
+fun EditProfileDialog(
+    entrant: Entrant,
+    onDismiss: () -> Unit,
+    onSave: (
+        name: String,
+        username: String,
+        dateOfBirth: String,
+        email: String,
+        phoneNumber: String,
+        description: String
+    ) -> Unit,
+    onDeleteProfile: () -> Unit
+) {
+    // Draft state: edits only get committed when Save is pressed
+    var name by remember { mutableStateOf(entrant.name) }
+    var username by remember { mutableStateOf(entrant.username) }
+    var dateOfBirth by remember { mutableStateOf(entrant.dateOfBirth) }
+    var email by remember { mutableStateOf(entrant.email) }
+    var phoneNumber by remember { mutableStateOf(entrant.phoneNumber) }
+    var description by remember { mutableStateOf(entrant.description) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit User Profile") },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = username,
+                    onValueChange = { username = it },
+                    label = { Text("Username") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = dateOfBirth,
+                    onValueChange = { dateOfBirth = it },
+                    label = { Text("Date of Birth") },
+                    placeholder = { Text("YYYY-MM-DD") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = { email = it },
+                    label = { Text("Email") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = phoneNumber,
+                    onValueChange = { phoneNumber = it },
+                    label = { Text("Phone Number") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it },
+                    label = { Text("About Me") },
+                    minLines = 3,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(Modifier.height(16.dp))
+
+                Button(
+                    onClick = onDeleteProfile,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Delete Profile") }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onSave(
+                    name,
+                    username,
+                    dateOfBirth,
+                    email,
+                    phoneNumber,
+                    description
+                ) }
+            ) { Text("Save") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
 }
