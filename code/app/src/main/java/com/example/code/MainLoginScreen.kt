@@ -76,7 +76,6 @@ fun LoginScreen(
     LoginScreenContent(
         onSignUp = { signIn(navController) },
         onLogIn = { signIn(navController) },
-        onOwnerLogin = { navController.navigate("campsiteOwnerLogin") },
         onPrivacyPolicy = {},
         darkTheme = darkTheme
     )
@@ -86,7 +85,6 @@ fun LoginScreen(
 fun LoginScreenContent(
     onSignUp: () -> Unit = {},
     onLogIn: () -> Unit = {},
-    onOwnerLogin: () -> Unit = {},
     onPrivacyPolicy: () -> Unit = {},
     darkTheme: Boolean = isSystemInDarkTheme()//checks for dark theme
 ) {
@@ -167,7 +165,6 @@ fun LoginScreenContent(
             ) {
                 HomeButton("Sign up", colors.primaryButton, colors.primaryText, onSignUp)//login and signup buttons
                 HomeButton("Log in", colors.secondaryButton, colors.secondaryText, onLogIn)
-                HomeButton("Campsite Owner Login", colors.primaryButton, colors.primaryText, onOwnerLogin)
             }
 
             // Footer Section
