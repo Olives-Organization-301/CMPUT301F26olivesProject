@@ -28,11 +28,11 @@ fun CampsiteNavController(
         composable("campsiteDetails") { CampsiteDetailsScreen(navController, appState) }
         composable("reservationsListScreen") { ReservationsListScreen(navController, appState) }
         composable("profileScreen") { ProfileScreen(navController, appState) }
-        composable("entrantAlerts") { EntrantAlertsScreen(navController)}
+        composable("entrantAlerts") { EntrantAlertsScreen(navController, appState)}
 
         // CAMPSITE OWNER SCREENS
         composable("campsiteOwnerLogin") { CampsiteOwnerLoginScreen(navController) }
-        composable("campsiteOwnerMainScreen"){ CampsiteOwnerMainScreen(navController) }
+        composable("campsiteOwnerMainScreen"){ CampsiteOwnerMainScreen(navController, appState) }
         composable("campsiteChat"){CampsiteChatScreen(navController)}
         // ADMIN SCREENS
         composable("AdminMainSearchScreen"){AdminMainSearchScreen(navController, appState)}
