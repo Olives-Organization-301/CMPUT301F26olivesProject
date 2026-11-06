@@ -63,8 +63,9 @@ import com.example.code.classes.PreviewCampsite
  *  Prompt: "How do I Correctly pad this Main screen? How do I make the Cards?"
  *
  */
+//https://claude.ai/share/a95788a4-8990-40f1-95c7-b5a744a1e94d: Prompt:I need to make a button to be able to go to campsitechatscreen
 @Composable
-fun campsiteOwnerMainScreen(navController: NavController) {
+fun CampsiteOwnerMainScreen(navController: NavController) {
     var searchString by remember { mutableStateOf("") }
     var showAdd by remember {mutableStateOf(false)}
     var showEdit by remember {mutableStateOf<PreviewCampsite?>(null)}
@@ -175,7 +176,8 @@ fun campsiteOwnerMainScreen(navController: NavController) {
         ) {
             Button(onClick = { }, modifier = Modifier.weight(1f)) { Text("List", maxLines = 1) }
             Button(onClick = { }, modifier = Modifier.weight(1f)) { Text("QR Code", maxLines = 1) }
-            Button(onClick = { }, modifier = Modifier.weight(1f)) { Text("Account", maxLines = 1) }
+            Button(onClick = { navController.navigate("loginScreen") }, modifier = Modifier.weight(1f)) { Text("Account", maxLines = 1) }
+            Button(onClick = { navController.navigate("campsiteChat") }, modifier = Modifier.weight(1f)) { Text("Message Entrants", maxLines = 1) }
         }
     }
     if(showAdd){
