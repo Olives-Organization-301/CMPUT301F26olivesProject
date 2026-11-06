@@ -57,7 +57,15 @@ import kotlin.contracts.SimpleEffect
 import com.example.code.classes.AppState
 import com.example.code.classes.Campsite
 
-
+/** # Search Screen
+ *  Implementation of the Admins' Main Screen as seen in the Figma.
+ *
+ *  Prototype was gained from this conversation with Claude Sonnet 5.0:
+ *  https://claude.ai/chat/fa52c57a-03b0-486b-b988-87d2f36ff18a
+ *  Prompt: "I want to change this UI code to make it look like this--how do I do that?"
+ *  Images attacthed: Figma write ups and beta code done in production
+ */
+// https://claude.ai/share/cdce4c2a-2c1a-4c36-895d-ad4fb811582b
 
 data class Profile(val id: String, val name: String, val role: String)
 data class PendingRemoval(val message: String, val onConfirm: () -> Unit)
@@ -149,7 +157,7 @@ fun AdminMainSearchScreen(navController: NavController, appState: AppState) {
                 .padding(vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("My Account", fontSize = 12.sp)
+            Text("", fontSize = 12.sp)
         }
 
     }
