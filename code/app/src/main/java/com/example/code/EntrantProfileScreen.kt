@@ -52,8 +52,6 @@ fun ProfileScreen(navController: NavController) {
             .padding(horizontal = 16.dp, vertical = 24.dp)
     ) {
 
-        Spacer(Modifier.height(48.dp))
-
         // Profile Basic Details
         Row(
             modifier = Modifier.fillMaxWidth(),
