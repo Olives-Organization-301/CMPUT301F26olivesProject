@@ -24,7 +24,7 @@ fun CampsiteOwnerLoginScreen(
     navController: NavController,
     darkTheme: Boolean = isSystemInDarkTheme()
 ) {
-    var ownerUsername by remember { mutableStateOf("") }
+    var ownerUsername by remember { mutableStateOf("") }//Username for owner and password
     var password by remember { mutableStateOf("") }
 
     val backgroundColor = if (darkTheme) Color(0xFF101828) else Color(0xFFFFF8EE)
@@ -49,7 +49,7 @@ fun CampsiteOwnerLoginScreen(
         ) {
             // Title
             Text(
-                text = "Campsite Owner Login",
+                text = "Campsite Owner Login",//The text for login
                 style = MaterialTheme.typography.headlineMedium.copy(
                     fontWeight = FontWeight.Bold,
                     color = textColor
@@ -63,7 +63,7 @@ fun CampsiteOwnerLoginScreen(
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Text(
-                    text = "Owner Log In",
+                    text = "Owner Log In",//where the owner logs in
                     style = MaterialTheme.typography.bodyMedium.copy(
                         color = textColor,
                         fontWeight = FontWeight.Medium
@@ -86,7 +86,7 @@ fun CampsiteOwnerLoginScreen(
                         if (ownerUsername.isNotEmpty()) {
                             IconButton(onClick = { ownerUsername = "" }) {
                                 Icon(Icons.Filled.Clear, contentDescription = "Clear text", tint = Color.Gray)
-                            }
+                            }//enters login
                         }
                     }
                 )
@@ -100,7 +100,7 @@ fun CampsiteOwnerLoginScreen(
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Text(
-                    text = "Password",
+                    text = "Password",//password field
                     style = MaterialTheme.typography.bodyMedium.copy(
                         color = textColor,
                         fontWeight = FontWeight.Medium
@@ -119,7 +119,7 @@ fun CampsiteOwnerLoginScreen(
                         disabledContainerColor = fieldBackgroundColor,
                         focusedBorderColor = Color.Transparent,
                         unfocusedBorderColor = Color.Transparent
-                    ),
+                    ),//enters password
                     trailingIcon = {
                         if (password.isNotEmpty()) {
                             IconButton(onClick = { password = "" }) {
@@ -145,7 +145,7 @@ fun CampsiteOwnerLoginScreen(
                 )
             ) {
                 Text(
-                    text = "Log in",
+                    text = "Log in",//logs in
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold
                 )
