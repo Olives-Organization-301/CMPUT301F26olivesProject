@@ -18,7 +18,7 @@ fun CampsiteNavController(
 
     NavHost(navController = navController, startDestination = "loginScreen") {
         // MAIN ENTRY POINTs
-        composable("loginScreen") { LoginScreen(navController) }
+        composable("loginScreen") { LoginScreen(navController, appState) }
 
         // ENTRANT SCREENS
         composable("mainSearchScreen") { MainSearchScreen(
