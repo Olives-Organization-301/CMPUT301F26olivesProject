@@ -22,6 +22,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.google.firebase.Firebase
+import com.google.firebase.auth.auth
 
 /** # Search Screen
  *  Implementation of the Entrants' Login screen as seen in the Figma.
@@ -206,6 +208,16 @@ private fun HomeButton(
         )
     ) {
         Text(text = label, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+fun signIn(navController: NavController){
+    if(Firebase.auth.currentUser == null){
+        Firebase.auth.signInAnonymously().addOnSuccessListener {
+            navController.navigate("mainSearchScreen")
+        }
+    } else {
+        navController.navigate("mainSearchScreen")
     }
 }
 

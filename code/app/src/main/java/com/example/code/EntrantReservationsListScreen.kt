@@ -64,6 +64,9 @@ fun ReservationsListScreen(
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
 
+        // To avoid clipping it into the top of the screen
+        Spacer(Modifier.height(48.dp))
+
         // Header: title + close button
         Row(
             modifier = Modifier.fillMaxWidth(),

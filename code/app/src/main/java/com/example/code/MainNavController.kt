@@ -6,12 +6,13 @@ import androidx.compose.runtime.Composable
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.example.code.classes.AppState
 import com.example.code.classes.Campsite
 
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun CampsiteNavController(
-    campsiteDatabase: MutableList<Campsite>,
+    appState: AppState
 ) {
     val navController = rememberNavController()
 
@@ -20,22 +21,19 @@ fun CampsiteNavController(
         composable("loginScreen") { LoginScreen(navController) }
 
         // ENTRANT SCREENS
-        composable("mainSearchScreen") { MainSearchScreen(navController, campsiteDatabase) }
-        composable("campsiteDetails") { CampsiteDetailsScreen(navController, campsiteDatabase, "1") }
+        composable("mainSearchScreen") { MainSearchScreen(
+            navController, appState,
+            onUpdateCampsiteId = { appState.viewingCampsiteID = it }
+        ) }
+        composable("campsiteDetails") { CampsiteDetailsScreen(navController, appState) }
         composable("reservationsListScreen") { ReservationsListScreen(navController) }
         composable("profileScreen") { ProfileScreen(navController) }
-        /* TODO: There should be only 4 Entrants Screens.
-            QR Screen, Map Screen, Date Selections, Edit Profile, Policy and Filter Settings should
-            be Popups instead when toggled.
-            I Want Review Screen to be integrated with Entrants
-            Also (I hope y'all don't mind) I want the screens to be named based on actors as well
-            Also sorry for these comments, they should be centralized in a Wiki but
-            I am in the zone right now
-        */
+        composable("entrantAlerts") {EntrantAlertsScreen(navController)}
 
         // CAMPSITE OWNER SCREENS
-        composable("campsiteOwnerMainScreen"){campsiteOwnerMainScreen(navController)}
-
+        composable("campsiteOwnerLogin") { CampsiteOwnerLoginScreen(navController) }
+        composable("campsiteOwnerMainScreen"){ CampsiteOwnerMainScreen(navController) }
+        composable("campsiteChat"){CampsiteChatScreen(navController)}
         // ADMIN SCREENS
         composable("AdminMainSearchScreen"){AdminMainSearchScreen(navController)}
 

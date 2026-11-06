@@ -1,23 +1,36 @@
 package com.example.code
-import com.google.firebase.firestore.DocumentId
+import androidx.compose.runtime.mutableStateListOf
+import com.example.code.classes.Campsite
+import com.google.firebase.Firebase
+import com.google.firebase.firestore.firestore
 
-/**
- * Repository for the "Campsites" Firestore collection.
- *
- * To use it, create an instance and call add, update, delete
- * The Campsite model is stored in each document. The id field is filled
- * automatically with the document ID.
- */
+class DatabaseCampsites() {
+    private val db = Firebase.firestore
+    private val campsitesRef = db.collection("campsites")
+    private val _campsites = mutableStateListOf<Campsite>()
 
-// Class was built with the help of Claude : https://claude.ai/chat/6b55aa79-e6e7-49f3-bdb6-21e1a4a4dd95
+    val campsites: List<Campsite> get() = _campsites
 
-class DatabaseCampsites : FirestoreRepository<DatabaseCampsites.Campsite>("Campsites", DatabaseCampsites.Campsite::class.java) {
+    fun addCampsite(campsite: Campsite) {
+        campsitesRef.document(campsite.campsiteID).set(campsite)
+    }
 
-    data class Campsite(
-        @DocumentId var id: String = "",
-        var name: String = "",
-        var location: String = "",
-        var ownerId: String = "",
-        var pricePerNight: Double = 0.0
-    )
+    fun updateCampsiteName(campsite: Campsite, newName: String) {
+        campsitesRef.document(campsite.campsiteID).update("name", newName)
+    }
+
+    fun deleteCampsite(campsite: Campsite) {
+        campsitesRef.document(campsite.campsiteID).delete()
+    }
+
+    fun searchCampsite(campsiteID: String, onResult: (Campsite?) -> Unit) {
+        campsitesRef.document(campsiteID).get()
+            .addOnSuccessListener { doc ->
+                // toObject returns null if the document doesn't exist
+                onResult(doc.toObject(Campsite::class.java))
+            }
+            .addOnFailureListener {
+                onResult(null)
+            }
+    }
 }
