@@ -22,6 +22,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.example.code.classes.AppState
+import com.example.code.classes.Entrant
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
 
@@ -71,11 +73,12 @@ private val Pink = Color(0xFFE91E63)
 @Composable
 fun LoginScreen(
     navController: NavController,
+    appState: AppState,
     darkTheme: Boolean = isSystemInDarkTheme()
 ) {
     LoginScreenContent(
-        onSignUp = { signIn(navController) },
-        onLogIn = { signIn(navController) },
+        onSignUp = { signIn(navController, appState) },
+        onLogIn = { signIn(navController, appState) },
         onOwnerLogin = { navController.navigate("campsiteOwnerLogin") },
         onPrivacyPolicy = {},
         darkTheme = darkTheme
@@ -214,9 +217,12 @@ private fun HomeButton(
     }
 }
 
-fun signIn(navController: NavController){
+fun signIn(navController: NavController, appState: AppState){
     if(Firebase.auth.currentUser == null){
         Firebase.auth.signInAnonymously().addOnSuccessListener {
+            val uid = Firebase.auth.uid
+            val newEntrant = Entrant(uid!!.take(6), "", uid)
+            appState.entrants.addEntrant(newEntrant)
             navController.navigate("mainSearchScreen")
         }
     } else {

@@ -245,16 +245,16 @@ class DatabaseCampsitesTest {
 
     @Test
     fun testAddCampsite() {
-        val owner = CampsiteOwner("owner_camp", "owner_camp@test.com", "owner_camp_id")
+        val ownerID = "owner_camp_id"
         val coords = Coordinates("Canada", "Alberta", -113.49, 53.54)
         val campsite = Campsite(
             name = "Mountain View",
-            owner = owner,
+            ownerID = ownerID,
+            campsiteID = "campsite_id_101",
             maxOccupancy = 4,
             price = 60.0f,
             rating = 4.8f,
-            capacity = "4",
-            campsiteID = "campsite_id_101",
+            capacity = 4,
             coordinates = coords,
             startDate = LocalDateTime.now(),
             endDate = LocalDateTime.now().plusDays(2),
@@ -264,16 +264,16 @@ class DatabaseCampsitesTest {
 
     @Test
     fun testUpdateCampsiteName() {
-        val owner = CampsiteOwner("owner_camp", "owner_camp@test.com", "owner_camp_id")
+        val ownerID = "owner_camp_id"
         val coords = Coordinates("Canada", "Alberta", -113.49, 53.54)
         val campsite = Campsite(
             name = "Sunny Meadow",
-            owner = owner,
+            ownerID = ownerID,
+            campsiteID = "campsite_id_102",
             maxOccupancy = 4,
             price = 60.0f,
             rating = 4.8f,
-            capacity = "4",
-            campsiteID = "campsite_id_102",
+            capacity = 4,
             coordinates = coords,
             startDate = LocalDateTime.now(),
             endDate = LocalDateTime.now().plusDays(2),
@@ -284,16 +284,16 @@ class DatabaseCampsitesTest {
 
     @Test
     fun testDeleteCampsite() {
-        val owner = CampsiteOwner("owner_camp", "owner_camp@test.com", "owner_camp_id")
+        val ownerID = "owner_camp_id"
         val coords = Coordinates("Canada", "Alberta", -113.49, 53.54)
         val campsite = Campsite(
             name = "River Bank",
-            owner = owner,
+            ownerID = ownerID,
+            campsiteID = "campsite_id_103",
             maxOccupancy = 4,
             price = 60.0f,
             rating = 4.8f,
-            capacity = "4",
-            campsiteID = "campsite_id_103",
+            capacity = 4,
             coordinates = coords,
             startDate = LocalDateTime.now(),
             endDate = LocalDateTime.now().plusDays(2),
@@ -375,16 +375,16 @@ class DatabaseUpdateAndDeleteTest {
     @Test
     fun testDeleteCampsite() {
         val campsiteStore = mutableMapOf<String, Campsite>()
-        val owner = CampsiteOwner("owner_1", "owner1@example.com", "owner_id_1")
+        val ownerID = "owner_id_1"
         val coords = Coordinates("Canada", "Alberta", -113.49, 53.54)
         val campsite = Campsite(
             name = "Pine Valley",
-            owner = owner,
+            ownerID = ownerID,
+            campsiteID = "campsite_999",
             maxOccupancy = 5,
             price = 50.0f,
             rating = 4.5f,
-            capacity = "5",
-            campsiteID = "campsite_999",
+            capacity = 5,
             coordinates = coords,
             startDate = LocalDateTime.now(),
             endDate = LocalDateTime.now().plusDays(5),
@@ -402,31 +402,30 @@ class DatabaseUpdateAndDeleteTest {
 
     @Test
     fun testUpdateEntrantWaitlistInCampsite() {
-        val owner = CampsiteOwner("owner_2", "owner2@example.com", "owner_id_2")
+        val ownerID = "owner_id_2"
         val coords = Coordinates("Canada", "Alberta", -113.49, 53.54)
         val campsite = Campsite(
             name = "Lakeside Camp",
-            owner = owner,
+            ownerID = ownerID,
+            campsiteID = "campsite_888",
             maxOccupancy = 2,
             price = 40.0f,
             rating = 4.0f,
-            capacity = "2",
-            campsiteID = "campsite_888",
+            capacity = 2,
             coordinates = coords,
             startDate = LocalDateTime.now(),
             endDate = LocalDateTime.now().plusDays(3),
         )
 
-        val entrant1 = Entrant("entrant1", "e1@example.com", "user_1")
-        val entrant2 = Entrant("entrant2", "e2@example.com", "user_2")
+        // Add entrant IDs to waiting list
+        campsite.addEntrant("user_1")
+        campsite.addEntrant("user_2")
+        assertTrue(campsite.entrantInList("user_1"))
+        assertTrue(campsite.entrantInList("user_2"))
 
-        // Add entrants to waiting list
-        campsite.addEntrant(entrant1)
-        campsite.addEntrant(entrant2)
-        assertEquals(2, campsite.waitingList.size)
-
-        // Generate final list (updates waitlist state)
+        // Generate final list (updates waitlist state and populates finalList)
         campsite.generateFinalList()
-        assertEquals(0, campsite.waitingList.size)
+        assertEquals(2, campsite.getFinalList().size)
+        assertFalse(campsite.entrantInList("user_1"))
     }
 }
