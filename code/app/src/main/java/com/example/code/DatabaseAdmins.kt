@@ -16,8 +16,7 @@ class DatabaseAdmins {
     }
 
     fun updateAdminUsername(admin: Administrator, newUsername: String) {
-        admin.username = newUsername
-        adminsRef.document(admin.getUserID()).update("username", newUsername)
+        adminsRef.document(admin.username).set(admin)
     }
 
     fun deleteAdmin(admin: Administrator) {

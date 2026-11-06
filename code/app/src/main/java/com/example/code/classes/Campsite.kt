@@ -3,38 +3,60 @@ package com.example.code.classes
 import java.time.LocalDateTime
 import kotlin.random.Random
 
-/**
+/** Representation of A Campsite class
  *
  */
 class Campsite(
     private val name: String,
-    private val owner: CampsiteOwner,
+    private val ownerID: String,
+    val campsiteID: String,
     private var maxOccupancy: Int,
     private var price: Float,
     private var rating: Float,
-    private var capacity: String,
-    public val campsiteID: String,
+    private var capacity: Int,
     private var coordinates: Coordinates,
     private var startDate: LocalDateTime,
     private var endDate: LocalDateTime,
 ) {
     private var description: String = ""
-
-    // Listy-list
-    var waitingList = mutableListOf<Entrant>()
-    private var finalList = mutableListOf<Entrant>()
+    private var waitingList = mutableListOf<String>()
+    private var activeLotteryList = mutableListOf<String>()
+    private var finalList = mutableListOf<String>() // Use Entrant IDs instead
     private var rules = mutableListOf<String>()
 
     fun getCoordinates(): Coordinates = coordinates
-
     fun getName(): String = name
-
-    fun addEntrant(entrant: Entrant) {
-        waitingList.add(entrant)
-    }
-
+    fun getMaxOccupancy(): Int = maxOccupancy
     fun getStartDate(): LocalDateTime = startDate
     fun getEndDate(): LocalDateTime = endDate
+    fun getOwnerID(): String = ownerID
+    fun getPrice(): Float = price
+    fun getRating(): Float = rating
+    fun getCapacity(): Int = capacity
+    fun getDescription(): String = description
+    fun getFinalList(): List<String> = finalList
+    fun getRules(): List<String> = rules
+
+    fun addEntrant(entrantID: String) {
+        waitingList.add(entrantID)
+    }
+
+    fun addActiveLotteryEntrant(entrantID: String) {
+        activeLotteryList.add(entrantID)
+    }
+
+    fun entrantInList(entrantID: String): Boolean {
+        return entrantID in waitingList || entrantID in activeLotteryList
+    }
+
+    fun removeEntrant(entrantID: String) {
+        if (entrantID in waitingList) {
+            waitingList.remove(entrantID)
+        }
+        else if (entrantID in activeLotteryList) {
+            activeLotteryList.remove(entrantID)
+        }
+    }
 
     fun generateFinalList() {
         var capacity = maxOccupancy
@@ -55,7 +77,4 @@ class Campsite(
             }
         }
     }
-
-
-
 }

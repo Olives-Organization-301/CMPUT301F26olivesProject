@@ -5,4 +5,4 @@ class PreviewCampsite (
     val location: String,
     val startMillis: Long?,
     val endMillis: Long?
-    )
+)
