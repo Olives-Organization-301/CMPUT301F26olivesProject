@@ -12,14 +12,14 @@ class DatabaseCampsites() {
     val campsites: List<Campsite> get() = _campsites
 
     fun addCampsite(campsite: Campsite) {
-        campsitesRef.document(campsite.toString()).set(campsite)
+        campsitesRef.document(campsite.campsiteID).set(campsite)
     }
 
     fun updateCampsiteName(campsite: Campsite, newName: String) {
-        campsitesRef.document(campsite.toString()).update("name", newName)
+        campsitesRef.document(campsite.campsiteID).update("name", newName)
     }
 
     fun deleteCampsite(campsite: Campsite) {
-        campsitesRef.document(campsite.toString()).delete()
+        campsitesRef.document(campsite.campsiteID).delete()
     }
 }
