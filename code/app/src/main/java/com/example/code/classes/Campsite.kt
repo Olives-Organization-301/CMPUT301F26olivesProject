@@ -14,7 +14,7 @@ class Campsite(
     private var price: Float = 0f,
     private var rating: Float = 0f,
     private var capacity: Int = 1,
-    private var coordinates: Coordinates = Coordinates(),
+    private var coordinates: Coordinates = Coordinates("", "", 0.0, 0.0),
     private var startDate: LocalDateTime = LocalDateTime.now(),
     private var endDate: LocalDateTime = LocalDateTime.now(),
 ) {
