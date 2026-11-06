@@ -53,4 +53,9 @@ class Entrant(
 // Map<String, MutableList<String>> defined in com.example.code.classes.Entrant. Fix this issue.
     @JvmName("getCampsiteListsMap")
     fun getCampsiteLists(): Map<String, MutableList<String>> = campsiteLists
+
+    fun rateCampsite(campsite: Campsite, newRating: Float, databaseCampsites: com.example.code.DatabaseCampsites) {
+        campsite.setRating(newRating)
+        databaseCampsites.updateCampsiteRating(campsite, newRating)
+    }
 }
