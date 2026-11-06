@@ -100,7 +100,7 @@ fun LoginScreen(
                     listOf(
                         "Admin" to "AdminMainSearchScreen",
                         "Entrant" to "mainSearchScreen",
-                        "Owner" to "campsiteOwnerMainScreen"
+                        "Owner" to "campsiteOwnerLogin"
                     ).forEach { (label, route) ->
                         Button(
                             modifier = Modifier.fillMaxWidth(),
