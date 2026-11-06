@@ -1,5 +1,7 @@
 package com.example.code
 import androidx.compose.runtime.mutableStateListOf
+import com.example.code.classes.Administrator
+import com.example.code.classes.Campsite
 import com.example.code.classes.Entrant
 import com.google.firebase.Firebase
 import com.google.firebase.firestore.DocumentId
@@ -17,10 +19,21 @@ class DatabaseEntrants() {
     }
 
     fun updateEntrantUsername(entrant: Entrant, newUsername: String) {
-        entrantsRef.document(entrant.username).set(newUsername)
+        entrant.username = newUsername
+        entrantsRef.document(entrant.getUserID()).set(entrant)
     }
 
     fun deleteEntrant(entrant: Entrant) {
         entrantsRef.document(entrant.getUserID()).delete()
+    }
+    fun searchEntrants(entrantID: String, onResult: (Entrant?) -> Unit) {
+        entrantsRef.document(entrantID).get()
+            .addOnSuccessListener { doc ->
+                // toObject returns null if the document doesn't exist
+                onResult(doc.toObject(Entrant::class.java))
+            }
+            .addOnFailureListener {
+                onResult(null)
+            }
     }
 }

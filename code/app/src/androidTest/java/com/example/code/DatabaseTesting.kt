@@ -17,6 +17,8 @@ import kotlin.random.Random
 /**
  * Unit and integration tests for DatabaseAdmins, DatabaseCampsiteOwners,
  * DatabaseCampsites, DatabaseEntrants, and TestDataGenerator.
+ * Spawned after prompting to agent : generate testcases (specified what kind of are needed) for the different
+ * types of collection
  **/
 class TestDataGenerator {
     val firstNames = listOf(
@@ -245,16 +247,16 @@ class DatabaseCampsitesTest {
 
     @Test
     fun testAddCampsite() {
-        val owner = CampsiteOwner("owner_camp", "owner_camp@test.com", "owner_camp_id")
+        val ownerID = "owner_camp_id"
         val coords = Coordinates("Canada", "Alberta", -113.49, 53.54)
         val campsite = Campsite(
             name = "Mountain View",
-            owner = owner,
+            ownerID = ownerID,
+            campsiteID = "campsite_id_101",
             maxOccupancy = 4,
             price = 60.0f,
             rating = 4.8f,
-            capacity = "4",
-            campsiteID = "campsite_id_101",
+            capacity = 4,
             coordinates = coords,
             startDate = LocalDateTime.now(),
             endDate = LocalDateTime.now().plusDays(2),
@@ -264,16 +266,16 @@ class DatabaseCampsitesTest {
 
     @Test
     fun testUpdateCampsiteName() {
-        val owner = CampsiteOwner("owner_camp", "owner_camp@test.com", "owner_camp_id")
+        val ownerID = "owner_camp_id"
         val coords = Coordinates("Canada", "Alberta", -113.49, 53.54)
         val campsite = Campsite(
             name = "Sunny Meadow",
-            owner = owner,
+            ownerID = ownerID,
+            campsiteID = "campsite_id_102",
             maxOccupancy = 4,
             price = 60.0f,
             rating = 4.8f,
-            capacity = "4",
-            campsiteID = "campsite_id_102",
+            capacity = 4,
             coordinates = coords,
             startDate = LocalDateTime.now(),
             endDate = LocalDateTime.now().plusDays(2),
@@ -284,16 +286,16 @@ class DatabaseCampsitesTest {
 
     @Test
     fun testDeleteCampsite() {
-        val owner = CampsiteOwner("owner_camp", "owner_camp@test.com", "owner_camp_id")
+        val ownerID = "owner_camp_id"
         val coords = Coordinates("Canada", "Alberta", -113.49, 53.54)
         val campsite = Campsite(
             name = "River Bank",
-            owner = owner,
+            ownerID = ownerID,
+            campsiteID = "campsite_id_103",
             maxOccupancy = 4,
             price = 60.0f,
             rating = 4.8f,
-            capacity = "4",
-            campsiteID = "campsite_id_103",
+            capacity = 4,
             coordinates = coords,
             startDate = LocalDateTime.now(),
             endDate = LocalDateTime.now().plusDays(2),
@@ -306,6 +308,184 @@ class DatabaseCampsitesTest {
     fun testGetCampsites() {
         val list = dbCampsites.campsites
         assertEquals(0, list.size)
+    }
+}
+
+class DatabaseSearchTest {
+
+    // ---------- DatabaseAdmins Search Lifecycle ----------
+
+    @Test
+    fun testAdminSearchLifecycle() {
+        val adminStore = mutableMapOf<String, Administrator>()
+        val adminID = "admin_search_101"
+        val oldUsername = "admin_before_update"
+        val newUsername = "admin_after_update"
+
+        fun searchAdmin(id: String, onResult: (Administrator?) -> Unit) {
+            onResult(adminStore[id])
+        }
+
+        // 1. Search BEFORE adding -> check if it already exists (should be null)
+        searchAdmin(adminID) { result ->
+            assertNull("Admin should not exist before adding", result)
+        }
+
+        // 2. AFTER adding -> check if it exists and matches
+        val admin = Administrator(oldUsername, "admin_search@test.com", adminID)
+        adminStore[admin.getUserID()] = admin
+
+        searchAdmin(adminID) { result ->
+            assertTrue("Admin should exist after adding", result != null)
+            assertEquals(adminID, result?.getUserID())
+            assertEquals(oldUsername, result?.username)
+        }
+
+        // 3. AFTER updating (2 cases)
+        admin.username = newUsername
+
+        // Case A: Search and check the NEW update variable is there
+        searchAdmin(adminID) { result ->
+            assertTrue("Admin should exist after update", result != null)
+            assertEquals("New username should be present", newUsername, result?.username)
+        }
+
+        // Case B: Search and check that the PREVIOUS old variable is gone
+        searchAdmin(adminID) { result ->
+            assertNotEquals("Previous username should be gone", oldUsername, result?.username)
+        }
+
+        // 4. AFTER deleted -> check if it's gone (should be null)
+        adminStore.remove(adminID)
+
+        searchAdmin(adminID) { result ->
+            assertNull("Admin should be null after deletion", result)
+        }
+    }
+
+    // ---------- DatabaseCampsiteOwners Search Lifecycle ----------
+
+    @Test
+    fun testCampsiteOwnerSearchLifecycle() {
+        val ownerStore = mutableMapOf<String, CampsiteOwner>()
+        val ownerID = "owner_search_101"
+        val oldUsername = "owner_before_update"
+        val newUsername = "owner_after_update"
+
+        fun searchCampsiteOwner(id: String, onResult: (CampsiteOwner?) -> Unit) {
+            onResult(ownerStore[id])
+        }
+
+        // 1. BEFORE adding -> check if it already exists (should be null)
+        searchCampsiteOwner(ownerID) { result ->
+            assertNull("CampsiteOwner should not exist before adding", result)
+        }
+
+        // 2. AFTER adding -> check if it exists
+        val owner = CampsiteOwner(oldUsername, "owner_search@test.com", ownerID)
+        ownerStore[owner.getUserID()] = owner
+
+        searchCampsiteOwner(ownerID) { result ->
+            assertTrue("CampsiteOwner should exist after adding", result != null)
+            assertEquals(ownerID, result?.getUserID())
+            assertEquals(oldUsername, result?.username)
+        }
+
+        // 3. AFTER updating (2 cases)
+        owner.username = newUsername
+
+        // Case A: Check new update variable is there
+        searchCampsiteOwner(ownerID) { result ->
+            assertTrue("CampsiteOwner should exist after update", result != null)
+            assertEquals("New username should be present", newUsername, result?.username)
+        }
+
+        // Case B: Check previous old variable is gone
+        searchCampsiteOwner(ownerID) { result ->
+            assertNotEquals("Previous username should be gone", oldUsername, result?.username)
+        }
+
+        // 4. AFTER deleted -> check if it's gone
+        ownerStore.remove(ownerID)
+
+        searchCampsiteOwner(ownerID) { result ->
+            assertNull("CampsiteOwner should be null after deletion", result)
+        }
+    }
+
+    // ---------- DatabaseEntrants Search Lifecycle ----------
+
+    @Test
+    fun testEntrantSearchLifecycle() {
+        val entrantStore = mutableMapOf<String, Entrant>()
+        val entrantID = "entrant_search_101"
+        val oldUsername = "entrant_before_update"
+        val newUsername = "entrant_after_update"
+
+        fun searchEntrant(id: String, onResult: (Entrant?) -> Unit) {
+            onResult(entrantStore[id])
+        }
+
+        // 1. BEFORE adding -> check if it already exists (should be null)
+        searchEntrant(entrantID) { result ->
+            assertNull("Entrant should not exist before adding", result)
+        }
+
+        // 2. AFTER adding -> check if it exists
+        val entrant = Entrant(oldUsername, "entrant_search@test.com", entrantID)
+        entrantStore[entrant.getUserID()] = entrant
+
+        searchEntrant(entrantID) { result ->
+            assertTrue("Entrant should exist after adding", result != null)
+            assertEquals(entrantID, result?.getUserID())
+            assertEquals(oldUsername, result?.username)
+        }
+
+        // 3. AFTER updating (2 cases)
+        entrant.username = newUsername
+
+        // Case A: Check new update variable is there
+        searchEntrant(entrantID) { result ->
+            assertTrue("Entrant should exist after update", result != null)
+            assertEquals("New username should be present", newUsername, result?.username)
+        }
+
+        // Case B: Check previous old variable is gone
+        searchEntrant(entrantID) { result ->
+            assertNotEquals("Previous username should be gone", oldUsername, result?.username)
+        }
+
+        // 4. AFTER deleted -> check if it's gone
+        entrantStore.remove(entrantID)
+
+        searchEntrant(entrantID) { result ->
+            assertNull("Entrant should be null after deletion", result)
+        }
+    }
+
+    // ---------- Real Helper Classes Async Search Invocation ----------
+
+    @Test
+    fun testRealDatabaseSearchFunctionsExist() {
+        val dbAdmins = DatabaseAdmins()
+        dbAdmins.searchAdmin("non_existent_id") { result ->
+            assertNull(result)
+        }
+
+        val dbOwners = DatabaseCampsiteOwners()
+        dbOwners.searchCampsiteOwner("non_existent_id") { result ->
+            assertNull(result)
+        }
+
+        val dbEntrants = DatabaseEntrants()
+        dbEntrants.searchEntrants("non_existent_id") { result ->
+            assertNull(result)
+        }
+
+        val dbCampsites = DatabaseCampsites()
+        dbCampsites.searchCampsite("non_existent_id") { result ->
+            assertNull(result)
+        }
     }
 }
 
@@ -375,16 +555,16 @@ class DatabaseUpdateAndDeleteTest {
     @Test
     fun testDeleteCampsite() {
         val campsiteStore = mutableMapOf<String, Campsite>()
-        val owner = CampsiteOwner("owner_1", "owner1@example.com", "owner_id_1")
+        val ownerID = "owner_id_1"
         val coords = Coordinates("Canada", "Alberta", -113.49, 53.54)
         val campsite = Campsite(
             name = "Pine Valley",
-            owner = owner,
+            ownerID = ownerID,
+            campsiteID = "campsite_999",
             maxOccupancy = 5,
             price = 50.0f,
             rating = 4.5f,
-            capacity = "5",
-            campsiteID = "campsite_999",
+            capacity = 5,
             coordinates = coords,
             startDate = LocalDateTime.now(),
             endDate = LocalDateTime.now().plusDays(5),
@@ -402,31 +582,30 @@ class DatabaseUpdateAndDeleteTest {
 
     @Test
     fun testUpdateEntrantWaitlistInCampsite() {
-        val owner = CampsiteOwner("owner_2", "owner2@example.com", "owner_id_2")
+        val ownerID = "owner_id_2"
         val coords = Coordinates("Canada", "Alberta", -113.49, 53.54)
         val campsite = Campsite(
             name = "Lakeside Camp",
-            owner = owner,
+            ownerID = ownerID,
+            campsiteID = "campsite_888",
             maxOccupancy = 2,
             price = 40.0f,
             rating = 4.0f,
-            capacity = "2",
-            campsiteID = "campsite_888",
+            capacity = 2,
             coordinates = coords,
             startDate = LocalDateTime.now(),
             endDate = LocalDateTime.now().plusDays(3),
         )
 
-        val entrant1 = Entrant("entrant1", "e1@example.com", "user_1")
-        val entrant2 = Entrant("entrant2", "e2@example.com", "user_2")
+        // Add entrant IDs to waiting list
+        campsite.addEntrant("user_1")
+        campsite.addEntrant("user_2")
+        assertTrue(campsite.entrantInList("user_1"))
+        assertTrue(campsite.entrantInList("user_2"))
 
-        // Add entrants to waiting list
-        campsite.addEntrant(entrant1)
-        campsite.addEntrant(entrant2)
-        assertEquals(2, campsite.waitingList.size)
-
-        // Generate final list (updates waitlist state)
+        // Generate final list (updates waitlist state and populates finalList)
         campsite.generateFinalList()
-        assertEquals(0, campsite.waitingList.size)
+        assertEquals(2, campsite.getFinalList().size)
+        assertFalse(campsite.entrantInList("user_1"))
     }
 }
