@@ -24,11 +24,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.example.code.classes.Alert
+import com.example.code.classes.AppState
 
 @Composable
-fun EntrantAlertsScreen(navController: NavController){
-    //TODO: Flesh out notifications
-    val alerts = remember { mutableListOf<String>("Sky is blue", "I am tired", "Its so over") }
+fun EntrantAlertsScreen(navController: NavController, appState: AppState){
+    val alerts : List<Alert> = appState.alerts.alerts
     Column(
         modifier = Modifier.fillMaxSize().padding(15.dp)
     ) {
@@ -53,7 +54,7 @@ fun EntrantAlertsScreen(navController: NavController){
         }
         LazyColumn() {
             itemsIndexed(alerts){
-                index, alert -> AlertRow(index.toString(), alert)
+                 index, alert -> AlertRow(alert.title, alert.body)
             }
         }
     }
