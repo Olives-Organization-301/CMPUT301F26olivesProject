@@ -205,8 +205,8 @@ class DatabaseCampsiteOwnersTest {
     }
 
     @Test
-    fun testGetEntrants() {
-        val list = dbCampsiteOwners.entrants
+    fun testGetCampsiteOwners() {
+        val list = dbCampsiteOwners.campsiteOwners
         assertEquals(0, list.size)
     }
 }

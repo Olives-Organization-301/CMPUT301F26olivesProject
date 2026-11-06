@@ -1,9 +1,9 @@
 package com.example.code.classes
 
 class Entrant(
-    username: String,
-    email: String,
-    userID: String,
+    username: String = "",
+    email: String = "",
+    userID: String = "",
     var phoneNumber: String = "",
     var description: String = "",
     var name: String = "",
