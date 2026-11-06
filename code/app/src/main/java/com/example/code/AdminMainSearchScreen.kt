@@ -1,5 +1,6 @@
 package com.example.code
 
+
 import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -38,6 +39,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -56,6 +58,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
 import com.example.code.classes.PreviewCampsite
 import kotlinx.coroutines.selects.select
+import kotlin.contracts.SimpleEffect
 
 
 /** # Search Screen
@@ -66,13 +69,27 @@ import kotlinx.coroutines.selects.select
  *  Prompt: "How do I Correctly pad this Main screen? How do I make the Cards?"
  *
  */
+data class Profile(val name: String, val role: String)
+data class PendingRemoval(val message: String, val onConfirm: () -> Unit)
 @Composable
 fun AdminMainSearchScreen(navController: NavController) {
     var searchString by remember { mutableStateOf("") }
-    var selectedTop by remember { mutableStateOf("Logs")}
+    var selectedTop by remember { mutableStateOf("Campsites")}
     val format = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
+    var pendingRemoval by remember {mutableStateOf<PendingRemoval?>(null)}
     // TODO: DELETE this once we connect it to a Database
     val previewCampsites = remember { mutableStateListOf(PreviewCampsite(name = "Campsite1", location = "Location1",startMillis = null, endMillis = null)) }
+    val profiles = remember {
+        mutableStateListOf(
+            Profile("Owner Name", "Campsite Owner"),
+            Profile("Entrant Name", "Entrant"),
+            Profile("Entrant2", "Entrant")
+        )
+    }
+
+    val askRemove: (String, () -> Unit) -> Unit = { message, action ->
+        pendingRemoval = PendingRemoval(message, action)
+    }
 
     // Column Wrapping the Search/Card Screens and Menu bar
     Column(modifier = Modifier.fillMaxSize()) {
@@ -83,40 +100,52 @@ fun AdminMainSearchScreen(navController: NavController) {
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(horizontal = 16.dp, vertical = 8.dp)
-            ){
+            ) {
+                //search bar
                 TextField(
                     value = searchString,
                     onValueChange = { searchString = it },
-                    placeholder = { Text("Search for a campsite")},
-                    leadingIcon = { Icon(Icons.Default.Menu, contentDescription = "Sidebar")},
+                    placeholder = { Text("Search for a campsite") },
+                    leadingIcon = { Icon(Icons.Default.Menu, contentDescription = "Sidebar") },
                     shape = RoundedCornerShape(24.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 12.dp)
-                ){
-                    Button(onClick = { }, modifier = Modifier.weight(1f)) { Text("Campsite Owner View")}
-                    Button(onClick = { }, modifier = Modifier.weight(1f)) { Text("Entrant View")}
-                }
-                Text(
-                    "Current View : Admin",
-                    modifier = Modifier
-                        .align(Alignment.CenterHorizontally)
-                        .padding(top = 8.dp)
-                )
+                val query = searchString.trim()
 
-                LazyColumn(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    contentPadding = PaddingValues(vertical = 12.dp)
-                ){
-                    items(previewCampsites) { preview ->
-                        CampsiteCard(preview, format)
-                    }
+                when (selectedTop) {
+                    "User Database" -> UserDatabaseTab(
+                        profiles = profiles.filter { it.name.contains(query, ignoreCase = true) },
+                        onRemoveProfile = { profile ->
+                            askRemove("Remove \"${profile.name}\" for violating app policy?") {
+                                profiles.remove(
+                                    profile
+                                )
+                            }
+                        },
+                        onRemoveOwner = { profile ->
+                            askRemove("Remove \"${profile.name}\" for violating app policy?") {
+                                profiles.remove(
+                                    profile
+                                )
+                            }
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    "Campsites" -> CampsitesTab(
+                        campsites = previewCampsites.filter { it.name.contains(query, ignoreCase = true) },
+                        format = format,
+                        onRemove = { campsite ->
+                            askRemove("Remove the campsite \"${campsite.name}\" ?") {
+                                previewCampsites.remove(
+                                    campsite
+                                )
+                            }
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+
                 }
             }
         }
@@ -134,6 +163,14 @@ fun AdminMainSearchScreen(navController: NavController) {
 
     }
 
+    pendingRemoval?.let { pending ->
+        ConfirmRemoveDialog(
+            message = pending.message,
+            onConfirm = pending.onConfirm,
+            onDismiss = { pendingRemoval = null }
+        )
+    }
+
 
 
 }
@@ -146,7 +183,7 @@ fun TopTabs(selected: String, onSelect: (String) -> Unit ){
             .padding(horizontal = 8.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ){
-        listOf("User Database", "Campsites", "Images", "Logs").forEach { tab ->
+        listOf("User Database", "Campsites").forEach { tab ->
             Button(
                 onClick = { onSelect(tab) },
                 modifier = Modifier.weight(1f),
@@ -158,7 +195,101 @@ fun TopTabs(selected: String, onSelect: (String) -> Unit ){
 }
 
 @Composable
-fun CampsiteCard(preview: PreviewCampsite, format: SimpleDateFormat){
+fun RemoveButton(text: String = "Remove", onClick: () -> Unit){
+    Button(
+        onClick = onClick,
+        shape = RoundedCornerShape(8.dp),
+        contentPadding = PaddingValues(horizontal = 12.dp),
+    ){ Text(text, maxLines = 1, fontSize = 12.sp)}
+}
+
+@Composable
+fun ConfirmRemoveDialog(message: String, onConfirm: () -> Unit, onDismiss: () -> Unit){
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {Text("Confirm removal")},
+        text = { Text(message)},
+        confirmButton = {
+            TextButton(onClick = {
+                onConfirm()
+                onDismiss()
+            }) { Text("Remove", color = Color.Red)}
+        },
+        dismissButton = { TextButton(onClick = onDismiss){ Text("Cancel")} }
+    )
+}
+
+@Composable
+fun EmptyState(text: String){
+    Box(modifier = Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center){
+        Text(text)
+    }
+}
+
+@Composable
+fun UserDatabaseTab(
+    profiles: List<Profile>,
+    onRemoveProfile: (Profile) -> Unit,
+    onRemoveOwner: (Profile) -> Unit,
+    modifier: Modifier = Modifier
+){
+    LazyColumn(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(vertical = 12.dp)
+    ) {
+        if(profiles.isEmpty()) item {EmptyState("No profiles found")}
+        items(profiles) { profile ->
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(24.dp)
+            ){
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ){
+                    Spacer(Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)){
+                        Text(profile.name)
+                        Text(profile.role, fontSize = 12.sp)
+                    }
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalAlignment = Alignment.End
+                    ){
+                        RemoveButton("Remove"){ onRemoveProfile(profile)}
+                        if(profile.role == "Campsite Owner"){
+                            RemoveButton("Policy Violation") { onRemoveOwner(profile)}
+                        }
+                    }
+                }
+            }
+
+        }
+    }
+}
+
+@Composable
+fun CampsitesTab(
+    campsites: List<PreviewCampsite>,
+    format: SimpleDateFormat,
+    onRemove: (PreviewCampsite) -> Unit,
+    modifier: Modifier = Modifier
+){
+    LazyColumn(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(vertical = 12.dp)
+    ){
+        if(campsites.isEmpty()) item {EmptyState("No campsites found")}
+        items(campsites){ campsite ->
+            CampsiteCard(campsite, format, onRemove = { onRemove(campsite)})
+        }
+    }
+}
+
+@Composable
+fun CampsiteCard(preview: PreviewCampsite, format: SimpleDateFormat, onRemove: () -> Unit){
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -177,12 +308,13 @@ fun CampsiteCard(preview: PreviewCampsite, format: SimpleDateFormat){
                     .background(Color.DarkGray, RoundedCornerShape(16.dp))
             )
             Spacer(Modifier.width(12.dp))
-            Column{
+            Column(modifier = Modifier.weight(1f)){
                 Text(preview.name)
                 Text(preview.location)
                 Text("Entry: " + (preview.startMillis?.let { format.format(Date(it)) } ?: "Not set"))
                 Text("End: " + (preview.endMillis?.let { format.format(Date(it)) } ?: "Not set"))
             }
+            RemoveButton(onClick = onRemove)
         }
     }
 }
