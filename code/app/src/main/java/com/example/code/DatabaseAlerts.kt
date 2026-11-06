@@ -6,6 +6,8 @@ import com.google.firebase.Firebase
 import com.google.firebase.firestore.firestore
 import com.example.code.classes.Entrant
 import com.example.code.classes.CampsiteOwner
+
+
 class DatabaseAlerts() {
     private val db = Firebase.firestore
     private val alertsRef = db.collection("alerts")

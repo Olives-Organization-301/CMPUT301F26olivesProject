@@ -9,7 +9,11 @@ import com.google.firebase.firestore.firestore
 import java.time.LocalDateTime
 import kotlin.random.Random
 
-class DatabaseCampsites {
+/** Database of Campsites
+ * represents every Campsite cached by the system, regardless of owner
+ * Since every campsite class has its owner, use
+ */
+class DatabaseCampsites() {
     private val db = Firebase.firestore
     private val campsitesRef = db.collection("campsites")
     private val _campsites = mutableStateListOf<Campsite>()

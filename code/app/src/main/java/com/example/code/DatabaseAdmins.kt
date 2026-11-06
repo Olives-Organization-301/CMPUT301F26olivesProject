@@ -5,6 +5,9 @@ import com.example.code.classes.Campsite
 import com.google.firebase.Firebase
 import com.google.firebase.firestore.firestore
 
+/** A main database representing every Admin the system has
+ * Used it to access, edit and set admins
+ */
 class DatabaseAdmins {
     private val db = Firebase.firestore
     private val adminsRef = db.collection("Admin")

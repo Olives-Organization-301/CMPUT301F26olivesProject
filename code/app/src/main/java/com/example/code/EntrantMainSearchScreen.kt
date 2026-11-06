@@ -52,9 +52,12 @@ import com.example.code.classes.SearchFilters
  *  Implementation of the Entrants' Main Screen as seen in the Figma.
  *
  *  Prototype was gained from this conversation with Claude Sonnet 5.0:
- *  https://claude.ai/share/65a871a8-c3f3-421e-ad84-506b32425362
- *  https://claude.ai/share/327fdf39-7b02-40b7-9f26-c5f66c048f9b (The Searching stuff)
+ *  Prompt: "Can you Do the GUI Based on this screenshot?"
  *  Prompt: "How do I Correctly pad this Main screen? How do I make the Cards?"
+ *  https://claude.ai/share/65a871a8-c3f3-421e-ad84-506b32425362
+ *  Claude Sonnet 5.0 was used for searching and filtering:
+ *  Prompt: "How Can you make a searching function? How do I check Levenshtein's Distance?"
+ *  https://claude.ai/share/327fdf39-7b02-40b7-9f26-c5f66c048f9b (The Searching stuff)
  *
  */
 @RequiresApi(Build.VERSION_CODES.O)
@@ -219,6 +222,7 @@ fun MainSearchScreen(
 /**
  * Uses Levenshtein Distance to sort the campsite
  * Based on String Similarity
+ * Prompt: "How do I use Levenshtein's Distance to "
  * Claude Convo: https://claude.ai/share/327fdf39-7b02-40b7-9f26-c5f66c048f9b
  */
 fun levenshteinDist(a: String, b: String): Int {
@@ -246,6 +250,7 @@ fun levenshteinDist(a: String, b: String): Int {
 /**
  * Main Popup ui that allows the user to change the filter
  * Can change Date, country, min and max guest number
+ * Prompt: "How can I handle search filtering?"
  * Claude convo: https://claude.ai/share/1fc95a02-f5f0-415b-8055-adf22f799619
  */
 @RequiresApi(Build.VERSION_CODES.O)
