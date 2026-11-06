@@ -9,6 +9,9 @@ import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.firestore
 
+/** Database of Entrants, representing the Entrants' screens
+ *
+ */
 class DatabaseEntrants() {
     private val db = Firebase.firestore
     private val entrantsRef = db.collection("Entrants")
