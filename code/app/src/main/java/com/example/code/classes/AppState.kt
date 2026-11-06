@@ -1,6 +1,7 @@
 package com.example.code.classes
 
 import com.example.code.DatabaseAdmins
+import com.example.code.DatabaseAlerts
 import com.example.code.DatabaseCampsiteOwners
 import com.example.code.DatabaseCampsites
 import com.example.code.DatabaseEntrants
@@ -10,6 +11,7 @@ class AppState {
     val owners = DatabaseCampsiteOwners()
     val campsites = DatabaseCampsites()
     val entrants = DatabaseEntrants()
+    val alerts = DatabaseAlerts()
 
     var userID: String? = null
     var role: String? = null
