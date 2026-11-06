@@ -4,6 +4,10 @@ import com.example.code.classes.Campsite
 import com.google.firebase.Firebase
 import com.google.firebase.firestore.firestore
 
+/** Database of Campsites
+ * represents every Campsite cached by the system, regardless of owner
+ * Since every campsite class has its owner, use
+ */
 class DatabaseCampsites() {
     private val db = Firebase.firestore
     private val campsitesRef = db.collection("campsites")

@@ -45,7 +45,15 @@ private val ScreenBackground = Color(0xFFFDF8F3)
 private val ButtonPurple = Color(0xFF6750A4)
 private val ImagePlaceholder = Color(0xFFE6DFD8)
 
-// Conversation: https://claude.ai/chat/073b54ab-b55c-4752-a1ab-e436a65fdb6a
+/** Campsite Details Screen
+ * Show the Details of the Screen
+ * I Used Sonnet 5.0 in order to make the basic GUI Structure
+ * Prompt: "Can you make the GUI based on this screen?"
+ * Conversation: https://claude.ai/share/2b8f9dba-e685-463b-b161-acccbf698b8a
+ * I used Sonnet 5.0 in order
+ * Prompt: "Can you integrate the backend with the GUI?"
+ * Conversation: https://claude.ai/share/fbdd45b9-ed51-42b6-a072-85a9fb6f5d32
+ */
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun CampsiteDetailsScreen(

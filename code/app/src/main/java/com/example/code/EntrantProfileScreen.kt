@@ -46,7 +46,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.ui.text.input.KeyboardType
 
-// Conversation: https://claude.ai/share/b857df9c-812a-4adb-b696-38a5266149f7
+/** Main Profile Screen
+ * I Used Sonnet 5.0 in order to finish the GUI and then integrate the backend
+ * Prompt: "Match The screenshot with the GUI"
+ * Conversation: https://claude.ai/share/b857df9c-812a-4adb-b696-38a5266149f7
+ * Prompt: "Can you integrate the profile with the backend?"
+ * Conversation: https://claude.ai/share/b0990579-fe55-4946-828d-1830efc58118
+ */
 @Composable
 fun ProfileScreen(
     navController: NavController,
@@ -247,6 +253,11 @@ fun ProfileScreen(
     }
 }
 
+/** Use Policy Page in order to see the policy from the profile
+ * I Used Sonnet 5.0 in Order to make a policy dialogue
+ * Prompt: "Can you make a separate policy dialogue?"
+ * Conversation: https://claude.ai/share/b0990579-fe55-4946-828d-1830efc58118
+ */
 @Composable
 fun PolicyDialog(
     onDismiss: () -> Unit
@@ -302,6 +313,11 @@ fun PolicyDialog(
     )
 }
 
+/** Quick Formatting in order to format headers and text
+ * I Used Sonnet 5.0 in Order to make a policy dialogue
+ * Prompt: "Can you make a separate policy dialogue?"
+ * Conversation: https://claude.ai/share/b0990579-fe55-4946-828d-1830efc58118
+ */
 @Composable
 private fun PolicySection(title: String, body: String) {
     Column {
@@ -310,6 +326,11 @@ private fun PolicySection(title: String, body: String) {
     }
 }
 
+/** Use separate popup to Edit the File
+ * I Used Sonnet 5.0 in Order to separate the filter settings
+ * Prompt: "Can you make ?"
+ * Conversation: https://claude.ai/share/b0990579-fe55-4946-828d-1830efc58118
+ */
 @Composable
 fun EditProfileDialog(
     entrant: Entrant,
