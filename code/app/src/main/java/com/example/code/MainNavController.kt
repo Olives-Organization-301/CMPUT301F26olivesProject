@@ -18,7 +18,7 @@ fun CampsiteNavController(
 
     NavHost(navController = navController, startDestination = "loginScreen") {
         // MAIN ENTRY POINTs
-        composable("loginScreen") { LoginScreen(navController) }
+        composable("loginScreen") { LoginScreen(navController, appState) }
 
         // ENTRANT SCREENS
         composable("mainSearchScreen") { MainSearchScreen(
@@ -26,9 +26,9 @@ fun CampsiteNavController(
             onUpdateCampsiteId = { appState.viewingCampsiteID = it }
         ) }
         composable("campsiteDetails") { CampsiteDetailsScreen(navController, appState) }
-        composable("reservationsListScreen") { ReservationsListScreen(navController) }
-        composable("profileScreen") { ProfileScreen(navController) }
-        composable("entrantAlerts") {EntrantAlertsScreen(navController)}
+        composable("reservationsListScreen") { ReservationsListScreen(navController, appState) }
+        composable("profileScreen") { ProfileScreen(navController, appState) }
+        composable("entrantAlerts") { EntrantAlertsScreen(navController)}
 
         // CAMPSITE OWNER SCREENS
         composable("campsiteOwnerLogin") { CampsiteOwnerLoginScreen(navController) }
