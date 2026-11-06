@@ -3,8 +3,11 @@ package com.example.code
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -20,6 +23,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Button
+
 //https://claude.ai/share/1c03451a-fc15-4299-b3cf-86965896ee5a. Prompt: Duplicate the figma drawing as best as you can.
 data class  ChatMessage(
     val sender: String,
@@ -42,22 +47,37 @@ fun CampsiteChatScreen(
         ChatMessage("Entrant Name", "Date, Time", "[Message Txt]", false))
 
 ){
-    Column(modifier = Modifier.fillMaxSize().background(ChatBackground)){
-        Column(modifier = Modifier.padding(start = 106.dp, top = 28.dp, bottom = 28.dp)) {
-            Text(
-                text = campsiteName,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium,
-                color = Color.Black
-            )
-            Text(
-                text = "Owner: $ownerName - Entrant: $entrantName",
-                fontSize = 12.sp,
-                color = SubtitleColor
-            )
+    Column(modifier = Modifier
+        .fillMaxSize()
+        .background(ChatBackground)){
+        // To avoid clipping it into the top of the screen
+        Spacer(Modifier.height(48.dp))
+
+        Row {
+            Button(onClick = {navController.popBackStack()},
+                modifier = Modifier
+                    .padding(vertical = 14.dp, horizontal = 14.dp))  {
+                Text("Back")
+            }
+
+            Column(modifier = Modifier.padding(vertical = 28.dp, horizontal = 14.dp)) {
+                Text(
+                    text = campsiteName,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.Black
+                )
+                Text(
+                    text = "Owner: $ownerName - Entrant: $entrantName",
+                    fontSize = 12.sp,
+                    color = SubtitleColor
+                )
+            }
         }
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 14.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             items(messages){ message ->
@@ -87,7 +107,11 @@ private fun MessageRow(message: ChatMessage) {
             text = message.text,
             fontSize = 18.sp,
             color = Color.White,
-            modifier = Modifier.padding(top = 4.dp).clip(RoundedCornerShape(8.dp)).background(BubbleColor).padding(horizontal = 24.dp, vertical = 12.dp)
+            modifier = Modifier
+                .padding(top = 4.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(BubbleColor)
+                .padding(horizontal = 24.dp, vertical = 12.dp)
 
         )
     }

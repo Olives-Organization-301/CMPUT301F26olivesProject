@@ -215,9 +215,11 @@ fun signIn(navController: NavController){
     if(Firebase.auth.currentUser == null){
         Firebase.auth.signInAnonymously().addOnSuccessListener {
             navController.navigate("mainSearchScreen")
+
+            // CHANGE BACK TO MAIN SEARCH SCREEN AFTER TESTING
         }
     } else {
-        navController.navigate("mainSearchScreen")
+        navController.navigate("campsiteOwnerMainScreen")
     }
 }
 
