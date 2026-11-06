@@ -4,7 +4,6 @@ import java.time.LocalDateTime
 import kotlin.random.Random
 
 /** Representation of A Campsite class
- *
  */
 class Campsite(
     private val name: String,
@@ -12,11 +11,11 @@ class Campsite(
     val campsiteID: String,
     private var maxOccupancy: Int,
     private var price: Float,
-    private var rating: Float,
+    private var rating: Float? = null,
     private var capacity: Int,
     private var coordinates: Coordinates,
-    private var startDate: LocalDateTime,
-    private var endDate: LocalDateTime,
+    private var startDate: LocalDateTime? = null,
+    private var endDate: LocalDateTime? = null,
 ) {
     private var description: String = ""
     private var waitingList = mutableListOf<String>()
@@ -27,11 +26,12 @@ class Campsite(
     fun getCoordinates(): Coordinates = coordinates
     fun getName(): String = name
     fun getMaxOccupancy(): Int = maxOccupancy
-    fun getStartDate(): LocalDateTime = startDate
-    fun getEndDate(): LocalDateTime = endDate
+    fun getStartDate(): LocalDateTime? = startDate
+    fun getEndDate(): LocalDateTime? = endDate
     fun getOwnerID(): String = ownerID
     fun getPrice(): Float = price
-    fun getRating(): Float = rating
+    fun getRating(): Float? = rating
+    fun setRating(newRating: Float?) { rating = newRating }
     fun getCapacity(): Int = capacity
     fun getDescription(): String = description
     fun getFinalList(): List<String> = finalList
@@ -77,4 +77,20 @@ class Campsite(
             }
         }
     }
+
+    fun toMap(): Map<String, Any?> = mapOf(
+        "name" to name,
+        "ownerID" to ownerID,
+        "campsiteID" to campsiteID,
+        "maxOccupancy" to maxOccupancy,
+        "price" to price,
+        "rating" to rating,
+        "capacity" to capacity,
+        "coordinates" to mapOf(
+            "country" to coordinates.getCountry(),
+            "firstSubdivision" to coordinates.getFirstSubdivision(),
+            "longitude" to coordinates.getLongitude(),
+            "latitude" to coordinates.getLatitude()
+        )
+    )
 }
