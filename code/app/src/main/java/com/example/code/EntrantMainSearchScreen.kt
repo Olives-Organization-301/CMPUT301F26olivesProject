@@ -73,6 +73,9 @@ fun MainSearchScreen(navController: NavController, campsiteDatabase: MutableList
     // Column Wrapping the Search/Card Screens and Menu bar
     Column(modifier = Modifier.fillMaxSize()) {
 
+        // To avoid clipping it into the top of the screen
+        Spacer(Modifier.height(48.dp))
+
         // Padded area for search screen and campsites: search field + list
         Column(
             modifier = Modifier

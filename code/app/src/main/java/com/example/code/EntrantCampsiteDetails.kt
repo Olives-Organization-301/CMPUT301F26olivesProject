@@ -54,6 +54,9 @@ fun CampsiteDetailsScreen(
             .background(ScreenBackground)
     ) {
 
+        // To avoid clipping it into the top of the screen
+        Spacer(Modifier.height(48.dp))
+
         // Header: centered title + exit button on the right
         // This box controls the campsite Title and the X Button on the far-left.
         Box(
