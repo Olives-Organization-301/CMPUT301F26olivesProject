@@ -52,6 +52,7 @@ fun CampsiteDetailsScreen(
     navController: NavController,
     appState: AppState,
 ) {
+
     val entrant by produceState<Entrant?>(
         initialValue = null,
         key1 = appState.userID
