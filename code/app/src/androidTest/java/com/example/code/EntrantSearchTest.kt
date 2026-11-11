@@ -34,13 +34,22 @@ class EntrantSearchTest {
 
     @Test
     fun testLevenshteinDist() {
-        // Compare Kitten and Mitten
-        val dist1 = levenshteinDist("Kitten", "Mitten")
-        assertEquals(1, dist1)
+        // Test Equality
+        val equalDist = levenshteinDist("Banff National Park", "Banff National Park")
+        assertEquals(0, equalDist)
 
-        // Compare Banff and Jasper
-        val dist2 = levenshteinDist("Banff", "Jasper")
-        assertTrue(dist2 > 0)
+        // Any Arbitrary non-equal Number
+        val nonEqualDist = levenshteinDist("Jasper National Park", "Banff National Park")
+        assertEquals(5, nonEqualDist)
+
+        // Another Arbitrary Test
+        val nonEqualDist2 = levenshteinDist("Yoko State Park", "Yoho National Area")
+        assertEquals(11, nonEqualDist2)
+
+        // 1 Difference
+        val diff1 = levenshteinDist("Yosemite State Park", "Gosemite State Park")
+        assertEquals(1, diff1)
+
     }
 
     @Test
