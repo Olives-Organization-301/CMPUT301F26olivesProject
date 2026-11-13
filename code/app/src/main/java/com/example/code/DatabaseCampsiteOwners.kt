@@ -6,7 +6,6 @@ import com.google.firebase.Firebase
 import com.google.firebase.firestore.firestore
 
 /** Database used to let campsite owners persist in the database
- *
  */
 class DatabaseCampsiteOwners {
     private val db = Firebase.firestore
@@ -14,6 +13,45 @@ class DatabaseCampsiteOwners {
     private val _campsiteOwners = mutableStateListOf<CampsiteOwner>()
 
     val campsiteOwners: List<CampsiteOwner> get() = _campsiteOwners
+
+    init {
+        campsiteOwnersRef.addSnapshotListener { snapshots, error ->
+            if (error != null) {
+                android.util.Log.e("DB", "owners listener failed", error)
+                return@addSnapshotListener
+            }
+            if (snapshots == null) return@addSnapshotListener
+            val list = snapshots.documents.map { doc ->
+                CampsiteOwner(
+                    username = doc.getString("username") ?: doc.getString("name") ?: doc.id,
+                    email = doc.getString("email") ?: "",
+                    userID = doc.id
+                )
+            }
+            _campsiteOwners.clear()
+            _campsiteOwners.addAll(list)
+            android.util.Log.d("DB", "Owners loaded: ${_campsiteOwners.size}")
+        }
+    }
+
+    fun fetchAllOwners(onResult: (List<CampsiteOwner>) -> Unit) {
+        campsiteOwnersRef.get()
+            .addOnSuccessListener { snapshot ->
+                val list = snapshot.documents.map { doc ->
+                    CampsiteOwner(
+                        username = doc.getString("username") ?: doc.getString("name") ?: doc.id,
+                        email = doc.getString("email") ?: "",
+                        userID = doc.id
+                    )
+                }
+                _campsiteOwners.clear()
+                _campsiteOwners.addAll(list)
+                onResult(list)
+            }
+            .addOnFailureListener {
+                onResult(emptyList())
+            }
+    }
 
     fun addCampsiteOwner(campsiteOwner: CampsiteOwner) {
         if (!_campsiteOwners.any { it.getUserID() == campsiteOwner.getUserID() }) {
@@ -36,15 +74,19 @@ class DatabaseCampsiteOwners {
         campsiteOwnersRef.document(campsiteOwner.getUserID()).delete()
     }
 
-    // Search for campsite Owners
+    // Search for campsite owner by document ID
     fun searchCampsiteOwner(ownerID: String, onResult: (CampsiteOwner?) -> Unit) {
         campsiteOwnersRef.document(ownerID).get()
             .addOnSuccessListener { doc ->
-                val owner = doc.toObject(CampsiteOwner::class.java)
-                if (owner != null) {
-                    owner.setUserID(doc.id)
+                if (doc.exists()) {
+                    val owner = doc.toObject(CampsiteOwner::class.java)
+                    if (owner != null) {
+                        owner.setUserID(doc.id)
+                    }
+                    onResult(owner)
+                } else {
+                    onResult(null)
                 }
-                onResult(owner)
             }
             .addOnFailureListener {
                 onResult(null)
@@ -81,24 +123,5 @@ class DatabaseCampsiteOwners {
             .addOnFailureListener {
                 onResult(null)
             }
-    }
-
-    init {
-        campsiteOwnersRef.addSnapshotListener { snapshots, error ->
-            if (error != null) {
-                android.util.Log.e("DB", "owners listener failed", error)
-                return@addSnapshotListener
-            }
-            if (snapshots == null) return@addSnapshotListener
-            _campsiteOwners.clear()
-            _campsiteOwners.addAll(snapshots.documents.map { doc ->
-                CampsiteOwner(
-                    doc.getString("username") ?: "",
-                    doc.getString("email") ?: "",
-                    doc.getString("userID") ?: doc.id
-                )
-            })
-            android.util.Log.d("DB", "Owners loaded: ${_campsiteOwners.size}")
-        }
     }
 }
