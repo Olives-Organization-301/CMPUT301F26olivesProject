@@ -1,10 +1,12 @@
 package com.example.code
 
+import android.app.AlertDialog
 import android.app.DatePickerDialog
 import android.content.Context
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,6 +16,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -61,11 +64,15 @@ import java.util.Date
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.ui.window.DialogProperties
+import com.example.code.classes.Alert
 import com.example.code.classes.AppState
 import com.example.code.classes.Campsite
+import com.example.code.classes.CampsiteOwner
 import com.example.code.classes.Coordinates
+import com.example.code.classes.Entrant
 import com.example.code.classes.PreviewCampsite
 import com.example.code.classes.WaitlistEntrant
+import com.google.api.HttpBody
 import java.time.LocalDateTime
 /** # Search Screen
  *  Implementation of the Entrants' Main Screen as seen in the Figma.
@@ -84,6 +91,7 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
     var ownerName by remember { mutableStateOf("Campsite Owner") }
     var showEdit by remember { mutableStateOf<PreviewCampsite?>(null) }
     var showLottery by remember { mutableStateOf<PreviewCampsite?>(null) }
+    var showAlert by remember { mutableStateOf<PreviewCampsite?>(null) }
     val format = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
 
     val previewCampsites = remember {
@@ -195,7 +203,7 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(120.dp),
+                                .heightIn(120.dp),
                             shape = RoundedCornerShape(24.dp),
                             colors = CardDefaults.cardColors(containerColor = Color(0xFFB0B0B0))
                         ) {
@@ -226,6 +234,7 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
                                 ) {
                                     Button(onClick = { showEdit = preview }) { Text("  Edit  ", maxLines = 1) }
                                     Button(onClick = { showLottery = preview }) { Text("Lottery", maxLines = 1) }
+                                    Button(onClick = { showAlert = preview }) { Text(" Alert ", maxLines = 1)}
                                 }
                             }
                         }
@@ -305,6 +314,15 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
                 if (i >= 0) previewCampsites[i] = updated
                 showLottery = null
             }
+        )
+    }
+
+    showAlert?.let { current ->
+        NotificationDialog(
+            campsite = current,
+            onDismiss = {showAlert = null},
+            ownerName = ownerName,
+            appState = appState
         )
     }
 }
@@ -797,4 +815,83 @@ private fun pickDate(context: Context, minDateMillis: Long?, onSelected: (Long) 
         dialog.datePicker.minDate = minDateMillis
     }
     dialog.show()
+}
+
+@Composable
+fun NotificationDialog(
+    campsite: PreviewCampsite,
+    onDismiss: () -> Unit,
+    ownerName: String,
+    appState: AppState
+){
+    var alertTitle by remember { mutableStateOf("") }
+    var alertBody by remember { mutableStateOf("") }
+
+    fun CreateAlert(campsite: PreviewCampsite, owner: String, title: String, body: String){
+        for(entrant in campsite.waitingList){
+            val alertID = java.util.UUID.randomUUID()
+            val newAlert = Alert(alertID.toString(), title, body, entrant.id, owner )
+            appState.alerts.addAlert(newAlert)
+        }
+
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ){
+        Surface(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier.fillMaxSize().padding(15.dp)
+            ) {
+                Spacer(Modifier.height(48.dp))
+                Row(){
+                    Text(
+                        text = "Send alert to entrants of ${campsite.name}",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        text = "✕",
+                        fontSize = 24.sp,
+                        modifier = Modifier.clickable { onDismiss() }
+                    )
+                }
+
+                OutlinedTextField(
+                    value = alertTitle,
+                    onValueChange = { alertTitle = it },
+                    label = { Text("Title", fontSize = 11.sp) },
+                    modifier = Modifier.fillMaxWidth().padding(5.dp),
+                    singleLine = true
+                )
+
+                OutlinedTextField(
+                    value = alertBody,
+                    onValueChange = { alertBody = it },
+                    label = { Text("Message", fontSize = 11.sp) },
+                    modifier = Modifier.weight(1f).fillMaxWidth().padding(5.dp),
+                    singleLine = true
+                )
+                Button(
+                    onClick = {
+                        CreateAlert(campsite, ownerName, alertTitle, alertBody)
+                        alertTitle = ""
+                        alertBody = ""
+                        onDismiss()
+                    },
+                    modifier = Modifier.fillMaxWidth().padding(5.dp)
+                ){
+                    Text("Send Alert")
+                }
+                Spacer(modifier = Modifier.weight(1f))
+
+
+            }
+        }
+
+    }
+
+
 }

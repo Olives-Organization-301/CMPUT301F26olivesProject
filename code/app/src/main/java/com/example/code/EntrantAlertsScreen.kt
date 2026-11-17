@@ -26,6 +26,8 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.example.code.classes.Alert
 import com.example.code.classes.AppState
+import com.google.firebase.Firebase
+import com.google.firebase.auth.auth
 
 /**
  *
@@ -57,7 +59,11 @@ fun EntrantAlertsScreen(navController: NavController, appState: AppState){
         }
         LazyColumn() {
             itemsIndexed(alerts){
-                 index, alert -> AlertRow(alert.title, alert.body)
+                 index, alert ->
+                if(alert.recipient == Firebase.auth.uid){
+                    AlertRow(alert.title, alert.body)
+                }
+
             }
         }
     }
