@@ -33,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import androidx.compose.material.icons.Icons
@@ -66,6 +67,8 @@ import com.example.code.classes.Campsite
  *  Images attacthed: Figma write ups and beta code done in production
  */
 // https://claude.ai/share/cdce4c2a-2c1a-4c36-895d-ad4fb811582b
+// one of the prompts used : now when User Database is clicked, I want both collections "Entrants" and
+// "CampsiteOwners" displayed as how the logic for displaying collection "campsites" were in Admin
 
 data class Profile(val id: String, val name: String, val role: String)
 data class PendingRemoval(val message: String, val onConfirm: () -> Unit)
@@ -79,8 +82,8 @@ fun AdminMainSearchScreen(navController: NavController, appState: AppState) {
     val entrantDb = appState.entrants
     val ownerDb = appState.owners
 
-    val profiles = ownerDb.campsiteOwners.map {Profile(it.getUserID(), it.username, "Campsite Owner")} +
-            entrantDb.entrants.map{ Profile(it.getUserID(), it.username, "Entrant")}
+    val profiles = ownerDb.campsiteOwners.map { Profile(it.getUserID(), it.username.ifBlank { it.email.ifBlank { it.getUserID() } }, "Campsite Owner") } +
+            entrantDb.entrants.map { Profile(it.getUserID(), it.username.ifBlank { it.email.ifBlank { it.getUserID() } }, "Entrant") }
 
     fun deleteProfile(profile: Profile){
         if(profile.role == "Campsite Owner"){
@@ -94,6 +97,15 @@ fun AdminMainSearchScreen(navController: NavController, appState: AppState) {
 
     val askRemove: (String, () -> Unit) -> Unit = { message, action ->
         pendingRemoval = PendingRemoval(message, action)
+    }
+
+    androidx.compose.runtime.LaunchedEffect(selectedTop) {
+        if (selectedTop == "Campsites") {
+            campsiteDb.fetchAllCampsites { _ -> }
+        } else if (selectedTop == "User Database") {
+            entrantDb.fetchAllEntrants { _ -> }
+            ownerDb.fetchAllOwners { _ -> }
+        }
     }
 
     // Column Wrapping the Search/Card Screens and Menu bar
@@ -291,7 +303,7 @@ fun CampsiteCard(campsite: Campsite,  onRemove: () -> Unit){
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(120.dp),
+            .height(130.dp),
         shape = RoundedCornerShape(24.dp)
     ){
         Row(
@@ -302,13 +314,20 @@ fun CampsiteCard(campsite: Campsite,  onRemove: () -> Unit){
         ){
             Box(
                 modifier = Modifier
-                    .size(96.dp)
+                    .size(80.dp)
                     .background(Color.DarkGray, RoundedCornerShape(16.dp))
             )
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)){
-                Text(campsite.getName())
-                Text(campsite.getCoordinates().getCountry())
+                Text(campsite.getName(), fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                val sub = campsite.getCoordinates().getFirstSubdivision()
+                val country = campsite.getCoordinates().getCountry()
+                val locText = if (sub.isNotBlank()) "$sub, $country" else country
+                Text(locText, fontSize = 12.sp, color = Color.Gray)
+                if (campsite.getOwnerID().isNotBlank()) {
+                    Text("Owner ID: ${campsite.getOwnerID()}", fontSize = 11.sp, color = Color.DarkGray)
+                }
+                Text("Price: \$${campsite.getPrice()} | Cap: ${campsite.getCapacity()}", fontSize = 11.sp, color = Color.DarkGray)
             }
             RemoveButton(onClick = onRemove)
         }
