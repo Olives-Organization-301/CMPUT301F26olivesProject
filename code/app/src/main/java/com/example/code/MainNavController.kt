@@ -11,11 +11,12 @@ import com.example.code.classes.AppState
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun CampsiteNavController(
-    appState: AppState
+    appState: AppState,
+    startDestination: String = "loginScreen" // tests can start on a different screen
 ) {
     val navController = rememberNavController()
 
-    NavHost(navController = navController, startDestination = "loginScreen") {
+    NavHost(navController = navController, startDestination = startDestination) {
         // MAIN ENTRY POINTs
         composable("loginScreen") { LoginScreen(navController, appState) }
 
