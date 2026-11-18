@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FloatingActionButton
@@ -63,6 +64,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.ui.window.DialogProperties
 import com.example.code.classes.AppState
 import com.example.code.classes.Campsite
+import com.example.code.classes.CampsiteOwner
 import com.example.code.classes.Coordinates
 import com.example.code.classes.PreviewCampsite
 import com.example.code.classes.WaitlistEntrant
@@ -79,9 +81,12 @@ import java.time.LocalDateTime
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
+    val context = LocalContext.current
     var searchString by remember { mutableStateOf("") }
     var showAdd by remember { mutableStateOf(false) }
+    var showAccountDialog by remember { mutableStateOf(false) }
     var ownerName by remember { mutableStateOf("Campsite Owner") }
+    var currentOwnerObj by remember { mutableStateOf<CampsiteOwner?>(null) }
     var showEdit by remember { mutableStateOf<PreviewCampsite?>(null) }
     var showLottery by remember { mutableStateOf<PreviewCampsite?>(null) }
     val format = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
@@ -239,7 +244,9 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
                     .padding(16.dp)
             ) { Icon(Icons.Filled.Add, contentDescription = "Add campsite") }
         }
-
+/**
+ * Displays Account details for campsite owner and allows user to log out
+ * **/
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -250,9 +257,50 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
         ) {
             Button(onClick = { }, modifier = Modifier.weight(1f)) { Text("List", maxLines = 1) }
             Button(onClick = { }, modifier = Modifier.weight(1f)) { Text("QR Code", maxLines = 1) }
-            Button(onClick = { navController.navigate("loginScreen") }, modifier = Modifier.weight(1f)) { Text("Account", maxLines = 1) }
+            Button(onClick = { showAccountDialog = true }, modifier = Modifier.weight(1f)) { Text("Account", maxLines = 1) }
             Button(onClick = { navController.navigate("campsiteChat") }, modifier = Modifier.weight(1f)) { Text("Message Entrants", maxLines = 1) }
         }
+    }
+
+    if (showAccountDialog) {
+        AlertDialog(
+            onDismissRequest = { showAccountDialog = false },
+            title = {
+                Text(
+                    text = "Campsite Owner Details",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 20.sp
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Name: $ownerName", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Text("Owner ID: ${appState.userID ?: "Unknown"}", fontSize = 13.sp, color = Color.Gray)
+                    Text("Role: Campsite Owner", fontSize = 13.sp, color = Color(0xFF274690), fontWeight = FontWeight.Medium)
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showAccountDialog = false
+                        appState.userID = null
+                        appState.role = null
+                        DeviceIdentity.clearEntrantId(context)
+                        navController.navigate("loginScreen") {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Log Out", color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAccountDialog = false }) {
+                    Text("Close")
+                }
+            }
+        )
     }
 
     if (showAdd) {
