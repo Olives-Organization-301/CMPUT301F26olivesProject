@@ -914,7 +914,12 @@ fun LotteryDialog(
         }
     }
 }
-
+/**
+ * Prompts :
+ * 1. so when Qr code in campsiteOwners is clicked, I want it to display the campsites the campsite owner has with
+ * a small button beside each of them with the word generate qr code
+ * 2. make a random qr code appear that will appear when generate qr code is clicked,
+ * and will link the campsite details to the entrant when scanned**/
 @Composable
 fun QRCodeImage(
     data: String,
