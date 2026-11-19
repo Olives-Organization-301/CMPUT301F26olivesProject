@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,8 +27,12 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.example.code.classes.Alert
 import com.example.code.classes.AppState
+import com.example.code.classes.Entrant
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import com.google.firebase.firestore.firestore
 
 /**
  *
@@ -35,6 +40,8 @@ import com.google.firebase.auth.auth
 @Composable
 fun EntrantAlertsScreen(navController: NavController, appState: AppState){
     val alerts : List<Alert> = appState.alerts.alerts
+    val entrant = appState.entrants as Entrant
+    var wantsNotifications by remember { mutableStateOf(entrant.wantsNotifications ?: true) }
     Column(
         modifier = Modifier.fillMaxSize().padding(15.dp)
     ) {
@@ -51,6 +58,21 @@ fun EntrantAlertsScreen(navController: NavController, appState: AppState){
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f)
             )
+
+
+            Button(onClick = {
+                wantsNotifications = !wantsNotifications
+                entrant?.wantsNotifications = wantsNotifications
+
+                Firebase.auth.uid?.let{ uid ->
+                    Firebase.firestore.collection("entrants")
+                        .document(uid)
+                        .update("wantsNotifications", wantsNotifications)
+                }
+            }, modifier = Modifier.weight(0.4f)) {
+                Text(if(wantsNotifications) "Opt Out" else "Opt In")
+            }
+
             Text(
                 text = "✕",
                 fontSize = 24.sp,
