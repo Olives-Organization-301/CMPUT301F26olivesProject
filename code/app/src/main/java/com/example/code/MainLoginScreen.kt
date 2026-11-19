@@ -25,6 +25,8 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.NavController
 import com.example.code.classes.AppState
 import com.example.code.classes.Entrant
@@ -89,25 +91,117 @@ fun LoginScreen(
     )
 
     if(showRoleDialog){
-        AlertDialog(
+        var selected by remember {mutableStateOf(false)}
+
+        var newUser by remember { mutableStateOf(Firebase.auth.currentUser == null)}
+        Dialog(
             onDismissRequest = {showRoleDialog = false},
-            confirmButton = {},
-            title = { Text("Continue as")},
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(
-                        "Admin" to "AdminMainSearchScreen",
-                        "Entrant" to "mainSearchScreen",
-                        "Owner" to "campsiteOwnerLogin"
-                    ).forEach { (label, route) ->
-                        Button(
-                            modifier = Modifier.fillMaxWidth(),
-                            onClick = {showRoleDialog = false; navController.navigate(route)}
-                        ){ Text(label)}
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ){
+            Surface(modifier = Modifier.fillMaxSize()) {
+                if(!selected){ // if role not selected display role selection menu thing
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.padding(25.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            textAlign = TextAlign.Center,
+                            fontSize = 30.sp,
+                            fontWeight = FontWeight.Medium,
+                            text = "Continue As"
+                        )
+                        listOf(
+                            "Admin" to "AdminMainSearchScreen",
+                            "Entrant" to "mainSearchScreen",
+                            "Owner" to "campsiteOwnerLogin"
+                        ).forEach { (label, route) ->
+                            Button(
+                                modifier = Modifier.fillMaxWidth()
+                                ,onClick = {
+                                    //navController.navigate(route)
+
+                                    when(route){
+                                        "AdminMainSearchScreen" -> {
+                                            showRoleDialog = false
+                                            navController.navigate(route)}
+                                        "mainSearchScreen" -> {
+                                            selected = true
+                                        }
+                                        "campsiteOwnerLogin" -> {
+                                            showRoleDialog = false
+                                            navController.navigate(route)}
+                                    }
+                                }
+                            ){ Text(label)}
+                        }
+
                     }
+                } // Role select block end
+
+                if(newUser && selected){
+                    var newUsername by remember { mutableStateOf("") }
+                    var newEmail by remember { mutableStateOf("") }
+                    var newPhoneNumber by remember { mutableStateOf("") }
+                    var newName by remember { mutableStateOf("") }
+                    var newDOB by remember { mutableStateOf("") }
+
+                    Dialog(
+                        onDismissRequest = { showRoleDialog = false},
+                        properties = DialogProperties(usePlatformDefaultWidth = false)
+                    ) {
+                        Surface(modifier = Modifier.fillMaxSize()) {
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                                modifier = Modifier.padding(25.dp),
+                            ) {
+                                TextField(
+                                    label = { Text("Username") },
+                                    value = newUsername,
+                                    onValueChange = {newUsername = it}
+                                )
+                                TextField(
+                                    label = { Text("Email") },
+                                    value = newEmail,
+                                    onValueChange = {newEmail = it}
+                                )
+                                TextField(
+                                    label = { Text("Phone Number") },
+                                    value = newPhoneNumber,
+                                    onValueChange = {newPhoneNumber = it}
+                                )
+                                TextField(
+                                    label = { Text("Name") },
+                                    value = newName,
+                                    onValueChange = {newName = it}
+                                )
+                                TextField(
+                                    label = { Text("Date of Birth") },
+                                    value = newDOB,
+                                    onValueChange = {newDOB = it}
+                                )
+                                Button(
+                                    onClick = {
+                                        signUp(appState, newUsername, newEmail, newPhoneNumber, newName, newDOB)
+                                        showRoleDialog = false
+                                        navController.navigate("mainSearchScreen")
+                                    }
+                                ){ Text("Enter")}
+                            }
+                        }
+
+                    }
+
                 }
+
+                if(!newUser && selected){
+                    showRoleDialog = false
+                    navController.navigate("mainSearchScreen")
+                }
+
+
             }
-        )
+
+        }
     }
 
 }
@@ -242,18 +336,11 @@ private fun HomeButton(
     }
 }
 
-fun signIn(navController: NavController, appState: AppState){
-    if(Firebase.auth.currentUser == null){
-        Firebase.auth.signInAnonymously().addOnSuccessListener {
-            val uid = Firebase.auth.uid
-            val newEntrant = Entrant(uid!!.take(6), "", uid, "7", "")
-            appState.entrants.addEntrant(newEntrant)
-            navController.navigate("mainSearchScreen")
-
-            // CHANGE BACK TO MAIN SEARCH SCREEN AFTER TESTING
-        }
-    } else {
-        navController.navigate("campsiteOwnerMainScreen")
+fun signUp(appState: AppState, newUsername: String, newEmail: String, newPhoneNumber: String, newName: String, newDOB: String){
+    Firebase.auth.signInAnonymously().addOnSuccessListener {
+        val newUID = Firebase.auth.uid
+        val newEntrant = Entrant(username = newUsername, email = newEmail, userID = newUID!!, phoneNumber = newPhoneNumber, name = newName, dateOfBirth = newDOB)
+        appState.entrants.addEntrant(newEntrant)
     }
 }
 

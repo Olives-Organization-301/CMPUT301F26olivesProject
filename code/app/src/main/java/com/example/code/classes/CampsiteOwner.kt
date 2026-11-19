@@ -1,7 +1,5 @@
 package com.example.code.classes
-
 import com.example.code.DatabaseCampsites
-
 /** CampsiteOwner Class used to represent the campsite Owner Actor
  *
  */
