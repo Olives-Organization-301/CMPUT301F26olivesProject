@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -85,6 +86,8 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
     var searchString by remember { mutableStateOf("") }
     var showAdd by remember { mutableStateOf(false) }
     var showAccountDialog by remember { mutableStateOf(false) }
+    var showQRCodeDialog by remember { mutableStateOf(false) }
+    var selectedQRCampsite by remember { mutableStateOf<PreviewCampsite?>(null) }
     var ownerName by remember { mutableStateOf("Campsite Owner") }
     var currentOwnerObj by remember { mutableStateOf<CampsiteOwner?>(null) }
     var showEdit by remember { mutableStateOf<PreviewCampsite?>(null) }
@@ -256,10 +259,132 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Button(onClick = { }, modifier = Modifier.weight(1f)) { Text("List", maxLines = 1) }
-            Button(onClick = { }, modifier = Modifier.weight(1f)) { Text("QR Code", maxLines = 1) }
+            Button(onClick = { showQRCodeDialog = true }, modifier = Modifier.weight(1f)) { Text("QR Code", maxLines = 1) }
             Button(onClick = { showAccountDialog = true }, modifier = Modifier.weight(1f)) { Text("Account", maxLines = 1) }
             Button(onClick = { navController.navigate("campsiteChat") }, modifier = Modifier.weight(1f)) { Text("Message Entrants", maxLines = 1) }
         }
+    }
+
+    if (showQRCodeDialog) {
+        AlertDialog(
+            onDismissRequest = { showQRCodeDialog = false },
+            title = {
+                Text(
+                    text = "Generate QR Code",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 20.sp
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    if (previewCampsites.isEmpty()) {
+                        Text(
+                            text = "No campsites available to generate QR code.",
+                            color = Color.Gray,
+                            fontSize = 14.sp
+                        )
+                    } else {
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.heightIn(max = 300.dp)
+                        ) {
+                            items(previewCampsites) { campsite ->
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF0E0D0))
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(campsite.name, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                            Text(campsite.location, fontSize = 12.sp, color = Color.DarkGray)
+                                        }
+                                        Button(
+                                            onClick = {
+                                                selectedQRCampsite = campsite
+                                            },
+                                            shape = RoundedCornerShape(12.dp),
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF274690))
+                                        ) {
+                                            Text("Generate QR code", fontSize = 11.sp, color = Color.White, maxLines = 1)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showQRCodeDialog = false }) {
+                    Text("Close")
+                }
+            }
+        )
+    }
+
+    selectedQRCampsite?.let { campsite ->
+        AlertDialog(
+            onDismissRequest = { selectedQRCampsite = null },
+            title = {
+                Text(
+                    text = "QR Code: ${campsite.name}",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+            },
+            text = {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Scanning this QR code links entrants to Campsite Details.", fontSize = 13.sp, color = Color.Gray)
+                    Spacer(Modifier.height(16.dp))
+
+                    QRCodeImage(
+                        data = campsite.name,
+                        modifier = Modifier
+                            .size(180.dp)
+                            .background(Color.White, RoundedCornerShape(8.dp))
+                    )
+
+                    Spacer(Modifier.height(16.dp))
+                    Text("Location: ${campsite.location}", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val matchedCampsite = appState.campsites.campsites.firstOrNull { it.getName() == campsite.name }
+                        if (matchedCampsite != null) {
+                            appState.viewingCampsiteID = matchedCampsite.campsiteID
+                            selectedQRCampsite = null
+                            showQRCodeDialog = false
+                            navController.navigate("campsiteDetails")
+                        } else {
+                            selectedQRCampsite = null
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF274690))
+                ) {
+                    Text("Test Scan (View Details)", color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { selectedQRCampsite = null }) {
+                    Text("Close")
+                }
+            }
+        )
     }
 
     if (showAccountDialog) {
@@ -784,6 +909,58 @@ fun LotteryDialog(
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun QRCodeImage(
+    data: String,
+    modifier: Modifier = Modifier
+) {
+    androidx.compose.foundation.Canvas(modifier = modifier) {
+        val sizeInPx = size.minDimension
+        val gridCount = 21
+        val cellSize = sizeInPx / gridCount
+
+        drawRect(Color.White)
+
+        val hash = data.hashCode()
+        val random = java.util.Random(hash.toLong())
+
+        val grid = Array(gridCount) { BooleanArray(gridCount) }
+
+        fun drawFinderPattern(row: Int, col: Int) {
+            for (r in 0..6) {
+                for (c in 0..6) {
+                    if (row + r < gridCount && col + c < gridCount) {
+                        grid[row + r][col + c] = (r == 0 || r == 6 || c == 0 || c == 6 || (r in 2..4 && c in 2..4))
+                    }
+                }
+            }
+        }
+
+        drawFinderPattern(0, 0)
+        drawFinderPattern(0, gridCount - 7)
+        drawFinderPattern(gridCount - 7, 0)
+
+        for (r in 0 until gridCount) {
+            for (c in 0 until gridCount) {
+                if ((r < 7 && c < 7) || (r < 7 && c >= gridCount - 7) || (r >= gridCount - 7 && c < 7)) continue
+                grid[r][c] = random.nextBoolean()
+            }
+        }
+
+        for (r in 0 until gridCount) {
+            for (c in 0 until gridCount) {
+                if (grid[r][c]) {
+                    drawRect(
+                        color = Color.Black,
+                        topLeft = androidx.compose.ui.geometry.Offset(c * cellSize, r * cellSize),
+                        size = androidx.compose.ui.geometry.Size(cellSize, cellSize)
+                    )
                 }
             }
         }

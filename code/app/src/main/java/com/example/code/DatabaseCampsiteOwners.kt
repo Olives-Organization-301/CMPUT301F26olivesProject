@@ -12,6 +12,7 @@ class DatabaseCampsiteOwners {
     private val campsiteOwnersRef = db.collection("CampsiteOwners")
     private val _campsiteOwners = mutableStateListOf<CampsiteOwner>()
 
+
     val campsiteOwners: List<CampsiteOwner> get() = _campsiteOwners
 
     init {
