@@ -50,11 +50,15 @@ private val ButtonBlue = Color(0xFF274690)
 private val FieldLine = Color(0xFF333333)
 
 @Composable
-fun EntrantLoginScreen(navController: NavController, appState: AppState) {
+fun EntrantLoginScreen(
+    navController: NavController,
+    appState: AppState,
+    startInSignUp: Boolean = false  // true when opened from the "Sign up" button
+) {
     val context = LocalContext.current
     var entrantEmail by remember { mutableStateOf("") }
     var entrantName by remember { mutableStateOf("") }
-    var isSignUp by remember { mutableStateOf(false) }
+    var isSignUp by remember { mutableStateOf(startInSignUp) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
 
@@ -124,7 +128,7 @@ fun EntrantLoginScreen(navController: NavController, appState: AppState) {
                                 appState.role = "entrant"
                                 DeviceIdentity.saveEntrantId(context, newEntrant.getUserID())
                                 navController.navigate("mainSearchScreen") {
-                                    popUpTo("entrantLogin") { inclusive = true }
+                                    popUpTo(ENTRANT_LOGIN_ROUTE) { inclusive = true }
                                 }
                             }
                         } else {
@@ -133,7 +137,7 @@ fun EntrantLoginScreen(navController: NavController, appState: AppState) {
                                 appState.role = "entrant"
                                 DeviceIdentity.saveEntrantId(context, existing.getUserID())
                                 navController.navigate("mainSearchScreen") {
-                                    popUpTo("entrantLogin") { inclusive = true }
+                                    popUpTo(ENTRANT_LOGIN_ROUTE) { inclusive = true }
                                 }
                             } else {
                                 errorMessage = "does not exist"

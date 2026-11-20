@@ -84,10 +84,12 @@ fun LoginScreen(
     darkTheme: Boolean = isSystemInDarkTheme()
 ) {
     var showRoleDialog by remember { mutableStateOf(false) }
+    // true when "Sign up" was pressed, so the role's login screen opens in sign-up mode
+    var signingUp by remember { mutableStateOf(false) }
 
     LoginScreenContent(
-        onSignUp = {showRoleDialog = true},
-        onLogIn = {showRoleDialog = true},
+        onSignUp = { signingUp = true; showRoleDialog = true },
+        onLogIn = { signingUp = false; showRoleDialog = true },
         darkTheme = darkTheme
     )
 
@@ -108,7 +110,7 @@ fun LoginScreen(
                     ).forEach { (label, route) ->
                         Button(
                             modifier = Modifier.fillMaxWidth(),
-                            onClick = { showRoleDialog = false; navController.navigate(route) }
+                            onClick = { showRoleDialog = false; navController.navigate("$route?signUp=$signingUp") }
                         ) { Text(label) }
                     }
                 } // Role select block end
