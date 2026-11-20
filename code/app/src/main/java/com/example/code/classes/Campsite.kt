@@ -44,10 +44,14 @@ class Campsite(
     fun getDescription(): String = description
     fun getFinalList(): List<String> = finalList
     fun getRules(): List<String> = rules
+    fun getWaitingList(): List<String> = waitingList
+    fun setWaitingList(entrantIDs: List<String>) { waitingList = entrantIDs.toMutableList() }
 
     // Add entrant into the waiting list
     fun addEntrant(entrantID: String) {
-        waitingList.add(entrantID)
+        if (entrantID !in waitingList) {
+            waitingList.add(entrantID)
+        }
     }
 
     // Add entrant to an active waiting list
@@ -99,6 +103,7 @@ class Campsite(
         "price" to price,
         "rating" to rating,
         "capacity" to capacity,
+        "waitingList" to waitingList,
         "coordinates" to mapOf(
             "country" to coordinates.getCountry(),
             "firstSubdivision" to coordinates.getFirstSubdivision(),

@@ -174,8 +174,15 @@ fun ReservationsListScreen(
                     campsiteData = campsiteCache[campsite],
                     dateFormatter = dateFormatter,
                     onRemove = {
+                        // Remove the campsite from the entrant's own list
                         entrant?.let {
                             appState.entrants.removeEntrantCampsite(it, selectedList, campsite)
+                        }
+                        // If it's the waiting list, also remove the entrant from the campsite's waitingList
+                        val userID = appState.userID
+                        if (selectedList == "Waiting_List" && userID != null) {
+                            campsiteCache[campsite]?.removeEntrant(userID)
+                            appState.campsites.removeFromWaitingList(campsite, userID)
                         }
                         displayedCampsites.remove(campsite)
                     }

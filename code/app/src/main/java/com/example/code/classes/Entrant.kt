@@ -27,8 +27,9 @@ class Entrant(
 
     // Add Campsite adds campsite to corresponding key
     fun addCampsite(key: String, campsiteID: String) {
-        if (key in campsiteLists.keys) {
-            campsiteLists[key]!!.add(campsiteID)
+        val list = campsiteLists[key] ?: return
+        if (campsiteID !in list) {
+            list.add(campsiteID)
         }
     }
 
