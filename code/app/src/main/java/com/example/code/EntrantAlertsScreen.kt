@@ -40,8 +40,7 @@ import com.google.firebase.firestore.firestore
 @Composable
 fun EntrantAlertsScreen(navController: NavController, appState: AppState){
     val alerts : List<Alert> = appState.alerts.alerts
-    val entrant = appState.entrants as Entrant
-    var wantsNotifications by remember { mutableStateOf(entrant.wantsNotifications ?: true) }
+    var wantsNotifications by remember { mutableStateOf(true) }
     Column(
         modifier = Modifier.fillMaxSize().padding(15.dp)
     ) {
@@ -62,13 +61,11 @@ fun EntrantAlertsScreen(navController: NavController, appState: AppState){
 
             Button(onClick = {
                 wantsNotifications = !wantsNotifications
-                entrant?.wantsNotifications = wantsNotifications
-
-                Firebase.auth.uid?.let{ uid ->
-                    Firebase.firestore.collection("entrants")
-                        .document(uid)
-                        .update("wantsNotifications", wantsNotifications)
-                }
+//                Firebase.auth.uid?.let{ uid ->
+//                    Firebase.firestore.collection("entrants")
+//                        .document(uid)
+//                        .update("wantsNotifications", wantsNotifications)
+//                }
             }, modifier = Modifier.weight(0.4f)) {
                 Text(if(wantsNotifications) "Opt Out" else "Opt In")
             }
