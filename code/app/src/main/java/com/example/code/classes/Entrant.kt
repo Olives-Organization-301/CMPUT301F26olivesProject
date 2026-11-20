@@ -1,5 +1,7 @@
 package com.example.code.classes
 
+import android.R
+
 /** Entrant Class represents the entrants
  * is a Subclass for user and has extra personal information.
  * @param username: A Person's nickname
@@ -13,6 +15,7 @@ class Entrant(
     var description: String = "",
     var name: String = "",
     var dateOfBirth: String = "",   // e.g. "2001-04-23"
+    var wantsNotifications: Boolean = true
 ): User(username, email, userID) {
 
     // Use Maps so User can add their own Custom lists

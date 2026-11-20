@@ -1,10 +1,12 @@
 package com.example.code
 
+import android.app.AlertDialog
 import android.app.DatePickerDialog
 import android.content.Context
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -63,12 +65,15 @@ import java.util.Date
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.ui.window.DialogProperties
+import com.example.code.classes.Alert
 import com.example.code.classes.AppState
 import com.example.code.classes.Campsite
 import com.example.code.classes.CampsiteOwner
 import com.example.code.classes.Coordinates
+import com.example.code.classes.Entrant
 import com.example.code.classes.PreviewCampsite
 import com.example.code.classes.WaitlistEntrant
+import com.google.api.HttpBody
 import java.time.LocalDateTime
 /** # Search Screen
  *  Implementation of the Entrants' Main Screen as seen in the Figma.
@@ -92,6 +97,7 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
     var currentOwnerObj by remember { mutableStateOf<CampsiteOwner?>(null) }
     var showEdit by remember { mutableStateOf<PreviewCampsite?>(null) }
     var showLottery by remember { mutableStateOf<PreviewCampsite?>(null) }
+    var showAlert by remember { mutableStateOf<PreviewCampsite?>(null) }
     val format = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
 
     val previewCampsites = remember {
@@ -121,6 +127,8 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
                                                 location = cLoc,
                                                 startMillis = null,
                                                 endMillis = null,
+                                                startMillisRegis = null,
+                                                endMillisRegis = null,
                                                 waitingList = emptyList()
                                             )
                                         )
@@ -140,6 +148,8 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
                                                 location = cLoc,
                                                 startMillis = null,
                                                 endMillis = null,
+                                                startMillisRegis = null,
+                                                endMillisRegis = null,
                                                 waitingList = emptyList()
                                             )
                                         )
@@ -203,7 +213,7 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(120.dp),
+                                .heightIn(120.dp),
                             shape = RoundedCornerShape(24.dp),
                             colors = CardDefaults.cardColors(containerColor = Color(0xFFB0B0B0))
                         ) {
@@ -234,6 +244,7 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
                                 ) {
                                     Button(onClick = { showEdit = preview }) { Text("  Edit  ", maxLines = 1) }
                                     Button(onClick = { showLottery = preview }) { Text("Lottery", maxLines = 1) }
+                                    Button(onClick = { showAlert = preview }) { Text(" Alert ", maxLines = 1)}
                                 }
                             }
                         }
@@ -480,6 +491,15 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
             }
         )
     }
+
+    showAlert?.let { current ->
+        NotificationDialog(
+            campsite = current,
+            onDismiss = {showAlert = null},
+            ownerName = ownerName,
+            appState = appState
+        )
+    }
 }
 
 @Composable
@@ -493,11 +513,15 @@ fun AddEditCampsite(
     var location by remember { mutableStateOf(initial?.location ?: "") }
     var startMillis by remember { mutableStateOf(initial?.startMillis) }
     var endMillis by remember { mutableStateOf(initial?.endMillis) }
+    var startMillisRegis by remember { mutableStateOf(initial?.startMillisRegis) }
+    var endMillisRegis by remember { mutableStateOf(initial?.endMillisRegis) }
     val context = LocalContext.current
     val format = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
 
     val startText = startMillis?.let { format.format(Date(it)) } ?: "Not set"
     val endText = endMillis?.let { format.format(Date(it)) } ?: "Not set"
+    val startTextRegis = startMillisRegis?.let { format.format(Date(it)) } ?: "Not set"
+    val endTextRegis = endMillisRegis?.let { format.format(Date(it)) } ?: "Not set"
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -527,6 +551,8 @@ fun AddEditCampsite(
                                     location = location,
                                     startMillis = startMillis,
                                     endMillis = endMillis,
+                                    startMillisRegis = startMillisRegis,
+                                    endMillisRegis = endMillisRegis,
                                     waitingList = initial?.waitingList ?: emptyList()
                                 )
                             )
@@ -558,7 +584,7 @@ fun AddEditCampsite(
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    Text("Lottery dates")
+                    Text("Booking dates")
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -572,6 +598,22 @@ fun AddEditCampsite(
                             onClick = { pickDate(context, startMillis) { endMillis = it } },
                             modifier = Modifier.weight(1f)
                         ) { Text("End: $endText", maxLines = 1) }
+                    }
+
+                    Text("Registration period")
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { pickDate(context, null) { startMillisRegis = it } },
+                            modifier = Modifier.weight(1f)
+                        ) { Text("Entry: $startTextRegis", maxLines = 1) }
+
+                        OutlinedButton(
+                            onClick = { pickDate(context, startMillisRegis) { endMillisRegis = it } },
+                            modifier = Modifier.weight(1f)
+                        ) { Text("End: $endTextRegis", maxLines = 1) }
                     }
                 }
             }
@@ -658,6 +700,8 @@ fun LotteryDialog(
                                     location = campsite.location,
                                     startMillis = startMillis,
                                     endMillis = endMillis,
+                                    startMillisRegis = startMillis,
+                                    endMillisRegis = endMillis,
                                     waitingList = waitingList
                                 )
                             )
@@ -711,29 +755,35 @@ fun LotteryDialog(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Button(
-                                onClick = { startLottery() },
+                                onClick = { pickDate(context, null) { s ->
+                                    startMillis = s
+                                    val cal = Calendar.getInstance().apply {
+                                        timeInMillis = s
+                                        add(Calendar.DAY_OF_YEAR, 7)
+                                    }
+
+                                } },
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Text("Start from today", maxLines = 1, fontSize = 12.sp)
+                                Text("Start date", maxLines = 1, fontSize = 12.sp)
                             }
 
-                            OutlinedButton(
+                            Button(
                                 onClick = {
                                     pickDate(context, null) { s ->
-                                        startMillis = s
+                                        endMillis = s
                                         val cal = Calendar.getInstance().apply {
                                             timeInMillis = s
                                             add(Calendar.DAY_OF_YEAR, 7)
                                         }
-                                        endMillis = cal.timeInMillis
                                     }
                                 },
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Text("Start from custom date", maxLines = 1, fontSize = 12.sp)
+                                Text("End date", maxLines = 1, fontSize = 12.sp)
                             }
 
-                            OutlinedButton(
+                            Button(
                                 onClick = {
                                     inputWinnersText = numLotteryWinners.toString()
                                     showSetWinnersDialog = true
@@ -1027,4 +1077,83 @@ private fun pickDate(context: Context, minDateMillis: Long?, onSelected: (Long) 
         dialog.datePicker.minDate = minDateMillis
     }
     dialog.show()
+}
+
+@Composable
+fun NotificationDialog(
+    campsite: PreviewCampsite,
+    onDismiss: () -> Unit,
+    ownerName: String,
+    appState: AppState
+){
+    var alertTitle by remember { mutableStateOf("") }
+    var alertBody by remember { mutableStateOf("") }
+
+    fun CreateAlert(campsite: PreviewCampsite, owner: String, title: String, body: String){
+        for(entrant in campsite.waitingList){
+            val alertID = java.util.UUID.randomUUID()
+            val newAlert = Alert(alertID.toString(), title, body, entrant.id, owner )
+            appState.alerts.addAlert(newAlert)
+        }
+
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ){
+        Surface(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier.fillMaxSize().padding(15.dp)
+            ) {
+                Spacer(Modifier.height(48.dp))
+                Row(){
+                    Text(
+                        text = "Send alert to entrants of ${campsite.name}",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        text = "✕",
+                        fontSize = 24.sp,
+                        modifier = Modifier.clickable { onDismiss() }
+                    )
+                }
+
+                OutlinedTextField(
+                    value = alertTitle,
+                    onValueChange = { alertTitle = it },
+                    label = { Text("Title", fontSize = 11.sp) },
+                    modifier = Modifier.fillMaxWidth().padding(5.dp),
+                    singleLine = true
+                )
+
+                OutlinedTextField(
+                    value = alertBody,
+                    onValueChange = { alertBody = it },
+                    label = { Text("Message", fontSize = 11.sp) },
+                    modifier = Modifier.weight(1f).fillMaxWidth().padding(5.dp),
+                    singleLine = true
+                )
+                Button(
+                    onClick = {
+                        CreateAlert(campsite, ownerName, alertTitle, alertBody)
+                        alertTitle = ""
+                        alertBody = ""
+                        onDismiss()
+                    },
+                    modifier = Modifier.fillMaxWidth().padding(5.dp)
+                ){
+                    Text("Send Alert")
+                }
+                Spacer(modifier = Modifier.weight(1f))
+
+
+            }
+        }
+
+    }
+
+
 }
