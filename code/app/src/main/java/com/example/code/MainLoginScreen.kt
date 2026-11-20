@@ -96,8 +96,8 @@ fun LoginScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(
-                        "Admin" to "AdminMainSearchScreen",
-                        "Entrant" to "mainSearchScreen",
+                        "Admin" to "adminLogin",
+                        "Entrant" to "entrantLogin",
                         "Owner" to "campsiteOwnerLogin"
                     ).forEach { (label, route) ->
                         Button(
