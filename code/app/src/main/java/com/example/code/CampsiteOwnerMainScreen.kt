@@ -127,6 +127,8 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
                                                 location = cLoc,
                                                 startMillis = null,
                                                 endMillis = null,
+                                                startMillisRegis = null,
+                                                endMillisRegis = null,
                                                 waitingList = emptyList()
                                             )
                                         )
@@ -146,6 +148,8 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
                                                 location = cLoc,
                                                 startMillis = null,
                                                 endMillis = null,
+                                                startMillisRegis = null,
+                                                endMillisRegis = null,
                                                 waitingList = emptyList()
                                             )
                                         )
@@ -509,11 +513,15 @@ fun AddEditCampsite(
     var location by remember { mutableStateOf(initial?.location ?: "") }
     var startMillis by remember { mutableStateOf(initial?.startMillis) }
     var endMillis by remember { mutableStateOf(initial?.endMillis) }
+    var startMillisRegis by remember { mutableStateOf(initial?.startMillisRegis) }
+    var endMillisRegis by remember { mutableStateOf(initial?.endMillisRegis) }
     val context = LocalContext.current
     val format = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
 
     val startText = startMillis?.let { format.format(Date(it)) } ?: "Not set"
     val endText = endMillis?.let { format.format(Date(it)) } ?: "Not set"
+    val startTextRegis = startMillisRegis?.let { format.format(Date(it)) } ?: "Not set"
+    val endTextRegis = endMillisRegis?.let { format.format(Date(it)) } ?: "Not set"
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -543,6 +551,8 @@ fun AddEditCampsite(
                                     location = location,
                                     startMillis = startMillis,
                                     endMillis = endMillis,
+                                    startMillisRegis = startMillisRegis,
+                                    endMillisRegis = endMillisRegis,
                                     waitingList = initial?.waitingList ?: emptyList()
                                 )
                             )
@@ -574,7 +584,7 @@ fun AddEditCampsite(
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    Text("Lottery dates")
+                    Text("Booking dates")
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -588,6 +598,22 @@ fun AddEditCampsite(
                             onClick = { pickDate(context, startMillis) { endMillis = it } },
                             modifier = Modifier.weight(1f)
                         ) { Text("End: $endText", maxLines = 1) }
+                    }
+
+                    Text("Registration period")
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { pickDate(context, null) { startMillisRegis = it } },
+                            modifier = Modifier.weight(1f)
+                        ) { Text("Entry: $startTextRegis", maxLines = 1) }
+
+                        OutlinedButton(
+                            onClick = { pickDate(context, startMillisRegis) { endMillisRegis = it } },
+                            modifier = Modifier.weight(1f)
+                        ) { Text("End: $endTextRegis", maxLines = 1) }
                     }
                 }
             }
@@ -674,6 +700,8 @@ fun LotteryDialog(
                                     location = campsite.location,
                                     startMillis = startMillis,
                                     endMillis = endMillis,
+                                    startMillisRegis = startMillis,
+                                    endMillisRegis = endMillis,
                                     waitingList = waitingList
                                 )
                             )
@@ -727,29 +755,35 @@ fun LotteryDialog(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Button(
-                                onClick = { startLottery() },
+                                onClick = { pickDate(context, null) { s ->
+                                    startMillis = s
+                                    val cal = Calendar.getInstance().apply {
+                                        timeInMillis = s
+                                        add(Calendar.DAY_OF_YEAR, 7)
+                                    }
+
+                                } },
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Text("Start from today", maxLines = 1, fontSize = 12.sp)
+                                Text("Start date", maxLines = 1, fontSize = 12.sp)
                             }
 
-                            OutlinedButton(
+                            Button(
                                 onClick = {
                                     pickDate(context, null) { s ->
-                                        startMillis = s
+                                        endMillis = s
                                         val cal = Calendar.getInstance().apply {
                                             timeInMillis = s
                                             add(Calendar.DAY_OF_YEAR, 7)
                                         }
-                                        endMillis = cal.timeInMillis
                                     }
                                 },
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Text("Start from custom date", maxLines = 1, fontSize = 12.sp)
+                                Text("End date", maxLines = 1, fontSize = 12.sp)
                             }
 
-                            OutlinedButton(
+                            Button(
                                 onClick = {
                                     inputWinnersText = numLotteryWinners.toString()
                                     showSetWinnersDialog = true
