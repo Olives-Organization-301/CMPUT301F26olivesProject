@@ -96,45 +96,19 @@ fun LoginScreen(
         var newUser by remember { mutableStateOf(Firebase.auth.currentUser == null)}
         Dialog(
             onDismissRequest = {showRoleDialog = false},
-            properties = DialogProperties(usePlatformDefaultWidth = false)
-        ){
-            Surface(modifier = Modifier.fillMaxSize()) {
-                if(!selected){ // if role not selected display role selection menu thing
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp),
-                        modifier = Modifier.padding(25.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            textAlign = TextAlign.Center,
-                            fontSize = 30.sp,
-                            fontWeight = FontWeight.Medium,
-                            text = "Continue As"
-                        )
-                        listOf(
-                            "Admin" to "AdminMainSearchScreen",
-                            "Entrant" to "mainSearchScreen",
-                            "Owner" to "campsiteOwnerLogin"
-                        ).forEach { (label, route) ->
-                            Button(
-                                modifier = Modifier.fillMaxWidth()
-                                ,onClick = {
-                                    //navController.navigate(route)
-
-                                    when(route){
-                                        "AdminMainSearchScreen" -> {
-                                            showRoleDialog = false
-                                            navController.navigate(route)}
-                                        "mainSearchScreen" -> {
-                                            selected = true
-                                        }
-                                        "campsiteOwnerLogin" -> {
-                                            showRoleDialog = false
-                                            navController.navigate(route)}
-                                    }
-                                }
-                            ){ Text(label)}
-                        }
-
+            confirmButton = {},
+            title = { Text("Continue as")},
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(
+                        "Admin" to "adminLogin",
+                        "Entrant" to "entrantLogin",
+                        "Owner" to "campsiteOwnerLogin"
+                    ).forEach { (label, route) ->
+                        Button(
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = {showRoleDialog = false; navController.navigate(route)}
+                        ){ Text(label)}
                     }
                 } // Role select block end
 
