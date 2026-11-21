@@ -245,6 +245,30 @@ class DatabaseCampsites {
             }
     }
 
+    /** Removes an entrant's ID from the waitingList of every campsite they joined.
+     *  Called when an entrant deletes their profile so no campsite keeps a dangling ID.
+     */
+    fun removeEntrantFromAllCampsites(entrantID: String, onComplete: (Boolean) -> Unit = {}) {
+        _campsites.forEach { it.removeEntrant(entrantID) }
+        campsitesRef.whereArrayContains("waitingList", entrantID).get()
+            .addOnSuccessListener { snapshot ->
+                val batch = db.batch()
+                snapshot.documents.forEach { doc ->
+                    batch.update(doc.reference, "waitingList", FieldValue.arrayRemove(entrantID))
+                }
+                batch.commit()
+                    .addOnSuccessListener { onComplete(true) }
+                    .addOnFailureListener { e ->
+                        android.util.Log.e("DB", "removeEntrantFromAllCampsites failed for $entrantID", e)
+                        onComplete(false)
+                    }
+            }
+            .addOnFailureListener { e ->
+                android.util.Log.e("DB", "removeEntrantFromAllCampsites query failed for $entrantID", e)
+                onComplete(false)
+            }
+    }
+
     fun deleteCampsite(campsite: Campsite) {
         try {
             _campsites.removeAll { it.campsiteID == campsite.campsiteID }

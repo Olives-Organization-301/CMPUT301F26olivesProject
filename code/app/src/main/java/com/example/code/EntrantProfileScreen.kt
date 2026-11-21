@@ -32,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -58,6 +59,7 @@ fun ProfileScreen(
     navController: NavController,
     appState: AppState
 ) {
+    val context = LocalContext.current
 
     val entrant by produceState<Entrant?>(
         initialValue = null,
@@ -240,10 +242,18 @@ fun ProfileScreen(
                 showEditDialog = false
             },
             onDeleteProfile = {
-                appState.entrants.deleteEntrant(entrant!!)
+                val id = current.getUserID()
+                // Take the entrant off every campsite's waiting list before deleting the profile
+                appState.campsites.removeEntrantFromAllCampsites(id)
+                appState.entrants.deleteEntrant(current)
                 showEditDialog = false
                 appState.userID = null
-                navController.navigate("loginScreen")
+                appState.role = null
+                // Forget this ID on the device so it's never reused for another account
+                DeviceIdentity.clearEntrantId(context)
+                navController.navigate("loginScreen") {
+                    popUpTo(0) { inclusive = true }
+                }
             }
         )
     }

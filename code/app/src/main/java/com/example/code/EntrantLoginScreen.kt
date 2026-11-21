@@ -117,7 +117,11 @@ fun EntrantLoginScreen(
                             if (existing != null) {
                                 errorMessage = "exists"
                             } else {
-                                val newID = DeviceIdentity.getOrCreate(context)
+                                // Prevent Deleting an Alt account causing to delete every account stored in a device
+                                // Always generate a fresh ID for a new account. getOrCreate() returned
+                                // whatever ID was last saved on this device (e.g. the previously logged-in
+                                // account), so a new sign-up overwrote that account's Firestore document.
+                                val newID = java.util.UUID.randomUUID().toString()
                                 val newEntrant = Entrant(
                                     username = entrantName.ifBlank { cleanEmail.substringBefore("@") },
                                     email = cleanEmail,
