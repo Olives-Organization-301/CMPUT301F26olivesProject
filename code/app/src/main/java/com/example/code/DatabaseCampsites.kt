@@ -1,12 +1,16 @@
 package com.example.code
 
 import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.compose.runtime.mutableStateListOf
 import com.example.code.classes.Campsite
 import com.example.code.classes.Coordinates
 import com.google.firebase.Firebase
+import com.google.android.gms.tasks.Tasks
+import com.google.firebase.firestore.DocumentReference
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.QuerySnapshot
 import com.google.firebase.firestore.firestore
 import java.time.LocalDateTime
 import kotlin.random.Random
@@ -19,6 +23,9 @@ import kotlin.random.Random
  * one of the prompts used : now when User Database is clicked, I want both collections "Entrants" and "
  * CampsiteOwners" displayed as how the logic for displaying collection "campsites" were in Admin
  */
+
+// From Gabe; I edited Campsite Details in order to change the dates of the campsites, so it requires this API (Sorry)
+@RequiresApi(Build.VERSION_CODES.O)
 class DatabaseCampsites {
     private val db = Firebase.firestore
     private val campsitesRef = db.collection("campsites")
@@ -44,6 +51,34 @@ class DatabaseCampsites {
         }
     }
 
+    /** Builds one location from a map in a campsite's "coordinates" list.
+     *  For older documents (a single map, or fields at the top level) [doc] supplies the fallbacks.
+     */
+    private fun coordinatesFromMap(coordMap: Map<*, *>?, doc: DocumentSnapshot?): Coordinates {
+        val country = coordMap?.get("country")?.toString()
+            ?: doc?.getString("country")
+            ?: "Canada"
+
+        val region = coordMap?.get("region")?.toString()
+            ?: doc?.getString("region")
+            ?: ""
+
+        // Older documents stored the location under "firstSubdivision"
+        val city = coordMap?.get("city")?.toString()
+            ?: coordMap?.get("firstSubdivision")?.toString()
+            ?: doc?.getString("city")
+            ?: doc?.getString("location")
+            ?: doc?.getString("firstSubdivision")
+            ?: ""
+
+        val address = coordMap?.get("address")?.toString()
+            ?: doc?.getString("address")
+            ?: ""
+
+        return Coordinates(country, region, city, address)
+    }
+
+    @RequiresApi(Build.VERSION_CODES.O)
     private fun parseCampsiteDocument(doc: DocumentSnapshot): Campsite? {
         return try {
             if (!doc.exists()) return null
@@ -59,9 +94,13 @@ class DatabaseCampsites {
                 ?: doc.get("owner_id")?.toString()
                 ?: ""
 
-            val maxOcc = (doc.get("maxOccupancy") as? Number)?.toInt()
-                ?: doc.get("maxOccupancy")?.toString()?.toIntOrNull()
-                ?: 4
+            // maxOccupancy is a list of per-day capacities; older documents stored a single number
+            val maxOccObj = doc.get("maxOccupancy")
+            val maxOcc: MutableList<Int> = when (maxOccObj) {
+                is List<*> -> maxOccObj.mapNotNull { (it as? Number)?.toInt() ?: it?.toString()?.toIntOrNull() }
+                is Number -> listOf(maxOccObj.toInt())
+                else -> listOfNotNull(maxOccObj?.toString()?.toIntOrNull())
+            }.ifEmpty { listOf(4) }.toMutableList()
 
             val priceObj = doc.get("price") ?: doc.get("Price")
             val price = (priceObj as? Number)?.toFloat()
@@ -72,34 +111,48 @@ class DatabaseCampsites {
             val rating = (ratingObj as? Number)?.toFloat()
                 ?: ratingObj?.toString()?.toFloatOrNull()
 
-            val capObj = doc.get("capacity") ?: doc.get("Capacity")
-            val capacity = (capObj as? Number)?.toInt()
-                ?: capObj?.toString()?.toIntOrNull()
-                ?: 4
+            // "coordinates" is a list of locations; older documents stored a single map
+            val coordsField = doc.get("coordinates")
+            val coords: MutableList<Coordinates> = when (coordsField) {
+                is List<*> -> coordsField.mapNotNull { entry ->
+                    (entry as? Map<*, *>)?.let { coordinatesFromMap(it, null) }
+                }
+                else -> listOf(coordinatesFromMap(coordsField as? Map<*, *>, doc))
+            }.toMutableList()
 
-            val coordMap = doc.get("coordinates") as? Map<*, *>
-            val country = coordMap?.get("country")?.toString()
-                ?: doc.getString("country")
-                ?: "Canada"
+            val vacationTimes = (doc.get("vacationStartTimes") as? List<*>)?.mapNotNull { entry ->
+                val map = entry as? Map<*, *> ?: return@mapNotNull null
+                try {
+                    LocalDateTime.parse(map["start"].toString()) to LocalDateTime.parse(map["end"].toString())
+                } catch (e: Exception) {
+                    null
+                }
+            } ?: emptyList()
 
-            val sub = coordMap?.get("firstSubdivision")?.toString()
-                ?: doc.getString("location")
-                ?: doc.getString("firstSubdivision")
-                ?: doc.getString("city")
-                ?: ""
+            // Lottery dates are stored as ISO-8601 strings
+            var start = doc.getString("lotteryStartDate")?.let {
+                try { LocalDateTime.parse(it) } catch (e: Exception) { null }
+            }
+            var end = doc.getString("lotteryEndDate")?.let {
+                try { LocalDateTime.parse(it) } catch (e: Exception) { null }
+            }
 
-            val lon = (coordMap?.get("longitude") as? Number)?.toDouble()
-                ?: doc.get("longitude")?.toString()?.toDoubleOrNull()
-                ?: -113.49
-
-            val lat = (coordMap?.get("latitude") as? Number)?.toDouble()
-                ?: doc.get("latitude")?.toString()?.toDoubleOrNull()
-                ?: 53.54
-
-            val coords = Coordinates(country, sub, lon, lat)
-
-            val start = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) LocalDateTime.now() else null
-            val end = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) LocalDateTime.now().plusDays(7) else null
+            // Older campsites never saved their lottery dates. Give them the same default as a new
+            // campsite (a 7-day lottery starting now) and save it once, so the dates stop changing.
+            if (start == null && end == null) {
+                start = LocalDateTime.now().withNano(0)
+                end = start.plusDays(7)
+                campsitesRef.document(doc.id)
+                    .update(
+                        mapOf(
+                            "lotteryStartDate" to start.toString(),
+                            "lotteryEndDate" to end.toString()
+                        )
+                    )
+                    .addOnFailureListener { e ->
+                        android.util.Log.e("DB", "Saving default lottery dates failed for ${doc.id}", e)
+                    }
+            }
 
             Campsite(
                 name = name,
@@ -108,13 +161,19 @@ class DatabaseCampsites {
                 maxOccupancy = maxOcc,
                 price = price,
                 rating = rating,
-                capacity = capacity,
                 coordinates = coords,
-                startDate = start,
-                endDate = end,
+                thumbnailImage = doc.getString("thumbnailImage"),
+                detailsImage = doc.getString("detailsImage"),
+                lotteryStartDate = start,
+                lotteryEndDate = end,
+                vacationStartTimes = vacationTimes.toMutableList(),
             ).also { campsite ->
                 val waiting = (doc.get("waitingList") as? List<*>)?.filterIsInstance<String>()
                 if (waiting != null) campsite.setWaitingList(waiting)
+                val active = (doc.get("activeLotteryList") as? List<*>)?.filterIsInstance<String>()
+                if (active != null) campsite.setActiveLotteryList(active)
+                val finalIDs = (doc.get("finalList") as? List<*>)?.filterIsInstance<String>()
+                if (finalIDs != null) campsite.setFinalList(finalIDs)
             }
         } catch (e: Exception) {
             android.util.Log.e("DB", "Failed to parse document ${doc.id}", e)
@@ -123,6 +182,7 @@ class DatabaseCampsites {
     }
 
     // Fetch all campsites from the firebase collection "campsites"
+    @RequiresApi(Build.VERSION_CODES.O)
     fun fetchAllCampsites(onResult: (List<Campsite>) -> Unit) {
         campsitesRef.get()
             .addOnSuccessListener { snapshot ->
@@ -245,6 +305,116 @@ class DatabaseCampsites {
             }
     }
 
+    /** Adds an entrant straight to the campsite's "activeLotteryList"
+     * (joining while the lottery is running).
+     */
+    fun addToActiveLottery(
+        campsite: Campsite,
+        entrantID: String,
+        onComplete: (Boolean) -> Unit = {}
+    ) {
+        // Add active lottery to the campsite
+        campsite.addActiveLotteryEntrant(entrantID)
+        // Document the change, with exceptions
+        campsitesRef.document(campsite.campsiteID)
+            .update("activeLotteryList", FieldValue.arrayUnion(entrantID))
+            .addOnSuccessListener { onComplete(true) }
+            .addOnFailureListener { e ->
+                android.util.Log.e("DB", "addToActiveLottery failed for ${campsite.campsiteID}", e)
+                onComplete(false)
+            }
+    }
+
+    /** Removes an entrant's ID from the campsite's "activeLotteryList". */
+    fun removeFromActiveLottery(
+        campsite: Campsite,
+        entrantID: String,
+        onComplete: (Boolean) -> Unit = {}
+    ) {
+        campsite.removeEntrant(entrantID)
+        removeFromActiveLottery(campsite.campsiteID, entrantID, onComplete)
+    }
+
+    /** Same as above, but only needs the campsite's ID (for when the Campsite object isn't loaded). */
+    fun removeFromActiveLottery(
+        campsiteID: String,
+        entrantID: String,
+        onComplete: (Boolean) -> Unit = {}
+    ) {
+        _campsites.firstOrNull { it.campsiteID == campsiteID }?.removeEntrant(entrantID)
+        campsitesRef.document(campsiteID)
+            .update("activeLotteryList", FieldValue.arrayRemove(entrantID))
+            .addOnSuccessListener { onComplete(true) }
+            .addOnFailureListener { e ->
+                android.util.Log.e("DB", "removeFromActiveLottery failed for $campsiteID", e)
+                onComplete(false)
+            }
+    }
+
+    /** Moves an entrant from the campsite's "waitingList" to its "activeLotteryList" once the lottery starts. */
+    fun moveToActiveLottery(
+        campsite: Campsite,
+        entrantID: String,
+        onComplete: (Boolean) -> Unit = {}
+    ) {
+        campsite.moveToActiveLottery(entrantID)
+        campsitesRef.document(campsite.campsiteID)
+            .update(
+                mapOf(
+                    "waitingList" to FieldValue.arrayRemove(entrantID),
+                    "activeLotteryList" to FieldValue.arrayUnion(entrantID)
+                )
+            )
+            .addOnSuccessListener { onComplete(true) }
+            .addOnFailureListener { e ->
+                android.util.Log.e("DB", "moveToActiveLottery failed for ${campsite.campsiteID}", e)
+                onComplete(false)
+            }
+    }
+
+    /** Removes an entrant's ID from the waitingList, activeLotteryList and finalList of every
+     *  campsite that contains it. Called when an entrant deletes their profile so no campsite
+     *  keeps a dangling ID.
+     */
+    fun removeEntrantFromAllCampsites(entrantID: String, onComplete: (Boolean) -> Unit = {}) {
+        _campsites.forEach { it.removeEntrant(entrantID) }
+
+        // One query per list field (Firestore allows only one array-contains per query)
+        val listFields = listOf("waitingList", "activeLotteryList", "finalList")
+        val queries = listFields.map { field ->
+            campsitesRef.whereArrayContains(field, entrantID).get()
+        }
+
+        Tasks.whenAllSuccess<QuerySnapshot>(queries)
+            .addOnSuccessListener { snapshots ->
+                // Campsite doc -> the list fields that actually contain this entrant
+                // This for loop deleted entrant ID from the firebase after deletion
+                val updates = mutableMapOf<DocumentReference, MutableMap<String, Any>>()
+                snapshots.forEachIndexed { i, snapshot ->
+                    snapshot.documents.forEach { doc ->
+                        updates.getOrPut(doc.reference) { mutableMapOf() }[listFields[i]] =
+                            FieldValue.arrayRemove(entrantID)
+                    }
+                }
+                if (updates.isEmpty()) {
+                    onComplete(true)
+                    return@addOnSuccessListener
+                }
+                val batch = db.batch()
+                updates.forEach { (ref, fields) -> batch.update(ref, fields) }
+                batch.commit()
+                    .addOnSuccessListener { onComplete(true) }
+                    .addOnFailureListener { e ->
+                        android.util.Log.e("DB", "removeEntrantFromAllCampsites failed for $entrantID", e)
+                        onComplete(false)
+                    }
+            }
+            .addOnFailureListener { e ->
+                android.util.Log.e("DB", "removeEntrantFromAllCampsites query failed for $entrantID", e)
+                onComplete(false)
+            }
+    }
+
     fun deleteCampsite(campsite: Campsite) {
         try {
             _campsites.removeAll { it.campsiteID == campsite.campsiteID }
@@ -254,6 +424,7 @@ class DatabaseCampsites {
         }
     }
 
+    @RequiresApi(Build.VERSION_CODES.O)
     fun searchCampsite(campsiteID: String, onResult: (Campsite?) -> Unit) {
         campsitesRef.document(campsiteID).get()
             .addOnSuccessListener { doc ->
