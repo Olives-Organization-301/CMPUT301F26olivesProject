@@ -1,5 +1,7 @@
 package com.example.code.classes
 
+import android.os.Build
+import androidx.annotation.RequiresApi
 import com.example.code.DatabaseAdmins
 import com.example.code.DatabaseAlerts
 import com.example.code.DatabaseCampsiteOwners
@@ -14,7 +16,7 @@ import com.example.code.DatabaseEntrants
  *  Prompt: "Add DatabaseChat instance to AppState for real-time campsite owner messaging"
  *
  */
-class AppState(
+class AppState @RequiresApi(Build.VERSION_CODES.O) constructor(
     val admins: DatabaseAdmins = DatabaseAdmins(),
     val owners: DatabaseCampsiteOwners = DatabaseCampsiteOwners(),
     val campsites: DatabaseCampsites = DatabaseCampsites(),

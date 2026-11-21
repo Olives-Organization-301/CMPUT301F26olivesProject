@@ -504,18 +504,19 @@ private fun CampsiteReviewsTab(campsite: Campsite?, textColor: Color) {
                 .background(textColor.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
                 .padding(12.dp)
         ) {
-            // Ratings are stored out of 10 and shown out of 5
-            Text(
-                "★ ${review.rating / 2f}/5${if (review.isEdited) "  (edited)" else ""}",
-                fontWeight = FontWeight.Bold,
-                fontSize = 16.sp
-            )
-            Text(review.review, fontSize = 16.sp)
-            Text(
-                "${review.calculateTotalUpvote()} votes · ${replies.size} replies",
-                fontSize = 13.sp,
-                color = textColor.copy(alpha = 0.7f)
-            )
+            // TODO: reviews are stored as IDs now; fetch the Review object by ID before showing these
+            // // Ratings are stored out of 10 and shown out of 5
+            // Text(
+            //     "★ ${review.rating / 2f}/5${if (review.isEdited) "  (edited)" else ""}",
+            //     fontWeight = FontWeight.Bold,
+            //     fontSize = 16.sp
+            // )
+            // Text(review.review, fontSize = 16.sp)
+            // Text(
+            //     "${review.calculateTotalUpvote()} votes · ${replies.size} replies",
+            //     fontSize = 13.sp,
+            //     color = textColor.copy(alpha = 0.7f)
+            // )
         }
     }
 }
