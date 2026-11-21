@@ -27,10 +27,12 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -162,24 +164,27 @@ fun MainSearchScreen(
                         shape = RoundedCornerShape(24.dp),
                         colors = CardDefaults.cardColors(containerColor = Color(0xFFB0B0B0))
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                        // Thumbnail fills the card (desaturated + black gradient), info on top at the start
+                        // Turn Card into Campsite background for prettier card
+                        val thumbnail = campsiteThumbnailRes(campsite)
+                        CampsiteImageBackground(
+                            imageRes = thumbnail,
+                            fallback = Color(0xFFB0B0B0),
+                            modifier = Modifier.fillMaxSize()
                         ) {
-                            // TODO: Make Image the Background, put info on the very beginning
-                            Box(
-                                modifier = Modifier
-                                    .size(96.dp)
-                                    .background(Color.DarkGray, RoundedCornerShape(16.dp))
-                            )
-                            Spacer(Modifier.width(12.dp))
-                            Column {
-                                Text(campsite.getName())
-                                Text(campsite.getCoordinates().getCountry())
-                                Text(campsite.getStartDate().toString())
-                                Text(campsite.getEndDate().toString())
+                            CompositionLocalProvider(
+                                LocalContentColor provides if (thumbnail != null) Color.White else Color.Black
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .align(Alignment.CenterStart)
+                                        .padding(horizontal = 20.dp, vertical = 12.dp)
+                                ) {
+                                    Text(campsite.getName(), fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                                    Text(campsite.getLocationSummary())
+                                    Text("Start: ${formatLotteryDate(campsite.getStartDate())}")
+                                    Text("End: ${formatLotteryDate(campsite.getEndDate())}")
+                                }
                             }
                         }
                     }

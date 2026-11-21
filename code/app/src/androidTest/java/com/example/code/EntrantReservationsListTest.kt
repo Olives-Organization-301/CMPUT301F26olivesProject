@@ -25,6 +25,11 @@ import java.util.Locale
  *   Entrant 1 (John): Active = c_1, c_2, c_3   Past = c_4, c_5
  *   Entrant 2 (Jane): Active = c_1, c_6        Past = c_4, c_5
  *   c_6 is the disjoint campsite: only Jane has it, so John should never see it.
+ *
+ * I used Opus 5.5 the Generate the testcases
+ * Prompt: "Can you make a testcase to make sure they see the appropriate campsites?"
+ * Date: November 16, 2026
+ * Conversation: https://claude.ai/share/d56f8081-64ea-4907-9fa0-896b2350b5a4
  */
 @RunWith(AndroidJUnit4::class)
 class EntrantReservationsListTest {
@@ -33,20 +38,19 @@ class EntrantReservationsListTest {
     val composeTestRule = createComposeRule()
 
     // Same format the screen uses for the lottery dates
-    private val dateFormatter = DateTimeFormatter.ofPattern("MMM d, yyyy h:mm a", Locale.getDefault())
+    private val dateFormatter = DateTimeFormatter.ofPattern("MMMM d, yyyy", Locale.getDefault())
 
     // Each campsite gets a different start date so its date line is unique on screen
     private fun testSite(id: String, name: String, country: String, month: Int) = Campsite(
         name = name,
         ownerID = "owner_1",
         campsiteID = id,
-        maxOccupancy = 4,
+        maxOccupancy = mutableListOf(4),
         price = 50.0f,
         rating = 4.5f,
-        capacity = 4,
-        coordinates = Coordinates(country, "", 0.0, 0.0),
-        startDate = LocalDateTime.of(2026, month, 1, 9, 0),
-        endDate = LocalDateTime.of(2026, month, 6, 17, 0)
+        coordinates = mutableListOf(Coordinates(country, "", "", "")),
+        lotteryStartDate = LocalDateTime.of(2026, month, 1, 9, 0),
+        lotteryEndDate = LocalDateTime.of(2026, month, 6, 17, 0)
     )
 
     private val c1 = testSite("c_1", "Banff National Park", "Canada", 1)
@@ -133,9 +137,9 @@ class EntrantReservationsListTest {
     // A campsite card is shown with its name and both lottery dates
     private fun assertCardShown(site: Campsite) {
         composeTestRule.onNodeWithText(site.getName()).assertIsDisplayed()
-        composeTestRule.onNodeWithText("Lottery Entry: ${site.getStartDate()!!.format(dateFormatter)}")
+        composeTestRule.onNodeWithText("Start: ${site.getStartDate()!!.format(dateFormatter)}")
             .assertIsDisplayed()
-        composeTestRule.onNodeWithText("Lottery End: ${site.getEndDate()!!.format(dateFormatter)}")
+        composeTestRule.onNodeWithText("End: ${site.getEndDate()!!.format(dateFormatter)}")
             .assertIsDisplayed()
     }
 
@@ -149,7 +153,7 @@ class EntrantReservationsListTest {
         openReservations(entrantExample(), listOf(entrantExample2()))
 
         // Active list is the default
-        composeTestRule.onNodeWithText("Active_Campsites").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Active Campsites").assertIsDisplayed()
 
         // John's 3 active campsites are shown
         assertCardShown(c1)
@@ -166,8 +170,9 @@ class EntrantReservationsListTest {
     fun viewPastCampsites() {
         openReservations(entrantExample(), listOf(entrantExample2()))
 
-        selectList("Past_Campsites")
-        composeTestRule.onNodeWithText("Past_Campsites").assertIsDisplayed()
+        // Underscore was removed, so reflect that in tests
+        selectList("Past Campsites")
+        composeTestRule.onNodeWithText("Past Campsites").assertIsDisplayed()
 
         // John's 2 past campsites are shown
         assertCardShown(c4)
@@ -185,11 +190,12 @@ class EntrantReservationsListTest {
         openReservations(entrantExample(), listOf(entrantExample2()))
 
         // John never sees Jane's disjoint campsite in any of his lists
+        // Underscore was removed, so reflect that in tests
         assertCardNotShown(c6)
-        selectList("Past_Campsites")
+        selectList("Past Campsites")
         assertCardNotShown(c6)
-        selectList("Waiting_List")
-        composeTestRule.onNodeWithText("Waiting_List").assertIsDisplayed()
+        selectList("Waiting List")
+        composeTestRule.onNodeWithText("Waiting List").assertIsDisplayed()
         assertCardNotShown(c6)
     }
 
@@ -205,7 +211,8 @@ class EntrantReservationsListTest {
         assertCardNotShown(c3)
 
         // Jane's past list
-        selectList("Past_Campsites")
+        // Underscore was removed, so reflect that in tests
+        selectList("Past Campsites")
         assertCardShown(c4)
         assertCardShown(c5)
         assertCardNotShown(c1)

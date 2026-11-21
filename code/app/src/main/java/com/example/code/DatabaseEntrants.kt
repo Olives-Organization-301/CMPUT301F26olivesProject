@@ -195,6 +195,37 @@ class DatabaseEntrants {
             }
     }
 
+    /** Move Entrant's Campsite list from Waiting List to Active List
+     * Prompt: "How do I move Entrants to active campsite when the lottery starts?"
+     * Conversation: https://claude.ai/share/e282e67a-f3db-4225-b23d-1cadc614a63f (Cite better later)
+     * */
+    fun moveEntrantCampsite(
+        entrant: Entrant,
+        fromKey: String,
+        toKey: String,
+        campsiteID: String,
+        onComplete: (Boolean) -> Unit = {}
+    ) {
+        // Remove from waiting list
+        entrant.removeCampsite(fromKey, campsiteID)
+
+        // Add to active waiting list
+        entrant.addNewList(toKey)
+        entrant.addCampsite(toKey, campsiteID)
+
+        // Document the Change in Firebase
+        entrantsRef.document(entrant.getUserID())
+            .update(
+                FieldPath.of("campsiteLists", fromKey), FieldValue.arrayRemove(campsiteID),
+                FieldPath.of("campsiteLists", toKey), FieldValue.arrayUnion(campsiteID)
+            )
+            .addOnSuccessListener { onComplete(true) }
+            .addOnFailureListener { e ->
+                android.util.Log.e("DB", "moveEntrantCampsite failed for ${entrant.getUserID()}", e)
+                onComplete(false)
+            }
+    }
+
     fun removeEntrantCampsite(entrant: Entrant, listKey: String, campsiteID: String) {
         entrant.removeCampsite(listKey, campsiteID)
         entrantsRef.document(entrant.getUserID())

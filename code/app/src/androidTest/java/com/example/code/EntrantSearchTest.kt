@@ -59,6 +59,7 @@ class EntrantSearchTest {
 
     }
 
+    // Campsite has been modified, so initialization has been changed
     @Test
     fun filterTest() {
         // Fixed test data so every filter has a campsite that passes and one that fails
@@ -66,13 +67,12 @@ class EntrantSearchTest {
             name = name,
             ownerID = "owner_1",
             campsiteID = "c_$name",
-            maxOccupancy = occupancy,
+            maxOccupancy = mutableListOf(occupancy),
             price = 50.0f,
             rating = 4.8f,
-            capacity = occupancy,
-            coordinates = Coordinates(country, "", 0.0, 0.0),
-            startDate = start,
-            endDate = start?.plusDays(5)
+            coordinates = mutableListOf(Coordinates(country, "", "", "")),
+            lotteryStartDate = start,
+            lotteryEndDate = start?.plusDays(5)
         )
 
         val july1 = LocalDateTime.of(2026, 7, 1, 0, 0)
@@ -176,17 +176,17 @@ class EntrantSearchTest {
         )
     }
 
+    // Campsite has been modified, so initialization has been changed
     private fun testSite(id: String, name: String, country: String, occupancy: Int) = Campsite(
         name = name,
         ownerID = "owner_1",
         campsiteID = id,
-        maxOccupancy = occupancy,
+        maxOccupancy = mutableListOf(occupancy),
         price = 50.0f,
         rating = 4.8f,
-        capacity = occupancy,
-        coordinates = Coordinates(country, "", 0.0, 0.0),
-        startDate = LocalDateTime.of(2026, 7, 1, 0, 0),
-        endDate = LocalDateTime.of(2026, 7, 6, 0, 0)
+        coordinates = mutableListOf(Coordinates(country, "", "", "")),
+        lotteryStartDate = LocalDateTime.of(2026, 7, 1, 0, 0),
+        lotteryEndDate = LocalDateTime.of(2026, 7, 6, 0, 0)
     )
 
     @Test
