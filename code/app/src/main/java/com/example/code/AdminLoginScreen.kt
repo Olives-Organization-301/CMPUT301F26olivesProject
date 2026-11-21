@@ -49,10 +49,14 @@ private val FieldLine = Color(0xFF333333)
 /**
  * made it function as how campsite owner log in is**/
 @Composable
-fun AdminLoginScreen(navController: NavController, appState: AppState) {
+fun AdminLoginScreen(
+    navController: NavController,
+    appState: AppState,
+    startInSignUp: Boolean = false  // true when opened from the "Sign up" button
+) {
     var adminEmail by remember { mutableStateOf("") }
     var adminName by remember { mutableStateOf("") }
-    var isSignUp by remember { mutableStateOf(false) }
+    var isSignUp by remember { mutableStateOf(startInSignUp) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
 
@@ -121,7 +125,7 @@ fun AdminLoginScreen(navController: NavController, appState: AppState) {
                                 appState.userID = newAdmin.getUserID()
                                 appState.role = "admin"
                                 navController.navigate("AdminMainSearchScreen") {
-                                    popUpTo("adminLogin") { inclusive = true }
+                                    popUpTo(ADMIN_LOGIN_ROUTE) { inclusive = true }
                                 }
                             }
                         } else {
@@ -129,7 +133,7 @@ fun AdminLoginScreen(navController: NavController, appState: AppState) {
                                 appState.userID = existing.getUserID()
                                 appState.role = "admin"
                                 navController.navigate("AdminMainSearchScreen") {
-                                    popUpTo("adminLogin") { inclusive = true }
+                                    popUpTo(ADMIN_LOGIN_ROUTE) { inclusive = true }
                                 }
                             } else {
                                 errorMessage = "does not exist"

@@ -6,6 +6,7 @@ import com.example.code.classes.Campsite
 import com.example.code.classes.Coordinates
 import com.google.firebase.Firebase
 import com.google.firebase.firestore.DocumentSnapshot
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.firestore
 import java.time.LocalDateTime
 import kotlin.random.Random
@@ -111,7 +112,10 @@ class DatabaseCampsites {
                 coordinates = coords,
                 startDate = start,
                 endDate = end,
-            )
+            ).also { campsite ->
+                val waiting = (doc.get("waitingList") as? List<*>)?.filterIsInstance<String>()
+                if (waiting != null) campsite.setWaitingList(waiting)
+            }
         } catch (e: Exception) {
             android.util.Log.e("DB", "Failed to parse document ${doc.id}", e)
             null
@@ -186,6 +190,59 @@ class DatabaseCampsites {
         } catch (e: Exception) {
             // Catch exception
         }
+    }
+
+    /** Adds an entrant's ID to the campsite's "waitingList" array in Firestore.
+     *  arrayUnion is atomic and never adds duplicates, so two people joining at once is safe.
+     *  Used Opus 5.5 in order to add people into the waiting list
+     *  Prompt: "Why isn't my Entrant being added to a campsite?"
+     *  Conversation: https://claude.ai/share/ae294592-b4fe-497b-86a9-a45c32b331e2
+     *  Date: Nov 20, 2026
+     */
+    fun addToWaitingList(
+        campsite: Campsite,
+        entrantID: String,
+        onComplete: (Boolean) -> Unit = {}
+    ) {
+        campsite.addEntrant(entrantID)
+        campsitesRef.document(campsite.campsiteID)
+            .update("waitingList", FieldValue.arrayUnion(entrantID))
+            .addOnSuccessListener { onComplete(true) }
+            .addOnFailureListener { e ->
+                android.util.Log.e("DB", "addToWaitingList failed for ${campsite.campsiteID}", e)
+                onComplete(false)
+            }
+    }
+
+    /** Removes an entrant's ID from the campsite's "waitingList" array in Firestore.
+     *  Used Opus 5.5 in order to update entrant's profile
+     *  Prompt: "Why isn't my entrant being removed from a campsite?"
+     *  Conversation: https://claude.ai/share/ae294592-b4fe-497b-86a9-a45c32b331e2
+     *  Date: Nov 20, 2026
+     */
+    fun removeFromWaitingList(
+        campsite: Campsite,
+        entrantID: String,
+        onComplete: (Boolean) -> Unit = {}
+    ) {
+        campsite.removeEntrant(entrantID)
+        removeFromWaitingList(campsite.campsiteID, entrantID, onComplete)
+    }
+
+    /** Same as above, but only needs the campsite's ID (for when the Campsite object isn't loaded). */
+    fun removeFromWaitingList(
+        campsiteID: String,
+        entrantID: String,
+        onComplete: (Boolean) -> Unit = {}
+    ) {
+        _campsites.firstOrNull { it.campsiteID == campsiteID }?.removeEntrant(entrantID)
+        campsitesRef.document(campsiteID)
+            .update("waitingList", FieldValue.arrayRemove(entrantID))
+            .addOnSuccessListener { onComplete(true) }
+            .addOnFailureListener { e ->
+                android.util.Log.e("DB", "removeFromWaitingList failed for $campsiteID", e)
+                onComplete(false)
+            }
     }
 
     fun deleteCampsite(campsite: Campsite) {
