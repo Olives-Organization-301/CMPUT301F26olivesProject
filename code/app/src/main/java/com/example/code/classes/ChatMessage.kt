@@ -6,6 +6,7 @@ package com.example.code.classes
  *  Prototype was gained from a Conversation with Android Studio's agent
  *  Prompt: "Create a ChatMessage data class to store sender, timestamp, text, campsite details, and message metadata"
  *
+ * Modified by https://claude.ai/share/c834d783-5930-4800-8f67-da339fafedfd
  */
 data class ChatMessage(
     var messageID: String = "",
@@ -24,6 +25,7 @@ data class ChatMessage(
 )
 
 // Kinds of chat messages
+// A Normal Chat Message
 const val MESSAGE_TEXT = "text"
 const val LOTTERY_WON = "lottery_won"
 const val LOTTERY_LOST = "lottery_lost"
