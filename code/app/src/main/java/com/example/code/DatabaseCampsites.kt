@@ -168,12 +168,30 @@ class DatabaseCampsites {
                 lotteryEndDate = end,
                 vacationStartTimes = vacationTimes.toMutableList(),
             ).also { campsite ->
-                val waiting = (doc.get("waitingList") as? List<*>)?.filterIsInstance<String>()
-                if (waiting != null) campsite.setWaitingList(waiting)
-                val active = (doc.get("activeLotteryList") as? List<*>)?.filterIsInstance<String>()
-                if (active != null) campsite.setActiveLotteryList(active)
+                val waiting = (doc.get("waitingList") as? List<*>)?.filterIsInstance<String>().orEmpty()
+                // Older campsites kept lottery-day joiners in a separate "activeLotteryList".
+                // Fold them into the waiting list and drop the old field once, so it stops existing.
+                val legacyActive = (doc.get("activeLotteryList") as? List<*>)?.filterIsInstance<String>()
+                campsite.setWaitingList((waiting + legacyActive.orEmpty()).distinct())
+                if (legacyActive != null) {
+                    val update = mutableMapOf<String, Any>("activeLotteryList" to FieldValue.delete())
+                    if (legacyActive.isNotEmpty()) {
+                        update["waitingList"] = FieldValue.arrayUnion(*legacyActive.toTypedArray())
+                    }
+                    campsitesRef.document(doc.id).update(update)
+                        .addOnFailureListener { e ->
+                            android.util.Log.e("DB", "Merging activeLotteryList failed for ${doc.id}", e)
+                        }
+                }
                 val finalIDs = (doc.get("finalList") as? List<*>)?.filterIsInstance<String>()
                 if (finalIDs != null) campsite.setFinalList(finalIDs)
+                // Map the Winners of the lottery
+                val winners = (doc.get("locationWinners") as? Map<*, *>)
+                    ?.mapNotNull { (key, value) ->
+                        val ids = (value as? List<*>)?.filterIsInstance<String>()
+                        if (key is String && ids != null) key to ids else null
+                    }?.toMap()
+                if (winners != null) campsite.setLocationWinners(winners)
             }
         } catch (e: Exception) {
             android.util.Log.e("DB", "Failed to parse document ${doc.id}", e)
@@ -305,74 +323,7 @@ class DatabaseCampsites {
             }
     }
 
-    /** Adds an entrant straight to the campsite's "activeLotteryList"
-     * (joining while the lottery is running).
-     */
-    fun addToActiveLottery(
-        campsite: Campsite,
-        entrantID: String,
-        onComplete: (Boolean) -> Unit = {}
-    ) {
-        // Add active lottery to the campsite
-        campsite.addActiveLotteryEntrant(entrantID)
-        // Document the change, with exceptions
-        campsitesRef.document(campsite.campsiteID)
-            .update("activeLotteryList", FieldValue.arrayUnion(entrantID))
-            .addOnSuccessListener { onComplete(true) }
-            .addOnFailureListener { e ->
-                android.util.Log.e("DB", "addToActiveLottery failed for ${campsite.campsiteID}", e)
-                onComplete(false)
-            }
-    }
-
-    /** Removes an entrant's ID from the campsite's "activeLotteryList". */
-    fun removeFromActiveLottery(
-        campsite: Campsite,
-        entrantID: String,
-        onComplete: (Boolean) -> Unit = {}
-    ) {
-        campsite.removeEntrant(entrantID)
-        removeFromActiveLottery(campsite.campsiteID, entrantID, onComplete)
-    }
-
-    /** Same as above, but only needs the campsite's ID (for when the Campsite object isn't loaded). */
-    fun removeFromActiveLottery(
-        campsiteID: String,
-        entrantID: String,
-        onComplete: (Boolean) -> Unit = {}
-    ) {
-        _campsites.firstOrNull { it.campsiteID == campsiteID }?.removeEntrant(entrantID)
-        campsitesRef.document(campsiteID)
-            .update("activeLotteryList", FieldValue.arrayRemove(entrantID))
-            .addOnSuccessListener { onComplete(true) }
-            .addOnFailureListener { e ->
-                android.util.Log.e("DB", "removeFromActiveLottery failed for $campsiteID", e)
-                onComplete(false)
-            }
-    }
-
-    /** Moves an entrant from the campsite's "waitingList" to its "activeLotteryList" once the lottery starts. */
-    fun moveToActiveLottery(
-        campsite: Campsite,
-        entrantID: String,
-        onComplete: (Boolean) -> Unit = {}
-    ) {
-        campsite.moveToActiveLottery(entrantID)
-        campsitesRef.document(campsite.campsiteID)
-            .update(
-                mapOf(
-                    "waitingList" to FieldValue.arrayRemove(entrantID),
-                    "activeLotteryList" to FieldValue.arrayUnion(entrantID)
-                )
-            )
-            .addOnSuccessListener { onComplete(true) }
-            .addOnFailureListener { e ->
-                android.util.Log.e("DB", "moveToActiveLottery failed for ${campsite.campsiteID}", e)
-                onComplete(false)
-            }
-    }
-
-    /** Removes an entrant's ID from the waitingList, activeLotteryList and finalList of every
+    /** Removes an entrant's ID from the waitingList and finalList of every
      *  campsite that contains it. Called when an entrant deletes their profile so no campsite
      *  keeps a dangling ID.
      */
@@ -380,7 +331,7 @@ class DatabaseCampsites {
         _campsites.forEach { it.removeEntrant(entrantID) }
 
         // One query per list field (Firestore allows only one array-contains per query)
-        val listFields = listOf("waitingList", "activeLotteryList", "finalList")
+        val listFields = listOf("waitingList", "finalList")
         val queries = listFields.map { field ->
             campsitesRef.whereArrayContains(field, entrantID).get()
         }
@@ -425,6 +376,22 @@ class DatabaseCampsites {
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
+    /** Saves the result of campsite.generateFinalList() (finalList + locationWinners) */
+    fun saveLotteryResults(campsite: Campsite, onComplete: (Boolean) -> Unit = {}) {
+        campsitesRef.document(campsite.campsiteID)
+            .update(
+                mapOf(
+                    "finalList" to campsite.getFinalList(),
+                    "locationWinners" to campsite.getLocationWinners()
+                )
+            )
+            .addOnSuccessListener { onComplete(true) }
+            .addOnFailureListener { e ->
+                android.util.Log.e("DB", "saveLotteryResults failed for ${campsite.campsiteID}", e)
+                onComplete(false)
+            }
+    }
+
     fun searchCampsite(campsiteID: String, onResult: (Campsite?) -> Unit) {
         campsitesRef.document(campsiteID).get()
             .addOnSuccessListener { doc ->

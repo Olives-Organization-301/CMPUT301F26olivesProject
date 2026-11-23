@@ -4,7 +4,6 @@ import android.os.Build
 import androidx.annotation.RequiresApi
 import java.time.LocalDate
 import java.time.LocalDateTime
-import kotlin.random.Random
 
 /**
  * Representation of A Campsite class For the App.
@@ -40,16 +39,18 @@ class Campsite(
 ) {
     /**
      * Description:         The Description of the campsite.
-     * WaitingList:         The Waiting List upon people wait upon.
-     * ActiveLotteryList:   People who join an active campsite. (I should combine this to WaitingList)
+     * WaitingList:         Everyone entered in this campsite's lottery, whether they joined
+     *                      before the lottery started or while it is running.
      * FinalList:           The People who are assigned into the campsite.
      * Rules:               Rules of the Campsite (Make its own header)
      * Reviews:             A Map of Reviews and their Corresponding replies, stored as IDs.
      */
     private var description: String = ""
     private var waitingList = mutableListOf<String>()
-    private var activeLotteryList = mutableListOf<String>()
     private var finalList = mutableListOf<String>() // Use Entrant IDs instead
+    // Lottery winners per location: "0" -> entrant IDs who won location 1, "1" -> location 2, ...
+    // (String keys because Firestore map keys must be strings)
+    private var locationWinners = mutableMapOf<String, MutableList<String>>()
     private var rules = mutableListOf<String>()
     private var reviews = mutableMapOf<String, MutableList<String>>() // reviewID -> list of replyIDs
 
@@ -97,9 +98,11 @@ class Campsite(
     fun addReview(reviewID: String, replyIDs: List<String> = emptyList()) {
         reviews[reviewID] = replyIDs.toMutableList()
     }
-    fun getActiveLotteryList(): List<String> = activeLotteryList
-    fun setActiveLotteryList(entrantIDs: List<String>) { activeLotteryList = entrantIDs.toMutableList() }
     fun setFinalList(entrantIDs: List<String>) { finalList = entrantIDs.toMutableList() }
+    fun getLocationWinners(): Map<String, List<String>> = locationWinners
+    fun setLocationWinners(winners: Map<String, List<String>>) {
+        locationWinners = winners.mapValues { it.value.toMutableList() }.toMutableMap()
+    }
     fun getVacationStartTimes(): List<Pair<LocalDateTime, LocalDateTime>> = vacationStartTimes
     fun setVacationStartTimes(times: List<Pair<LocalDateTime, LocalDateTime>>) {
         vacationStartTimes = times.toMutableList()
@@ -112,19 +115,6 @@ class Campsite(
         }
     }
 
-    // Add entrant to an active waiting list
-    fun addActiveLotteryEntrant(entrantID: String) {
-        if (entrantID !in activeLotteryList) {
-            activeLotteryList.add(entrantID)
-        }
-    }
-
-    // Move an entrant from the waiting list to the active lottery list
-    fun moveToActiveLottery(entrantID: String) {
-        waitingList.remove(entrantID)
-        addActiveLotteryEntrant(entrantID)
-    }
-
     // True if today is within the lottery dates (both days included)
     @RequiresApi(Build.VERSION_CODES.O)
     fun isLotteryActive(today: LocalDate = LocalDate.now()): Boolean {
@@ -133,38 +123,52 @@ class Campsite(
         return !today.isBefore(start) && !today.isAfter(end)
     }
 
-    // Check if Entrant is in waiting list or active lottery list
+    // Check if Entrant is in the waiting list
     fun entrantInList(entrantID: String): Boolean {
-        return entrantID in waitingList || entrantID in activeLotteryList
+        return entrantID in waitingList
     }
 
-    // Remove entrant from the waiting list, active lottery list and final list
+    // Remove entrant from the waiting list and final list
     fun removeEntrant(entrantID: String) {
         waitingList.remove(entrantID)
-        activeLotteryList.remove(entrantID)
         finalList.remove(entrantID)
+        locationWinners.values.forEach { it.remove(entrantID) }
     }
 
-    // Use random numbers to generate a final list and cache it into the thing
+    /** Draws the lottery: every location runs its own draw from the whole waiting list,
+     *  so one entrant can win a place at several locations.
+     *  - locationWinners["0"] = winners of location 1, ["1"] = location 2, ...
+     *  - finalList = everyone who won at least one location
+     *  The waiting list is left as is (it's everyone who entered), so anyone on it who isn't in
+     *  the final list lost.
+     */
     fun generateFinalList() {
-        // One winner per spot, across all locations
-        var capacity = getTotalOccupancy()
-
-        //if more capacity than entrants, all entrants make the final list
-        if(waitingList.size <= capacity){
-            finalList = waitingList.toMutableList() // use .toMutableList() to create a copy instead of an alias
-            waitingList.clear()
-        } else {
-            while (capacity != 0) {
-                // use .size instead of .lastInt because the until value in kotlin ranges is exclusive
-                val randomInd = Random.nextInt(0, waitingList.size)
-
-                // add random entrant to final list, and remove from waitlist
-                finalList.add(waitingList[randomInd])
-                waitingList.removeAt(randomInd)
-                capacity -= 1
-            }
+        locationWinners.clear()
+        for (i in maxOccupancy.indices) {
+            // Shuffle the whole waiting list and take as many people as this location holds
+            val winners = waitingList.shuffled().take(maxOccupancy[i])
+            locationWinners[i.toString()] = winners.toMutableList()
         }
+        finalList = locationWinners.values.flatten().distinct().toMutableList()
+    }
+
+    // True once generateFinalList() has run
+    fun isLotteryDrawn(): Boolean = locationWinners.isNotEmpty()
+
+    // Indexes of the locations [entrantID] won (0 = location 1), empty if they won none
+    fun getLocationsWon(entrantID: String): List<Int> =
+        locationWinners.filterValues { entrantID in it }.keys.mapNotNull { it.toIntOrNull() }.sorted()
+
+    /** After the lottery has been drawn, checks every entrant on the waiting list against the
+     *  final list.
+     *  @return entrantID -> true if they're in the final list (won), false if not (lost)
+     */
+    fun checkLotteryResults(): Map<String, Boolean> {
+        val results = mutableMapOf<String, Boolean>()
+        for (entrantID in waitingList) {
+            results[entrantID] = entrantID in finalList
+        }
+        return results
     }
 
     fun toMap(): Map<String, Any?> = mapOf(
@@ -175,8 +179,8 @@ class Campsite(
         "price" to price,
         "rating" to rating,
         "waitingList" to waitingList,
-        "activeLotteryList" to activeLotteryList,
         "finalList" to finalList,
+        "locationWinners" to locationWinners,
         "coordinates" to coordinates.map { it.toMap() },
         "thumbnailImage" to thumbnailImage,
         // Stored as ISO-8601 strings, like vacationStartTimes

@@ -209,10 +209,10 @@ fun MainSearchScreen(
                 Text("List", maxLines = 1)
             }
             Button(onClick = {
-                navController.navigate("entrantAlerts")
+                navController.navigate("entrantMessages")
             },
                 modifier = Modifier.weight(1f)) {
-                Text("Alerts", maxLines = 1)
+                Text("Messages", maxLines = 1)
             }
             Button(onClick = {
                 navController.navigate("profileScreen")

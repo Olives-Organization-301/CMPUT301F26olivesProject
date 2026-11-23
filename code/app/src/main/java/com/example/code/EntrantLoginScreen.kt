@@ -125,7 +125,8 @@ fun EntrantLoginScreen(
                                 val newEntrant = Entrant(
                                     username = entrantName.ifBlank { cleanEmail.substringBefore("@") },
                                     email = cleanEmail,
-                                    userID = newID
+                                    userID = newID,
+                                    profileImage = ""   // No profile picture yet
                                 )
                                 appState.entrants.addEntrant(newEntrant)
                                 appState.userID = newEntrant.getUserID()

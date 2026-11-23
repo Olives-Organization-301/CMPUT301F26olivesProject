@@ -293,9 +293,8 @@ fun CampsiteDetailsScreen(
                     val currentEntrant = entrant
 
                     if (campsite != null && userID != null && isJoined) {
-                        // Which list the entrant is on decides what "Leave" removes them from
+                        // Which of the entrant's lists the campsite is on (the campsite itself only has a waitingList)
                         val inActiveLottery = movedToActiveLottery ||
-                            userID in campsite.getActiveLotteryList() ||
                             currentEntrant?.getCampsiteLists()?.get(ACTIVE_CAMPSITES)
                                 ?.contains(campsite.campsiteID) == true
                         // Button that handles you joining the active list or not
@@ -310,11 +309,7 @@ fun CampsiteDetailsScreen(
                                     if (ok) isJoined = false
                                     showLeaveDialog = true
                                 }
-                                if (inActiveLottery) {
-                                    appState.campsites.removeFromActiveLottery(campsite, userID, onLeft)
-                                } else {
-                                    appState.campsites.removeFromWaitingList(campsite, userID, onLeft)
-                                }
+                                appState.campsites.removeFromWaitingList(campsite, userID, onLeft)
                                 if (currentEntrant != null) {
                                     appState.entrants.removeEntrantCampsite(
                                         currentEntrant,
@@ -354,12 +349,8 @@ fun CampsiteDetailsScreen(
                                             showJoinDialog = true
                                         }
                                     }
-                                    // 1. campsite doc: waitingList (or activeLotteryList on lottery day) += entrantID
-                                    if (lotteryActive) {
-                                        appState.campsites.addToActiveLottery(campsite, userID, addToEntrant)
-                                    } else {
-                                        appState.campsites.addToWaitingList(campsite, userID, addToEntrant)
-                                    }
+                                    // 1. campsite doc: waitingList += entrantID (same list before or during the lottery)
+                                    appState.campsites.addToWaitingList(campsite, userID, addToEntrant)
                                 }
                             },
                             modifier = Modifier.weight(1f),
@@ -582,10 +573,12 @@ fun AvailableDatesCalendar(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Decrease Month
             TextButton(
                 onClick = { month = month.minusMonths(1) },
                 modifier = Modifier.testTag("calendarPrevMonth")
             ) { Text("‹", fontSize = 20.sp) }
+            // Display Month Name (Month, Year)
             Text(
                 text = "${month.month.getDisplayName(TextStyle.FULL, LocalLocale.current.platformLocale)} ${month.year}",
                 modifier = Modifier
@@ -594,6 +587,7 @@ fun AvailableDatesCalendar(
                 textAlign = TextAlign.Center,
                 fontWeight = FontWeight.Bold
             )
+            // Increase Month
             TextButton(
                 onClick = { month = month.plusMonths(1) },
                 modifier = Modifier.testTag("calendarNextMonth")
@@ -613,15 +607,20 @@ fun AvailableDatesCalendar(
             }
         }
 
-        // Day grid
+        // Day grid: Insert Month names in proper place
+        // Get Month's Length
+
         val leadingBlanks = month.atDay(1).dayOfWeek.value % 7   // Sunday = 0
         val daysInMonth = month.lengthOfMonth()
         val rows = (leadingBlanks + daysInMonth + 6) / 7
+
+        // Iterate through the months, displaying their day
         for (row in 0 until rows) {
             Row(modifier = Modifier.fillMaxWidth()) {
                 for (col in 0 until 7) {
                     val day = row * 7 + col - leadingBlanks + 1
                     if (day in 1..daysInMonth) {
+                        // Handle colouring if they're reserved or not
                         CalendarDay(
                             date = month.atDay(day),
                             ranges = ranges,
@@ -645,6 +644,14 @@ private fun CalendarDay(
     ranges: List<Pair<LocalDateTime, LocalDateTime>>,
     modifier: Modifier = Modifier
 ) {
+    /**
+     * highlighted      - use function to see if it's not in the month in question or not
+     * roundStart       - Get date range start
+     * roundEnd         - Get date range end
+     * startRadius      - Colour in the radius
+     * endRadius        - Colour the radius end
+     * shape            - Get the rounded Corner for the highlighter
+     */
     val highlighted = isDateAvailable(date, ranges)
     val roundStart = !isDateAvailable(date.minusDays(1), ranges) ||
         date.dayOfWeek == DayOfWeek.SUNDAY || date.dayOfMonth == 1
@@ -657,6 +664,7 @@ private fun CalendarDay(
         topEnd = endRadius, bottomEnd = endRadius
     )
 
+    // If it's an available spot, the Box colours in the dates
     Box(
         modifier = modifier
             .height(40.dp)

@@ -87,18 +87,6 @@ class EntrantCampsiteDetailsTest {
             thirdArg<(Boolean) -> Unit>()(true)
         }
 
-        // Mockk Object caches in active lottery list for testing
-        // Joining while the lottery is running
-        every { campsites.addToActiveLottery(any(), any(), any()) } answers {
-            firstArg<Campsite>().addActiveLotteryEntrant(secondArg())
-            thirdArg<(Boolean) -> Unit>()(true)
-        }
-        // Lottery started: waitingList -> activeLotteryList
-        every { campsites.moveToActiveLottery(any(), any(), any()) } answers {
-            firstArg<Campsite>().moveToActiveLottery(secondArg())
-            thirdArg<(Boolean) -> Unit>()(true)
-        }
-
         val entrants = mockk<DatabaseEntrants>(relaxed = true)
         every { entrants.entrants } returns listOf(user)
         every { entrants.searchEntrants(any(), any()) } answers {
@@ -662,10 +650,9 @@ class EntrantCampsiteDetailsTest {
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithText("Leave Active Lottery").assertIsDisplayed()
 
-        // Joined the active lottery, not the waiting list
-        verify(exactly = 1) { appState.campsites.addToActiveLottery(banff, "e_1", any()) }
-        verify(exactly = 0) { appState.campsites.addToWaitingList(any(), any(), any()) }
-        assertTrue("e_1" in banff.getActiveLotteryList())
+        // On lottery day the entrant still goes into the campsite's single waitingList
+        verify(exactly = 1) { appState.campsites.addToWaitingList(banff, "e_1", any()) }
+        assertTrue("e_1" in banff.getWaitingList())
 
         // Reservations list: Banff is on Active Campsites...
         closeDetails()
@@ -686,13 +673,12 @@ class EntrantCampsiteDetailsTest {
         startApp(appState)
         openCampsite("Banff", banff.getName())
 
-        // Opening the campsite on lottery day moved it, on both sides
+        // Opening the campsite on lottery day moved it on the entrant's side;
+        // the entrant stays on the campsite's waitingList (the lottery pool)
         verify(exactly = 1) {
             appState.entrants.moveEntrantCampsite(user, "Waiting_List", "Active_Campsites", "c_1", any())
         }
-        verify(exactly = 1) { appState.campsites.moveToActiveLottery(banff, "e_1", any()) }
-        assertTrue("e_1" in banff.getActiveLotteryList())
-        assertFalse("e_1" in banff.getWaitingList())
+        assertTrue("e_1" in banff.getWaitingList())
         composeTestRule.onNodeWithText("Leave Active Lottery").assertIsDisplayed()
 
         // Reservations list: Banff is now on Active Campsites...

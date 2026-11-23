@@ -603,9 +603,11 @@ class DatabaseUpdateAndDeleteTest {
         assertTrue(campsite.entrantInList("user_1"))
         assertTrue(campsite.entrantInList("user_2"))
 
-        // Generate final list (updates waitlist state and populates finalList)
+        // Generate final list (one location with 2 spots, so both entrants win it)
         campsite.generateFinalList()
         assertEquals(2, campsite.getFinalList().size)
-        assertFalse(campsite.entrantInList("user_1"))
+        assertEquals(listOf(0), campsite.getLocationsWon("user_1"))
+        // The waiting list keeps everyone who entered (anyone on it but not in finalList lost)
+        assertTrue(campsite.entrantInList("user_1"))
     }
 }

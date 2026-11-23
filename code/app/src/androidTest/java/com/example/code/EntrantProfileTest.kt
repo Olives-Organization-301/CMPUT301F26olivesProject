@@ -1,6 +1,8 @@
 package com.example.code
 
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
@@ -75,7 +77,8 @@ class EntrantProfileTest {
         phoneNumber = "780-555-0123",
         description = "I like camping.",
         name = "John Doe",
-        dateOfBirth = "2001-04-23"
+        dateOfBirth = "2001-04-23",
+        profileImage = ""   // No profile picture (blank)
     ).apply {
         addCampsite("Past_Campsites", "Banff National Park")
         addCampsite("Past_Campsites", "Jasper Lake")
@@ -89,7 +92,8 @@ class EntrantProfileTest {
         phoneNumber = "587-555-0199",
         description = "Delete me.",
         name = "Jane Smith",
-        dateOfBirth = "1999-12-31"
+        dateOfBirth = "1999-12-31",
+        profileImage = ""   // No profile picture (blank)
     ).apply {
         addCampsite("Past_Campsites", "Yoho Valley")
     }
@@ -265,5 +269,89 @@ class EntrantProfileTest {
         composeTestRule.onNodeWithText("Log in").assertIsDisplayed()
         composeTestRule.onNodeWithText("Sign up").assertIsDisplayed()
         composeTestRule.onNodeWithText("Jane Smith").assertDoesNotExist()
+    }
+
+    // US.01.08.02
+    // Test if it's blank initially, then add first default picture
+    // Once first default picture shows up, update it to the second default picture
+    // After that, delete the profile picture and test that it's blank
+    // (The Photo Picker is a system screen tests can't drive, so "Swap test image" stands in for it)
+    @Test
+    fun testProfilePicture() {
+        val john = johnDoe()
+        val appState = fakeAppState(listOf(john, janeSmith()), loggedIn = john)
+
+        // Fake Firestore: remember the profileImage string each time updateEntrant saves it
+        val firestore = mutableMapOf<String, String>()
+        every { appState.entrants.updateEntrant(any()) } answers {
+            val saved = firstArg<Entrant>()
+            firestore[saved.getUserID()] = saved.profileImage
+        }
+        openProfile(appState)
+
+        // Picture images are drawn with this description; the blank placeholder has none
+        fun pictures() = composeTestRule.onAllNodesWithContentDescription("Profile picture")
+        fun openEdit() {
+            composeTestRule.onNodeWithText("Edit User Profile").performClick()
+            composeTestRule.waitForIdle()
+        }
+        fun click(text: String) {
+            composeTestRule.onNodeWithText(text).performScrollTo().performClick()
+            composeTestRule.waitForIdle()
+        }
+        // Save is one of the dialog's own buttons, outside the scrolling content, so don't scroll to it
+        fun save() {
+            composeTestRule.onNodeWithText("Save").performClick()
+            composeTestRule.waitForIdle()
+        }
+
+        // 1. Blank initially
+        assertEquals("", john.profileImage)
+        pictures().assertCountEquals(0)
+
+        openEdit()
+        composeTestRule.onNodeWithText("Add").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Update").assertDoesNotExist()
+        composeTestRule.onNodeWithText("Remove").assertDoesNotExist()
+
+        // 2. Add the first default picture
+        click("Swap test image")
+        composeTestRule.onNodeWithText("Add").assertDoesNotExist()
+        composeTestRule.onNodeWithText("Update").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Remove").performScrollTo().assertIsDisplayed()
+        // Nothing is saved until Save is pressed
+        assertEquals("", john.profileImage)
+        assertTrue(firestore.isEmpty())
+        save()
+
+        assertEquals(TEST_PFP_PROFILE, john.profileImage)
+        assertEquals(TEST_PFP_PROFILE, firestore["e_1"])
+        pictures().assertCountEquals(1)   // shown on the profile screen
+
+        // 3. Update it to the second default picture
+        openEdit()
+        // The saved picture is loaded back into the dialog
+        composeTestRule.onNodeWithText("Update").performScrollTo().assertIsDisplayed()
+        click("Swap test image")
+        save()
+
+        assertEquals(TEST_PFP_GIFT, john.profileImage)
+        assertEquals(TEST_PFP_GIFT, firestore["e_1"])
+        pictures().assertCountEquals(1)
+
+        // 4. Remove it: blank again
+        openEdit()
+        click("Remove")
+        composeTestRule.onNodeWithText("Add").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Remove").assertDoesNotExist()
+        save()
+
+        assertEquals("", john.profileImage)
+        assertEquals("", firestore["e_1"])
+        pictures().assertCountEquals(0)
+
+        // One save per change, and the other entrant was never saved
+        verify(exactly = 3) { appState.entrants.updateEntrant(john) }
+        assertFalse("e_2" in firestore)
     }
 }

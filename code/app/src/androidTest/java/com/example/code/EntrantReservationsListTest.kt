@@ -11,6 +11,8 @@ import com.example.code.classes.Coordinates
 import com.example.code.classes.Entrant
 import io.mockk.every
 import io.mockk.mockk
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -90,6 +92,8 @@ class EntrantReservationsListTest {
      * Builds an AppState whose databases are MockK stand-ins, so the UI tests never touch Firestore.
      * - entrants.searchEntrants(id) hands back the entrant with that ID (what the screen loads)
      * - campsites.searchCampsite(id) hands back the campsite with that ID (what each card loads)
+     * - entrants.moveEntrantCampsite / addEntrantCampsite actually move/add the campsite in the
+     *   entrant's lists (e.g. reserving a spot moves it into Reserved_Campsites)
      * - userID is set to loggedIn's ID, as if they had just logged in
      */
     private fun fakeAppState(entrantList: List<Entrant>, loggedIn: Entrant): AppState {
@@ -98,6 +102,20 @@ class EntrantReservationsListTest {
         every { entrants.searchEntrants(any(), any()) } answers {
             val id = firstArg<String>()
             secondArg<(Entrant?) -> Unit>()(entrantList.find { it.getUserID() == id })
+        }
+        every { entrants.moveEntrantCampsite(any(), any(), any(), any(), any()) } answers {
+            val e = firstArg<Entrant>()
+            val id = arg<String>(3)
+            e.removeCampsite(arg(1), id)
+            e.addNewList(arg(2))
+            e.addCampsite(arg(2), id)
+            arg<(Boolean) -> Unit>(4)(true)
+        }
+        every { entrants.addEntrantCampsite(any(), any(), any(), any()) } answers {
+            val e = firstArg<Entrant>()
+            e.addNewList(secondArg())
+            e.addCampsite(secondArg(), thirdArg())
+            arg<(Boolean) -> Unit>(3)(true)
         }
 
         val campsites = mockk<DatabaseCampsites>(relaxed = true)
@@ -118,8 +136,13 @@ class EntrantReservationsListTest {
         return appState
     }
 
-    private fun openReservations(loggedIn: Entrant, others: List<Entrant>) {
+    private fun openReservations(
+        loggedIn: Entrant,
+        others: List<Entrant>,
+        beforeOpening: (AppState) -> Unit = {}
+    ) {
         val appState = fakeAppState(listOf(loggedIn) + others, loggedIn)
+        beforeOpening(appState)
         composeTestRule.setContent {
             CampsiteNavController(appState, startDestination = "reservationsListScreen")
         }
@@ -217,5 +240,30 @@ class EntrantReservationsListTest {
         assertCardShown(c5)
         assertCardNotShown(c1)
         assertCardNotShown(c6)
+    }
+
+    // John wins Banff (c_1) and reserves his dates, so Banff moves from Active to Reserved
+    @Test
+    fun reservedCampsiteMovesToReservedList() {
+        val john = entrantExample()
+        openReservations(john, listOf(entrantExample2())) { appState ->
+            // Same call the Messages screen makes after "Select Dates" -> Confirm
+            reserveCampsite(appState, john, "c_1")
+        }
+
+        // Moved in the entrant's own lists
+        assertTrue("c_1" in john.getCampsiteLists()[RESERVED_CAMPSITES].orEmpty())
+        assertFalse("c_1" in john.getCampsiteLists()[ACTIVE_CAMPSITES].orEmpty())
+
+        // Reserved Campsites shows Banff only
+        selectList("Reserved Campsites")
+        assertCardShown(c1)
+        composeTestRule.onNodeWithText(c2.getName()).assertDoesNotExist()
+
+        // Active Campsites no longer has Banff, but still has the others
+        selectList("Active Campsites")
+        composeTestRule.onNodeWithText(c1.getName()).assertDoesNotExist()
+        assertCardShown(c2)
+        assertCardShown(c3)
     }
 }

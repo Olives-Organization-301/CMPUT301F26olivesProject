@@ -53,6 +53,27 @@ class DatabaseChat {
         messagesRef.document(id).set(message)
     }
 
+    /** Every message between [entrantID] and [campsiteID], oldest first
+     * Filter Messages to capture correspondence between an Entrant and its Campsite,
+     * Using its strings; Return it as a list
+     */
+    fun conversation(campsiteID: String, entrantID: String): List<ChatMessage> =
+        _messages.filter { it.campsiteID == campsiteID && it.entrantID == entrantID }
+            .sortedBy { it.sentAt }
+
+    /** [entrantID]'s conversations: campsiteID -> its messages (oldest first),
+     *  with the most recently active conversation first
+     *  From an Entrant, get the campsites it has messaged and return
+     *  the campsites it has messaged from
+     */
+    fun conversationsFor(entrantID: String): Map<String, List<ChatMessage>> =
+        _messages.filter { it.entrantID == entrantID && it.campsiteID.isNotBlank() }
+            .groupBy { it.campsiteID }
+            .mapValues { (_, msgs) -> msgs.sortedBy { it.sentAt } }
+            .entries
+            .sortedByDescending { (_, msgs) -> msgs.last().sentAt }
+            .associate { it.key to it.value }
+
     /**
      * Deletes a ChatMessage document from Firestore by message ID.
      */
