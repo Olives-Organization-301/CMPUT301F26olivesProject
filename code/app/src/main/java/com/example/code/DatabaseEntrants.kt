@@ -20,7 +20,7 @@ class DatabaseEntrants {
     val entrants: List<Entrant> get() = _entrants
 
     /** Builds a full Entrant Object from a Firestore document, including the profile fields
-     *  (name, dateOfBirth, phoneNumber, description) and the campsite lists.
+     *  (name, dateOfBirth, phoneNumber, description, profileImage) and the campsite lists.
      *  Used Opus 5.5 in order to create an Entrant Object (For App usage)
      *  Prompt: "Why isn't Profile information persisting?"
      *  Conversation: https://claude.ai/share/ae294592-b4fe-497b-86a9-a45c32b331e2
@@ -36,7 +36,8 @@ class DatabaseEntrants {
             description = doc.getString("description") ?: "",
             name = doc.getString("name") ?: "",
             dateOfBirth = doc.getString("dateOfBirth") ?: "",
-            wantsNotifications = doc.getBoolean("wantsNotifications") ?: true
+            wantsNotifications = doc.getBoolean("wantsNotifications") ?: true,
+            profileImage = doc.getString("profileImage") ?: ""   // Older entrants have no profileImage field
         )
         // Get List of Campsites Entrant is getting it
         val lists = doc.get("campsiteLists") as? Map<*, *>
@@ -162,7 +163,8 @@ class DatabaseEntrants {
                     "dateOfBirth" to entrant.dateOfBirth,
                     "phoneNumber" to entrant.phoneNumber,
                     "description" to entrant.description,
-                    "wantsNotifications" to entrant.wantsNotifications
+                    "wantsNotifications" to entrant.wantsNotifications,
+                    "profileImage" to entrant.profileImage
                 )
             )
             .addOnFailureListener { e ->
@@ -191,6 +193,37 @@ class DatabaseEntrants {
             .addOnSuccessListener { onComplete(true) }
             .addOnFailureListener { e ->
                 android.util.Log.e("DB", "addEntrantCampsite failed for ${entrant.getUserID()}", e)
+                onComplete(false)
+            }
+    }
+
+    /** Move Entrant's Campsite list from Waiting List to Active List
+     * Prompt: "How do I move Entrants to active campsite when the lottery starts?"
+     * Conversation: https://claude.ai/share/e282e67a-f3db-4225-b23d-1cadc614a63f (Cite better later)
+     * */
+    fun moveEntrantCampsite(
+        entrant: Entrant,
+        fromKey: String,
+        toKey: String,
+        campsiteID: String,
+        onComplete: (Boolean) -> Unit = {}
+    ) {
+        // Remove from waiting list
+        entrant.removeCampsite(fromKey, campsiteID)
+
+        // Add to active waiting list
+        entrant.addNewList(toKey)
+        entrant.addCampsite(toKey, campsiteID)
+
+        // Document the Change in Firebase
+        entrantsRef.document(entrant.getUserID())
+            .update(
+                FieldPath.of("campsiteLists", fromKey), FieldValue.arrayRemove(campsiteID),
+                FieldPath.of("campsiteLists", toKey), FieldValue.arrayUnion(campsiteID)
+            )
+            .addOnSuccessListener { onComplete(true) }
+            .addOnFailureListener { e ->
+                android.util.Log.e("DB", "moveEntrantCampsite failed for ${entrant.getUserID()}", e)
                 onComplete(false)
             }
     }

@@ -32,6 +32,7 @@ fun CampsiteNavController(
         composable("reservationsListScreen") { ReservationsListScreen(navController, appState) }
         composable("profileScreen") { ProfileScreen(navController, appState) }
         composable("entrantAlerts") { EntrantAlertsScreen(navController, appState)}
+        composable("entrantMessages") { EntrantMessagesScreen(navController, appState) }
 
         // LOGIN SCREENS
         // "?signUp=true" opens the screen in sign-up mode; plain "entrantLogin" etc. still works (defaults to login)

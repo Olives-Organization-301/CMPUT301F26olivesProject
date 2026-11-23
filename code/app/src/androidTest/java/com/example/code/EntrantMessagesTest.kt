@@ -1,0 +1,312 @@
+package com.example.code
+
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.example.code.classes.AppState
+import com.example.code.classes.Campsite
+import com.example.code.classes.ChatMessage
+import com.example.code.classes.Coordinates
+import com.example.code.classes.Entrant
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.verify
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import java.time.LocalDateTime
+
+/** Test Entrant Messages Screen
+ * Uses MockK in order to simulate the database without adding actual data.
+ *
+ * Mock data: 1 entrant (e_1), 5 campsites they're messaging in.
+ * The lottery results are set by hand (not random), then sendLotteryMessages() sends the same
+ * automated messages the real lottery would.
+ *   c_1 Banff National Park: 2 locations, lost both
+ *   c_2 Jasper Lake:         2 locations, won both
+ *   c_3 Yosemite Valley:     2 locations, won one (location 2)
+ *   c_4 Waterton Lakes:      1 location,  won
+ *   c_5 Zion Canyon:         1 location,  lost
+ * Every campsite's dates are December 10 - 14, 2026.
+ * https://claude.ai/share/c834d783-5930-4800-8f67-da339fafedfd
+ */
+@RunWith(AndroidJUnit4::class)
+class EntrantMessagesTest {
+
+    @get:Rule
+    val composeTestRule = createComposeRule()
+
+    private val user = "e_1"
+    private val other = "e_other"   // whoever won the spots e_1 didn't
+
+    // Campsite where e_1 is on the waiting list and the lottery is already drawn
+    // winners: location index -> who won it
+    private fun drawnSite(id: String, name: String, winners: List<String>) = Campsite(
+        name = name,
+        ownerID = "owner_$id",
+        campsiteID = id,
+        maxOccupancy = MutableList(winners.size) { 1 },
+        price = 50.0f,
+        coordinates = MutableList(winners.size) { Coordinates("Canada", "Alberta", name, "") },
+        lotteryStartDate = LocalDateTime.of(2026, 11, 1, 9, 0),
+        lotteryEndDate = LocalDateTime.of(2026, 11, 7, 17, 0),
+        vacationStartTimes = mutableListOf(
+            LocalDateTime.of(2026, 12, 10, 0, 0) to LocalDateTime.of(2026, 12, 14, 0, 0)
+        )
+    ).apply {
+        addEntrant(user)
+        addEntrant(other)
+        setLocationWinners(winners.mapIndexed { i, id -> i.toString() to listOf(id) }.toMap())
+        setFinalList(winners.distinct())
+    }
+
+    private val c1 = drawnSite("c_1", "Banff National Park", listOf(other, other))
+    private val c2 = drawnSite("c_2", "Jasper Lake", listOf(user, user))
+    private val c3 = drawnSite("c_3", "Yosemite Valley", listOf(other, user))
+    private val c4 = drawnSite("c_4", "Waterton Lakes", listOf(user))
+    private val c5 = drawnSite("c_5", "Zion Canyon", listOf(other))
+    private val allSites = listOf(c1, c2, c3, c4, c5)
+
+    // The entrant was in all 5 lotteries
+    private fun entrantExample() = Entrant(
+        username = "jdoe",
+        email = "jdoe@example.com",
+        userID = user,
+        name = "John Doe"
+    ).apply {
+        allSites.forEach { addCampsite(ACTIVE_CAMPSITES, it.campsiteID) }
+    }
+
+    /**
+     * Builds an AppState whose databases are MockK stand-ins, so the UI tests never touch Firestore.
+     * - chat keeps its messages in a plain list (the fake "messages" collection);
+     *   addMessage / conversation / conversationsFor work on that list like the real ones
+     * - entrants.searchEntrants(id) hands back the entrant
+     * - entrants.moveEntrantCampsite / addEntrantCampsite really move the campsite in the
+     *   entrant's lists (used when a spot is reserved)
+     * - campsites.searchCampsite(id) hands back the campsite with that ID
+     * - every campsite's lottery result has been sent as automated messages
+     */
+    private fun fakeAppState(entrant: Entrant): AppState {
+        val messages = mutableStateListOf<ChatMessage>()
+        val chat = mockk<DatabaseChat>(relaxed = true)
+        every { chat.messages } returns messages
+        every { chat.addMessage(any()) } answers {
+            val m = firstArg<ChatMessage>()
+            if (m.messageID.isBlank()) m.messageID = java.util.UUID.randomUUID().toString()
+            messages.add(m)
+        }
+        every { chat.conversation(any(), any()) } answers {
+            messages.filter { it.campsiteID == firstArg<String>() && it.entrantID == secondArg<String>() }
+                .sortedBy { it.sentAt }
+        }
+        every { chat.conversationsFor(any()) } answers {
+            messages.filter { it.entrantID == firstArg<String>() }
+                .groupBy { it.campsiteID }
+                .mapValues { (_, msgs) -> msgs.sortedBy { it.sentAt } }
+        }
+
+        val entrants = mockk<DatabaseEntrants>(relaxed = true)
+        every { entrants.entrants } returns listOf(entrant)
+        every { entrants.searchEntrants(any(), any()) } answers {
+            secondArg<(Entrant?) -> Unit>()(if (firstArg<String>() == entrant.getUserID()) entrant else null)
+        }
+        every { entrants.moveEntrantCampsite(any(), any(), any(), any(), any()) } answers {
+            val e = firstArg<Entrant>()
+            val id = arg<String>(3)
+            e.removeCampsite(arg(1), id)
+            e.addNewList(arg(2))
+            e.addCampsite(arg(2), id)
+            arg<(Boolean) -> Unit>(4)(true)
+        }
+        every { entrants.addEntrantCampsite(any(), any(), any(), any()) } answers {
+            val e = firstArg<Entrant>()
+            e.addNewList(secondArg())
+            e.addCampsite(secondArg(), thirdArg())
+            arg<(Boolean) -> Unit>(3)(true)
+        }
+
+        val campsites = mockk<DatabaseCampsites>(relaxed = true)
+        every { campsites.campsites } returns allSites
+        every { campsites.searchCampsite(any(), any()) } answers {
+            secondArg<(Campsite?) -> Unit>()(allSites.find { it.campsiteID == firstArg<String>() })
+        }
+
+        val appState = AppState(
+            admins = mockk(relaxed = true),
+            owners = mockk(relaxed = true),
+            campsites = campsites,
+            entrants = entrants,
+            alerts = mockk(relaxed = true),
+            chat = chat
+        )
+        appState.userID = entrant.getUserID()
+
+        // Same automated messages drawLottery() sends
+        allSites.forEach { sendLotteryMessages(appState, it) }
+        return appState
+    }
+
+    private fun openMessages(appState: AppState) {
+        composeTestRule.setContent {
+            CampsiteNavController(appState, startDestination = "entrantMessages")
+        }
+        composeTestRule.waitForIdle()
+    }
+
+    // From the conversation list, open the chat with a campsite
+    private fun openChat(site: Campsite) {
+        composeTestRule.onNodeWithText(site.getName()).performClick()
+        composeTestRule.waitForIdle()
+    }
+
+    // From a chat, go back to the conversation list
+    private fun backToList() {
+        composeTestRule.onNodeWithText("‹ Back").performClick()
+        composeTestRule.waitForIdle()
+    }
+
+    private fun wonText(location: Int, site: Campsite) =
+        "You won a place in location $location at ${site.getName()}"
+
+    private fun lostText(site: Campsite) = "I'm Sorry, you lost the lottery for ${site.getName()}."
+
+    private fun sendChat(text: String) {
+        composeTestRule.onNode(hasSetTextAction()).performTextInput(text)
+        composeTestRule.onNodeWithText("Send").performClick()
+        composeTestRule.waitForIdle()
+    }
+
+    // US 01.03.01
+    // User goes to see campsite 4, and sees that they won its one location
+    // User goes to see campsite 3, and sees that they won one of its two locations
+    @Test
+    fun testWinningNotification() {
+        openMessages(fakeAppState(entrantExample()))
+
+        // Every campsite has a conversation
+        allSites.forEach { composeTestRule.onNodeWithText(it.getName()).assertIsDisplayed() }
+
+        // Campsite 4: won its only location
+        openChat(c4)
+        composeTestRule.onNodeWithText("AUTOMATED MESSAGE").assertIsDisplayed()
+        composeTestRule.onNodeWithText(wonText(1, c4), substring = true).assertIsDisplayed()
+        composeTestRule.onAllNodesWithText("Select Dates").assertCountEquals(1)
+        composeTestRule.onNodeWithText(lostText(c4)).assertDoesNotExist()
+        backToList()
+
+        // Campsite 3: won location 2 only
+        openChat(c3)
+        composeTestRule.onNodeWithText(wonText(2, c3), substring = true).assertIsDisplayed()
+        composeTestRule.onNodeWithText(wonText(1, c3), substring = true).assertDoesNotExist()
+        composeTestRule.onAllNodesWithText("Select Dates").assertCountEquals(1)
+        composeTestRule.onNodeWithText(lostText(c3)).assertDoesNotExist()
+    }
+
+    // US 01.03.02
+    // User goes to see campsite 5, and sees that they lost
+    // Chats "Damn", and that's it
+    @Test
+    fun testLosingNotification() {
+        val appState = fakeAppState(entrantExample())
+        openMessages(appState)
+
+        openChat(c5)
+        composeTestRule.onNodeWithText("AUTOMATED MESSAGE").assertIsDisplayed()
+        composeTestRule.onNodeWithText(lostText(c5)).assertIsDisplayed()
+        composeTestRule.onNodeWithText("Select Dates").assertDoesNotExist()
+
+        sendChat("Damn")
+        composeTestRule.onNodeWithText("Damn").assertIsDisplayed()
+        verify(exactly = 1) {
+            appState.chat.addMessage(match {
+                it.text == "Damn" && !it.fromOwner && !it.automated &&
+                    it.campsiteID == "c_5" && it.entrantID == user
+            })
+        }
+        backToList()
+
+        // Campsite 1: lost both locations, but gets one "lost" message (not one per location)
+        openChat(c1)
+        composeTestRule.onAllNodesWithText(lostText(c1)).assertCountEquals(1)
+        composeTestRule.onNodeWithText("Select Dates").assertDoesNotExist()
+    }
+
+    // US 01.04.01
+    // User goes to campsite 2 and sees that they won two locations
+    // User can select dates for one spot out of those
+    @Test
+    fun testAvailableDates() {
+        val entrant = entrantExample()
+        openMessages(fakeAppState(entrant))
+
+        openChat(c2)
+        composeTestRule.onNodeWithText(wonText(1, c2), substring = true).assertIsDisplayed()
+        composeTestRule.onNodeWithText(wonText(2, c2), substring = true).assertIsDisplayed()
+        composeTestRule.onAllNodesWithText("Select Dates").assertCountEquals(2)
+
+        // Location 1's calendar
+        composeTestRule.onAllNodesWithText("Select Dates")[0].performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithText("Select Dates: Location 1").assertIsDisplayed()
+        composeTestRule.onNodeWithText("0 day(s) selected").assertIsDisplayed()
+
+        // A day outside the campsite's dates can't be picked
+        composeTestRule.onNodeWithTag("reserveDay_2026-12-01").performClick()
+        composeTestRule.onNodeWithText("0 day(s) selected").assertIsDisplayed()
+
+        // Days inside the dates can
+        composeTestRule.onNodeWithTag("reserveDay_2026-12-11").performClick()
+        composeTestRule.onNodeWithTag("reserveDay_2026-12-12").performClick()
+        composeTestRule.onNodeWithText("2 day(s) selected").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Confirm").performClick()
+        composeTestRule.waitForIdle()
+
+        // Location 1 is picked, location 2 is still open
+        composeTestRule.onNodeWithText("Select Dates: Location 1").assertDoesNotExist()
+        composeTestRule.onNodeWithText("You picked 2 day(s).").assertIsDisplayed()
+        composeTestRule.onAllNodesWithText("Change Dates").assertCountEquals(1)
+        composeTestRule.onAllNodesWithText("Select Dates").assertCountEquals(1)
+
+        // Reserving moved the campsite into the entrant's Reserved Campsites
+        assertTrue("c_2" in entrant.getCampsiteLists()[RESERVED_CAMPSITES].orEmpty())
+        assertFalse("c_2" in entrant.getCampsiteLists()[ACTIVE_CAMPSITES].orEmpty())
+    }
+
+    // US 01.14.01
+    // Make sure User is able to message in the campsite
+    // TODO: Make sure Campsite Owner sees it (Don't do it for now)
+    @Test
+    fun messageCampsiteOwner() {
+        val appState = fakeAppState(entrantExample())
+        openMessages(appState)
+
+        openChat(c4)
+        sendChat("Is the site dog friendly?")
+
+        // Shown in the chat as the entrant's own message
+        composeTestRule.onNodeWithText("Is the site dog friendly?").assertIsDisplayed()
+        // The text box was cleared
+        composeTestRule.onNodeWithText("Type a message...").assertIsDisplayed()
+
+        // Sent once, addressed to the campsite's owner
+        verify(exactly = 1) {
+            appState.chat.addMessage(match {
+                it.text == "Is the site dog friendly?" && !it.fromOwner &&
+                    it.campsiteID == "c_4" && it.entrantID == user && it.ownerID == "owner_c_4"
+            })
+        }
+        // ...and is now part of the conversation the owner would load
+        assertTrue(appState.chat.conversation("c_4", user).any { it.text == "Is the site dog friendly?" })
+    }
+}
