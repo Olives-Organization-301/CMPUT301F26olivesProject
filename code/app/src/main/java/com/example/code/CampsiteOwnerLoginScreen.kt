@@ -48,10 +48,14 @@ private val ButtonBlue = Color(0xFF274690)
 private val FieldLine = Color(0xFF333333)
 
 @Composable
-fun CampsiteOwnerLoginScreen(navController: NavController, appState: AppState) {
+fun CampsiteOwnerLoginScreen(
+    navController: NavController,
+    appState: AppState,
+    startInSignUp: Boolean = false  // true when opened from the "Sign up" button
+) {
     var ownerEmail by remember { mutableStateOf("") }
     var ownerName by remember { mutableStateOf("") }
-    var isSignUp by remember { mutableStateOf(false) }
+    var isSignUp by remember { mutableStateOf(startInSignUp) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
 
@@ -120,7 +124,7 @@ fun CampsiteOwnerLoginScreen(navController: NavController, appState: AppState) {
                                 appState.userID = newOwner.getUserID()
                                 appState.role = "owner"
                                 navController.navigate("campsiteOwnerMainScreen") {
-                                    popUpTo("campsiteOwnerLogin") { inclusive = true }
+                                    popUpTo(OWNER_LOGIN_ROUTE) { inclusive = true }
                                 }
                             }
                         } else {
@@ -128,7 +132,7 @@ fun CampsiteOwnerLoginScreen(navController: NavController, appState: AppState) {
                                 appState.userID = existing.getUserID()
                                 appState.role = "owner"
                                 navController.navigate("campsiteOwnerMainScreen") {
-                                    popUpTo("campsiteOwnerLogin") { inclusive = true }
+                                    popUpTo(OWNER_LOGIN_ROUTE) { inclusive = true }
                                 }
                             } else {
                                 errorMessage = "does not exist"

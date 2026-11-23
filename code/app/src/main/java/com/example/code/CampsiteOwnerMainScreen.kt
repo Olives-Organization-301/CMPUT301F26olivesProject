@@ -1,10 +1,12 @@
 package com.example.code
 
+import android.app.AlertDialog
 import android.app.DatePickerDialog
 import android.content.Context
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,6 +16,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -24,6 +27,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FloatingActionButton
@@ -61,11 +65,15 @@ import java.util.Date
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.ui.window.DialogProperties
+import com.example.code.classes.Alert
 import com.example.code.classes.AppState
 import com.example.code.classes.Campsite
+import com.example.code.classes.CampsiteOwner
 import com.example.code.classes.Coordinates
+import com.example.code.classes.Entrant
 import com.example.code.classes.PreviewCampsite
 import com.example.code.classes.WaitlistEntrant
+import com.google.api.HttpBody
 import java.time.LocalDateTime
 /** # Search Screen
  *  Implementation of the Entrants' Main Screen as seen in the Figma.
@@ -79,11 +87,17 @@ import java.time.LocalDateTime
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
+    val context = LocalContext.current
     var searchString by remember { mutableStateOf("") }
     var showAdd by remember { mutableStateOf(false) }
+    var showAccountDialog by remember { mutableStateOf(false) }
+    var showQRCodeDialog by remember { mutableStateOf(false) }
+    var selectedQRCampsite by remember { mutableStateOf<PreviewCampsite?>(null) }
     var ownerName by remember { mutableStateOf("Campsite Owner") }
+    var currentOwnerObj by remember { mutableStateOf<CampsiteOwner?>(null) }
     var showEdit by remember { mutableStateOf<PreviewCampsite?>(null) }
     var showLottery by remember { mutableStateOf<PreviewCampsite?>(null) }
+    var showAlert by remember { mutableStateOf<PreviewCampsite?>(null) }
     val format = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
 
     val previewCampsites = remember {
@@ -113,6 +127,8 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
                                                 location = cLoc,
                                                 startMillis = null,
                                                 endMillis = null,
+                                                startMillisRegis = null,
+                                                endMillisRegis = null,
                                                 waitingList = emptyList()
                                             )
                                         )
@@ -132,6 +148,8 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
                                                 location = cLoc,
                                                 startMillis = null,
                                                 endMillis = null,
+                                                startMillisRegis = null,
+                                                endMillisRegis = null,
                                                 waitingList = emptyList()
                                             )
                                         )
@@ -195,7 +213,7 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(120.dp),
+                                .heightIn(120.dp),
                             shape = RoundedCornerShape(24.dp),
                             colors = CardDefaults.cardColors(containerColor = Color(0xFFB0B0B0))
                         ) {
@@ -226,6 +244,7 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
                                 ) {
                                     Button(onClick = { showEdit = preview }) { Text("  Edit  ", maxLines = 1) }
                                     Button(onClick = { showLottery = preview }) { Text("Lottery", maxLines = 1) }
+                                    Button(onClick = { showAlert = preview }) { Text(" Alert ", maxLines = 1)}
                                 }
                             }
                         }
@@ -239,7 +258,9 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
                     .padding(16.dp)
             ) { Icon(Icons.Filled.Add, contentDescription = "Add campsite") }
         }
-
+/**
+ * Displays Account details for campsite owner and allows user to log out
+ * **/
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -249,10 +270,173 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Button(onClick = { }, modifier = Modifier.weight(1f)) { Text("List", maxLines = 1) }
-            Button(onClick = { }, modifier = Modifier.weight(1f)) { Text("QR Code", maxLines = 1) }
-            Button(onClick = { navController.navigate("loginScreen") }, modifier = Modifier.weight(1f)) { Text("Account", maxLines = 1) }
+            Button(onClick = { showQRCodeDialog = true }, modifier = Modifier.weight(1f)) { Text("QR Code", maxLines = 1) }
+            Button(onClick = { showAccountDialog = true }, modifier = Modifier.weight(1f)) { Text("Account", maxLines = 1) }
             Button(onClick = { navController.navigate("campsiteChat") }, modifier = Modifier.weight(1f)) { Text("Message Entrants", maxLines = 1) }
         }
+    }
+
+    if (showQRCodeDialog) {
+        AlertDialog(
+            onDismissRequest = { showQRCodeDialog = false },
+            title = {
+                Text(
+                    text = "Generate QR Code",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 20.sp
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    if (previewCampsites.isEmpty()) {
+                        Text(
+                            text = "No campsites available to generate QR code.",
+                            color = Color.Gray,
+                            fontSize = 14.sp
+                        )
+                    } else {
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.heightIn(max = 300.dp)
+                        ) {
+                            items(previewCampsites) { campsite ->
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF0E0D0))
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(campsite.name, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                            Text(campsite.location, fontSize = 12.sp, color = Color.DarkGray)
+                                        }
+                                        Button(
+                                            onClick = {
+                                                selectedQRCampsite = campsite
+                                            },
+                                            shape = RoundedCornerShape(12.dp),
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF274690))
+                                        ) {
+                                            Text("Generate QR code", fontSize = 11.sp, color = Color.White, maxLines = 1)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showQRCodeDialog = false }) {
+                    Text("Close")
+                }
+            }
+        )
+    }
+
+    selectedQRCampsite?.let { campsite ->
+        AlertDialog(
+            onDismissRequest = { selectedQRCampsite = null },
+            title = {
+                Text(
+                    text = "QR Code: ${campsite.name}",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+            },
+            text = {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Scanning this QR code links entrants to Campsite Details.", fontSize = 13.sp, color = Color.Gray)
+                    Spacer(Modifier.height(16.dp))
+
+                    QRCodeImage(
+                        data = campsite.name,
+                        modifier = Modifier
+                            .size(180.dp)
+                            .background(Color.White, RoundedCornerShape(8.dp))
+                    )
+
+                    Spacer(Modifier.height(16.dp))
+                    Text("Location: ${campsite.location}", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val matchedCampsite = appState.campsites.campsites.firstOrNull { it.getName() == campsite.name }
+                        if (matchedCampsite != null) {
+                            appState.viewingCampsiteID = matchedCampsite.campsiteID
+                            selectedQRCampsite = null
+                            showQRCodeDialog = false
+                            navController.navigate("campsiteDetails")
+                        } else {
+                            selectedQRCampsite = null
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF274690))
+                ) {
+                    Text("Test Scan (View Details)", color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { selectedQRCampsite = null }) {
+                    Text("Close")
+                }
+            }
+        )
+    }
+
+    if (showAccountDialog) {
+        AlertDialog(
+            onDismissRequest = { showAccountDialog = false },
+            title = {
+                Text(
+                    text = "Campsite Owner Details",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 20.sp
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Name: $ownerName", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Text("Owner ID: ${appState.userID ?: "Unknown"}", fontSize = 13.sp, color = Color.Gray)
+                    Text("Role: Campsite Owner", fontSize = 13.sp, color = Color(0xFF274690), fontWeight = FontWeight.Medium)
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showAccountDialog = false
+                        appState.userID = null
+                        appState.role = null
+                        DeviceIdentity.clearEntrantId(context)
+                        navController.navigate("loginScreen") {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Log Out", color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAccountDialog = false }) {
+                    Text("Close")
+                }
+            }
+        )
     }
 
     if (showAdd) {
@@ -307,6 +491,15 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
             }
         )
     }
+
+    showAlert?.let { current ->
+        NotificationDialog(
+            campsite = current,
+            onDismiss = {showAlert = null},
+            ownerName = ownerName,
+            appState = appState
+        )
+    }
 }
 
 @Composable
@@ -320,11 +513,15 @@ fun AddEditCampsite(
     var location by remember { mutableStateOf(initial?.location ?: "") }
     var startMillis by remember { mutableStateOf(initial?.startMillis) }
     var endMillis by remember { mutableStateOf(initial?.endMillis) }
+    var startMillisRegis by remember { mutableStateOf(initial?.startMillisRegis) }
+    var endMillisRegis by remember { mutableStateOf(initial?.endMillisRegis) }
     val context = LocalContext.current
     val format = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
 
     val startText = startMillis?.let { format.format(Date(it)) } ?: "Not set"
     val endText = endMillis?.let { format.format(Date(it)) } ?: "Not set"
+    val startTextRegis = startMillisRegis?.let { format.format(Date(it)) } ?: "Not set"
+    val endTextRegis = endMillisRegis?.let { format.format(Date(it)) } ?: "Not set"
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -354,6 +551,8 @@ fun AddEditCampsite(
                                     location = location,
                                     startMillis = startMillis,
                                     endMillis = endMillis,
+                                    startMillisRegis = startMillisRegis,
+                                    endMillisRegis = endMillisRegis,
                                     waitingList = initial?.waitingList ?: emptyList()
                                 )
                             )
@@ -385,7 +584,7 @@ fun AddEditCampsite(
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    Text("Lottery dates")
+                    Text("Booking dates")
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -399,6 +598,22 @@ fun AddEditCampsite(
                             onClick = { pickDate(context, startMillis) { endMillis = it } },
                             modifier = Modifier.weight(1f)
                         ) { Text("End: $endText", maxLines = 1) }
+                    }
+
+                    Text("Registration period")
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { pickDate(context, null) { startMillisRegis = it } },
+                            modifier = Modifier.weight(1f)
+                        ) { Text("Entry: $startTextRegis", maxLines = 1) }
+
+                        OutlinedButton(
+                            onClick = { pickDate(context, startMillisRegis) { endMillisRegis = it } },
+                            modifier = Modifier.weight(1f)
+                        ) { Text("End: $endTextRegis", maxLines = 1) }
                     }
                 }
             }
@@ -485,6 +700,8 @@ fun LotteryDialog(
                                     location = campsite.location,
                                     startMillis = startMillis,
                                     endMillis = endMillis,
+                                    startMillisRegis = startMillis,
+                                    endMillisRegis = endMillis,
                                     waitingList = waitingList
                                 )
                             )
@@ -538,29 +755,35 @@ fun LotteryDialog(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Button(
-                                onClick = { startLottery() },
+                                onClick = { pickDate(context, null) { s ->
+                                    startMillis = s
+                                    val cal = Calendar.getInstance().apply {
+                                        timeInMillis = s
+                                        add(Calendar.DAY_OF_YEAR, 7)
+                                    }
+
+                                } },
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Text("Start from today", maxLines = 1, fontSize = 12.sp)
+                                Text("Start date", maxLines = 1, fontSize = 12.sp)
                             }
 
-                            OutlinedButton(
+                            Button(
                                 onClick = {
                                     pickDate(context, null) { s ->
-                                        startMillis = s
+                                        endMillis = s
                                         val cal = Calendar.getInstance().apply {
                                             timeInMillis = s
                                             add(Calendar.DAY_OF_YEAR, 7)
                                         }
-                                        endMillis = cal.timeInMillis
                                     }
                                 },
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Text("Start from custom date", maxLines = 1, fontSize = 12.sp)
+                                Text("End date", maxLines = 1, fontSize = 12.sp)
                             }
 
-                            OutlinedButton(
+                            Button(
                                 onClick = {
                                     inputWinnersText = numLotteryWinners.toString()
                                     showSetWinnersDialog = true
@@ -741,6 +964,63 @@ fun LotteryDialog(
         }
     }
 }
+/**
+ * Prompts :
+ * 1. so when Qr code in campsiteOwners is clicked, I want it to display the campsites the campsite owner has with
+ * a small button beside each of them with the word generate qr code
+ * 2. make a random qr code appear that will appear when generate qr code is clicked,
+ * and will link the campsite details to the entrant when scanned**/
+@Composable
+fun QRCodeImage(
+    data: String,
+    modifier: Modifier = Modifier
+) {
+    androidx.compose.foundation.Canvas(modifier = modifier) {
+        val sizeInPx = size.minDimension
+        val gridCount = 21
+        val cellSize = sizeInPx / gridCount
+
+        drawRect(Color.White)
+
+        val hash = data.hashCode()
+        val random = java.util.Random(hash.toLong())
+
+        val grid = Array(gridCount) { BooleanArray(gridCount) }
+
+        fun drawFinderPattern(row: Int, col: Int) {
+            for (r in 0..6) {
+                for (c in 0..6) {
+                    if (row + r < gridCount && col + c < gridCount) {
+                        grid[row + r][col + c] = (r == 0 || r == 6 || c == 0 || c == 6 || (r in 2..4 && c in 2..4))
+                    }
+                }
+            }
+        }
+
+        drawFinderPattern(0, 0)
+        drawFinderPattern(0, gridCount - 7)
+        drawFinderPattern(gridCount - 7, 0)
+
+        for (r in 0 until gridCount) {
+            for (c in 0 until gridCount) {
+                if ((r < 7 && c < 7) || (r < 7 && c >= gridCount - 7) || (r >= gridCount - 7 && c < 7)) continue
+                grid[r][c] = random.nextBoolean()
+            }
+        }
+
+        for (r in 0 until gridCount) {
+            for (c in 0 until gridCount) {
+                if (grid[r][c]) {
+                    drawRect(
+                        color = Color.Black,
+                        topLeft = androidx.compose.ui.geometry.Offset(c * cellSize, r * cellSize),
+                        size = androidx.compose.ui.geometry.Size(cellSize, cellSize)
+                    )
+                }
+            }
+        }
+    }
+}
 /*
 WAITLIST implemented in order to facilitate the lottery function.
 Users/entrants will be allowed to join this waitlist for a period of
@@ -797,4 +1077,83 @@ private fun pickDate(context: Context, minDateMillis: Long?, onSelected: (Long) 
         dialog.datePicker.minDate = minDateMillis
     }
     dialog.show()
+}
+
+@Composable
+fun NotificationDialog(
+    campsite: PreviewCampsite,
+    onDismiss: () -> Unit,
+    ownerName: String,
+    appState: AppState
+){
+    var alertTitle by remember { mutableStateOf("") }
+    var alertBody by remember { mutableStateOf("") }
+
+    fun CreateAlert(campsite: PreviewCampsite, owner: String, title: String, body: String){
+        for(entrant in campsite.waitingList){
+            val alertID = java.util.UUID.randomUUID()
+            val newAlert = Alert(alertID.toString(), title, body, entrant.id, owner )
+            appState.alerts.addAlert(newAlert)
+        }
+
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ){
+        Surface(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier.fillMaxSize().padding(15.dp)
+            ) {
+                Spacer(Modifier.height(48.dp))
+                Row(){
+                    Text(
+                        text = "Send alert to entrants of ${campsite.name}",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        text = "✕",
+                        fontSize = 24.sp,
+                        modifier = Modifier.clickable { onDismiss() }
+                    )
+                }
+
+                OutlinedTextField(
+                    value = alertTitle,
+                    onValueChange = { alertTitle = it },
+                    label = { Text("Title", fontSize = 11.sp) },
+                    modifier = Modifier.fillMaxWidth().padding(5.dp),
+                    singleLine = true
+                )
+
+                OutlinedTextField(
+                    value = alertBody,
+                    onValueChange = { alertBody = it },
+                    label = { Text("Message", fontSize = 11.sp) },
+                    modifier = Modifier.weight(1f).fillMaxWidth().padding(5.dp),
+                    singleLine = true
+                )
+                Button(
+                    onClick = {
+                        CreateAlert(campsite, ownerName, alertTitle, alertBody)
+                        alertTitle = ""
+                        alertBody = ""
+                        onDismiss()
+                    },
+                    modifier = Modifier.fillMaxWidth().padding(5.dp)
+                ){
+                    Text("Send Alert")
+                }
+                Spacer(modifier = Modifier.weight(1f))
+
+
+            }
+        }
+
+    }
+
+
 }

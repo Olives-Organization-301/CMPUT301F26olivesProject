@@ -22,4 +22,20 @@ object DeviceIdentity {
                 preferences.edit().putString(USER_ID_KEY, generatedId).apply()
             }
     }
+
+    fun saveEntrantId(context: Context, id: String) {
+        val preferences = context.applicationContext
+            .getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+        preferences.edit().putString(USER_ID_KEY, id).apply()
+    }
+
+    /**
+     * wipes the saved ID from the device so when app
+     * is restarted, it won't auto-login from the previous account
+     * **/
+    fun clearEntrantId(context: Context) {
+        val preferences = context.applicationContext
+            .getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+        preferences.edit().remove(USER_ID_KEY).apply()
+    }
 }
