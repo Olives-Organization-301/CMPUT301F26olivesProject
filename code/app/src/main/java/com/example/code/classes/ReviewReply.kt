@@ -1,7 +1,7 @@
 package com.example.code.classes
 
 /**
- * ReviewReply that symbolizes the user's review
+ * ReviewReply is the class that stores a reply to a review (Only one review.)
  * @param replyID Cache in Reply ID
  * @param parentReviewID Tie Reply to Review (They can't be on their own)
  * @param entrantID Cache in which Entrant replied
