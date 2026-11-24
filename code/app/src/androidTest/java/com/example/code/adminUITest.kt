@@ -36,18 +36,18 @@ class adminUITest {
         val owner1 = CampsiteOwner(username = "Owner One", email = "owner1@test.com", userID = "owner_1")
         appState.owners.addCampsiteOwner(owner1)
 
-        val coords = Coordinates("Canada", "Alberta", -113.49, 53.54)
+        // Since I changed how the campsite has been declared, You have to change coordinate and campsite declarations
+        val coords = Coordinates("Canada", "Alberta", "Edmonton", "")
         val campsite1 = Campsite(
             name = "Pine River Camp",
             ownerID = "owner_1",
             campsiteID = "camp_101",
-            maxOccupancy = 4,
+            maxOccupancy = mutableListOf(4), // Max occupancy turned into list in order to show availability per day
             price = 45.0f,
             rating = 4.5f,
-            capacity = 4,
-            coordinates = coords,
-            startDate = null,
-            endDate = null
+            coordinates = mutableListOf(coords),
+            lotteryStartDate = null,
+            lotteryEndDate = null
         )
         appState.campsites.addCampsite(campsite1)
 
@@ -94,17 +94,17 @@ class adminUITest {
     fun testDeduplicationLogic() {
         val appState = AppState()
 
+        // Since I changed how the campsite has been declared, You have to change coordinate and campsite declarations
         val campsite = Campsite(
             name = "Sunny Meadows",
             ownerID = "owner_99",
             campsiteID = "camp_unique_99",
-            maxOccupancy = 6,
+            maxOccupancy = mutableListOf(6),
             price = 60.0f,
             rating = 5.0f,
-            capacity = 6,
-            coordinates = Coordinates("Canada", "Edmonton", -113.49, 53.54),
-            startDate = null,
-            endDate = null
+            coordinates = mutableListOf(Coordinates("Canada", "Alberta", "Edmonton", "")),
+            lotteryStartDate = null,
+            lotteryEndDate = null
         )
 
         // Attempt adding the exact same campsite twice

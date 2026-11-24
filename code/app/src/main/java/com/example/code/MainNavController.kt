@@ -4,6 +4,7 @@ import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavBackStackEntry
+import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -15,9 +16,9 @@ import com.example.code.classes.AppState
 @Composable
 fun CampsiteNavController(
     appState: AppState,
-    startDestination: String = "loginScreen" // tests can start on a different screen
+    startDestination: String = "loginScreen", // tests can start on a different screen
+    navController: NavHostController = rememberNavController() // tests can pass their own to navigate
 ) {
-    val navController = rememberNavController()
 
     NavHost(navController = navController, startDestination = startDestination) {
         // MAIN ENTRY POINTs
@@ -32,6 +33,7 @@ fun CampsiteNavController(
         composable("reservationsListScreen") { ReservationsListScreen(navController, appState) }
         composable("profileScreen") { ProfileScreen(navController, appState) }
         composable("entrantAlerts") { EntrantAlertsScreen(navController, appState)}
+        composable("entrantMessages") { EntrantMessagesScreen(navController, appState) }
 
         // LOGIN SCREENS
         // "?signUp=true" opens the screen in sign-up mode; plain "entrantLogin" etc. still works (defaults to login)

@@ -1,7 +1,8 @@
 package com.example.code
 
 
-import android.content.Context
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,8 +22,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -37,24 +36,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.window.Dialog
-import java.util.Calendar
-import androidx.compose.material3.Surface
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.DialogProperties
-import kotlinx.coroutines.selects.select
-import kotlin.contracts.SimpleEffect
 import com.example.code.classes.AppState
 import com.example.code.classes.Campsite
 
@@ -72,6 +58,9 @@ import com.example.code.classes.Campsite
 
 data class Profile(val id: String, val name: String, val role: String)
 data class PendingRemoval(val message: String, val onConfirm: () -> Unit)
+
+// From Gabe; I edited Campsite Details in order to change the dates of the campsites, so it requires this API (Sorry)
+@RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun AdminMainSearchScreen(navController: NavController, appState: AppState) {
     var searchString by remember { mutableStateOf("") }
@@ -320,14 +309,15 @@ fun CampsiteCard(campsite: Campsite,  onRemove: () -> Unit){
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)){
                 Text(campsite.getName(), fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                val sub = campsite.getCoordinates().getFirstSubdivision()
-                val country = campsite.getCoordinates().getCountry()
+                val sub = campsite.getMainCoordinates()?.getCity() ?: "" // I Changed getfirstSubdivision to get City
+                val country = campsite.getMainCoordinates()?.getCountry() ?: "" // Also get country now
                 val locText = if (sub.isNotBlank()) "$sub, $country" else country
                 Text(locText, fontSize = 12.sp, color = Color.Gray)
                 if (campsite.getOwnerID().isNotBlank()) {
                     Text("Owner ID: ${campsite.getOwnerID()}", fontSize = 11.sp, color = Color.DarkGray)
                 }
-                Text("Price: \$${campsite.getPrice()} | Cap: ${campsite.getCapacity()}", fontSize = 11.sp, color = Color.DarkGray)
+                // Since I Changed Max Occupancy as how many spots there were in a day, total occupancy should just be the sum of it
+                Text("Price: \$${campsite.getPrice()} | Max Occupancy: ${campsite.getTotalOccupancy()}", fontSize = 11.sp, color = Color.DarkGray)
             }
             RemoveButton(onClick = onRemove)
         }

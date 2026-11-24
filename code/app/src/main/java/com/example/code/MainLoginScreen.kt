@@ -315,7 +315,7 @@ private fun HomeButton(
 fun signUp(appState: AppState, newUsername: String, newEmail: String, newPhoneNumber: String, newName: String, newDOB: String){
     Firebase.auth.signInAnonymously().addOnSuccessListener {
         val newUID = Firebase.auth.uid
-        val newEntrant = Entrant(username = newUsername, email = newEmail, userID = newUID!!, phoneNumber = newPhoneNumber, name = newName, dateOfBirth = newDOB)
+        val newEntrant = Entrant(username = newUsername, email = newEmail, userID = newUID!!, phoneNumber = newPhoneNumber, name = newName, dateOfBirth = newDOB, profileImage = "")
         appState.entrants.addEntrant(newEntrant)
     }
 }

@@ -245,60 +245,60 @@ class DatabaseEntrantsTest {
 class DatabaseCampsitesTest {
     private val dbCampsites = DatabaseCampsites()
 
+    // Since I changed how the campsite has been declared, You have to change coordinate and campsite declarations
     @Test
     fun testAddCampsite() {
         val ownerID = "owner_camp_id"
-        val coords = Coordinates("Canada", "Alberta", -113.49, 53.54)
+        val coords = Coordinates("Canada", "Alberta", "Edmonton", "")
         val campsite = Campsite(
             name = "Mountain View",
             ownerID = ownerID,
             campsiteID = "campsite_id_101",
-            maxOccupancy = 4,
+            maxOccupancy = mutableListOf(4),
             price = 60.0f,
             rating = 4.8f,
-            capacity = 4,
-            coordinates = coords,
-            startDate = LocalDateTime.now(),
-            endDate = LocalDateTime.now().plusDays(2),
+            coordinates = mutableListOf(coords),
+            lotteryStartDate = LocalDateTime.now(),
+            lotteryEndDate = LocalDateTime.now().plusDays(2),
         )
         dbCampsites.addCampsite(campsite)
     }
 
+    // Since I changed how the campsite has been declared, You have to change coordinate and campsite declarations
     @Test
     fun testUpdateCampsiteName() {
         val ownerID = "owner_camp_id"
-        val coords = Coordinates("Canada", "Alberta", -113.49, 53.54)
+        val coords = Coordinates("Canada", "Alberta", "Edmonton", "")
         val campsite = Campsite(
             name = "Sunny Meadow",
             ownerID = ownerID,
             campsiteID = "campsite_id_102",
-            maxOccupancy = 4,
+            maxOccupancy = mutableListOf(4),
             price = 60.0f,
             rating = 4.8f,
-            capacity = 4,
-            coordinates = coords,
-            startDate = LocalDateTime.now(),
-            endDate = LocalDateTime.now().plusDays(2),
+            coordinates = mutableListOf(coords),
+            lotteryStartDate = LocalDateTime.now(),
+            lotteryEndDate = LocalDateTime.now().plusDays(2),
         )
         dbCampsites.addCampsite(campsite)
         dbCampsites.updateCampsiteName(campsite, "Sunny Meadow Updated")
     }
 
+    // Since I changed how the campsite has been declared, You have to change coordinate and campsite declarations
     @Test
     fun testDeleteCampsite() {
         val ownerID = "owner_camp_id"
-        val coords = Coordinates("Canada", "Alberta", -113.49, 53.54)
+        val coords = Coordinates("Canada", "Alberta", "Edmonton", "")
         val campsite = Campsite(
             name = "River Bank",
             ownerID = ownerID,
             campsiteID = "campsite_id_103",
-            maxOccupancy = 4,
+            maxOccupancy = mutableListOf(4),
             price = 60.0f,
             rating = 4.8f,
-            capacity = 4,
-            coordinates = coords,
-            startDate = LocalDateTime.now(),
-            endDate = LocalDateTime.now().plusDays(2),
+            coordinates = mutableListOf(coords),
+            lotteryStartDate = LocalDateTime.now(),
+            lotteryEndDate = LocalDateTime.now().plusDays(2),
         )
         dbCampsites.addCampsite(campsite)
         dbCampsites.deleteCampsite(campsite)
@@ -552,22 +552,22 @@ class DatabaseUpdateAndDeleteTest {
 
     // ---------- Campsite Updates and Deletions ----------
 
+    // Since I changed how the campsite has been declared, You have to change coordinate and campsite declarations
     @Test
     fun testDeleteCampsite() {
         val campsiteStore = mutableMapOf<String, Campsite>()
         val ownerID = "owner_id_1"
-        val coords = Coordinates("Canada", "Alberta", -113.49, 53.54)
+        val coords = Coordinates("Canada", "Alberta", "Edmonton", "")
         val campsite = Campsite(
             name = "Pine Valley",
             ownerID = ownerID,
             campsiteID = "campsite_999",
-            maxOccupancy = 5,
+            maxOccupancy = mutableListOf(5),
             price = 50.0f,
             rating = 4.5f,
-            capacity = 5,
-            coordinates = coords,
-            startDate = LocalDateTime.now(),
-            endDate = LocalDateTime.now().plusDays(5),
+            coordinates = mutableListOf(coords),
+            lotteryStartDate = LocalDateTime.now(),
+            lotteryEndDate = LocalDateTime.now().plusDays(5),
         )
 
         // Add campsite
@@ -580,21 +580,21 @@ class DatabaseUpdateAndDeleteTest {
         assertNull(campsiteStore["campsite_999"])
     }
 
+    // Since I changed how the campsite has been declared, You have to change coordinate and campsite declarations
     @Test
     fun testUpdateEntrantWaitlistInCampsite() {
         val ownerID = "owner_id_2"
-        val coords = Coordinates("Canada", "Alberta", -113.49, 53.54)
+        val coords = Coordinates("Canada", "Alberta", "Edmonton", "")
         val campsite = Campsite(
             name = "Lakeside Camp",
             ownerID = ownerID,
             campsiteID = "campsite_888",
-            maxOccupancy = 2,
+            maxOccupancy = mutableListOf(2),
             price = 40.0f,
             rating = 4.0f,
-            capacity = 2,
-            coordinates = coords,
-            startDate = LocalDateTime.now(),
-            endDate = LocalDateTime.now().plusDays(3),
+            coordinates = mutableListOf(coords),
+            lotteryStartDate = LocalDateTime.now(),
+            lotteryEndDate = LocalDateTime.now().plusDays(3),
         )
 
         // Add entrant IDs to waiting list
@@ -603,9 +603,11 @@ class DatabaseUpdateAndDeleteTest {
         assertTrue(campsite.entrantInList("user_1"))
         assertTrue(campsite.entrantInList("user_2"))
 
-        // Generate final list (updates waitlist state and populates finalList)
+        // Generate final list (one location with 2 spots, so both entrants win it)
         campsite.generateFinalList()
         assertEquals(2, campsite.getFinalList().size)
-        assertFalse(campsite.entrantInList("user_1"))
+        assertEquals(listOf(0), campsite.getLocationsWon("user_1"))
+        // The waiting list keeps everyone who entered (anyone on it but not in finalList lost)
+        assertTrue(campsite.entrantInList("user_1"))
     }
 }

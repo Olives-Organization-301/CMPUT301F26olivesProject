@@ -1,5 +1,13 @@
 package com.example.code
 
+import android.os.Build
+import androidx.annotation.RequiresApi
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -32,6 +40,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -45,6 +54,17 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.ui.text.input.KeyboardType
+import android.content.Context
+import android.graphics.BitmapFactory
+import android.net.Uri
+import androidx.annotation.DrawableRes
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /** Main Profile Screen
  * I Used Sonnet 5.0 in order to finish the GUI and then integrate the backend
@@ -53,11 +73,13 @@ import androidx.compose.ui.text.input.KeyboardType
  * Prompt: "Can you integrate the profile with the backend?"
  * Conversation: https://claude.ai/share/b0990579-fe55-4946-828d-1830efc58118
  */
+@RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun ProfileScreen(
     navController: NavController,
     appState: AppState
 ) {
+    val context = LocalContext.current
 
     val entrant by produceState<Entrant?>(
         initialValue = null,
@@ -96,33 +118,13 @@ fun ProfileScreen(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.Top
         ) {
-            // Profile Picture (placeholder silhouette built from plain shapes, no icon dependency)
-            // Swap this Box for an Image / AsyncImage once users have real photos.
-            Box(
-                modifier = Modifier.size(80.dp),
-                contentAlignment = Alignment.TopCenter
-            ) {
-                /* TODO: Claude ass Attempt at making a cute little profile picture
-                *   In the future, replace this with an image Box or something
-                */
-                // Head
-                Box(
-                    modifier = Modifier
-                        .size(38.dp)
-                        .border(4.dp, outline, CircleShape)
-                )
-                // Shoulders
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .size(width = 80.dp, height = 36.dp)
-                        .border(
-                            4.dp,
-                            outline,
-                            RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
-                        )
-                )
-            }
+            // Profile Picture (blank circle if the entrant has none, see ProfilePicture below)
+            ProfilePicture(
+                profileImage = entrant?.profileImage.orEmpty(),
+                modifier = Modifier
+                    .size(80.dp)
+                    .clip(CircleShape)
+            )
 
             // Details
             Column(
@@ -228,22 +230,34 @@ fun ProfileScreen(
         EditProfileDialog(
             entrant = current,
             onDismiss = { showEditDialog = false },
-            onSave = { name, username, dob, email, phone, description ->
+            onSave = { name, username, dob, email, phone, description, profileImage, wantsNotifications ->
                 current.name = name
                 current.username = username
                 current.dateOfBirth = dob
                 current.email = email
                 current.phoneNumber = phone
                 current.description = description
+                current.profileImage = profileImage
+                current.wantsNotifications = wantsNotifications
                 appState.entrants.updateEntrant(current)
+                // If notifications were just turned on, show any lottery results waiting
+                if (wantsNotifications) notifyLotteryResults(context, appState)
                 refreshTick++
                 showEditDialog = false
             },
             onDeleteProfile = {
-                appState.entrants.deleteEntrant(entrant!!)
+                val id = current.getUserID()
+                // Take the entrant off every campsite's waiting list before deleting the profile
+                appState.campsites.removeEntrantFromAllCampsites(id)
+                appState.entrants.deleteEntrant(current)
                 showEditDialog = false
                 appState.userID = null
-                navController.navigate("loginScreen")
+                appState.role = null
+                // Forget this ID on the device so it's never reused for another account
+                DeviceIdentity.clearEntrantId(context)
+                navController.navigate("loginScreen") {
+                    popUpTo(0) { inclusive = true }
+                }
             }
         )
     }
@@ -341,7 +355,9 @@ fun EditProfileDialog(
         dateOfBirth: String,
         email: String,
         phoneNumber: String,
-        description: String
+        description: String,
+        profileImage: String,
+        wantsNotifications: Boolean
     ) -> Unit,
     onDeleteProfile: () -> Unit
 ) {
@@ -352,6 +368,46 @@ fun EditProfileDialog(
     var email by remember { mutableStateOf(entrant.email) }
     var phoneNumber by remember { mutableStateOf(entrant.phoneNumber) }
     var description by remember { mutableStateOf(entrant.description) }
+    var profileImage by remember { mutableStateOf(entrant.profileImage) }
+    var wantsNotifications by remember { mutableStateOf(entrant.wantsNotifications) }
+
+    // Photo Picker: lets the user pick an image from their gallery/files (no permissions needed)
+    val context = LocalContext.current
+
+    // Whether the phone lets the app notify. The app only asks from here, never on its own.
+    var canNotify by remember { mutableStateOf(hasNotificationPermission(context)) }
+    var askedForPermission by remember { mutableStateOf(false) }
+    val notificationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        canNotify = granted
+        askedForPermission = true
+    }
+    // Opting in asks the phone for permission if it doesn't have it yet
+    fun setWantsNotifications(wants: Boolean) {
+        wantsNotifications = wants
+        if (wants && !canNotify && !askedForPermission) {
+            requestNotificationPermission(context, notificationPermission)
+        }
+    }
+    val photoPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            // Keep read access to the image after the app restarts
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (e: SecurityException) {
+                android.util.Log.w("EditProfile", "No persistable permission for $uri", e)
+            }
+            profileImage = uri.toString()
+        }
+    }
+    val openPhotoPicker = {
+        photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -407,7 +463,72 @@ fun EditProfileDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(8.dp))
+
+                // Profile Picture: "Add" if there's none, otherwise "Update" and "Remove"
+                Text("Profile Picture", fontWeight = FontWeight.Bold)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    ProfilePicture(
+                        profileImage = profileImage,
+                        modifier = Modifier
+                            .size(56.dp)
+                            .clip(CircleShape)
+                    )
+                    if (profileImage.isBlank()) {
+                        Button(
+                            onClick = openPhotoPicker,
+                            modifier = Modifier.weight(1f)
+                        ) { Text("Add") }
+                    } else {
+                        Button(
+                            onClick = openPhotoPicker,
+                            modifier = Modifier.weight(1f)
+                        ) { Text("Update") }
+                        OutlinedButton(
+                            onClick = { profileImage = "" },
+                            modifier = Modifier.weight(1f)
+                        ) { Text("Remove") }
+                    }
+                }
+                // TEMPORARY (testing): swap between the two hardcoded images without the picker
+                TextButton(
+                    onClick = {
+                        profileImage =
+                            if (profileImage == TEST_PFP_PROFILE) TEST_PFP_GIFT else TEST_PFP_PROFILE
+                    }
+                ) { Text("Swap test image") }
+
+                // Notifications opt in / out (tapping the text toggles it too)
+                Text("Notifications", fontWeight = FontWeight.Bold)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { setWantsNotifications(!wantsNotifications) },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = wantsNotifications,
+                        onCheckedChange = { setWantsNotifications(it) }
+                    )
+                    Text("Opt in to notifications")
+                }
+                // Opted in, but the phone is blocking notifications for this app
+                if (wantsNotifications && !canNotify) {
+                    Text(
+                        "Notifications are turned off for this app on your phone.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                    TextButton(onClick = {
+                        requestNotificationPermission(context, notificationPermission, askedForPermission)
+                    }) { Text("Allow Notifications") }
+                }
+
+                Spacer(Modifier.height(8.dp))
 
                 Button(
                     onClick = onDeleteProfile,
@@ -426,7 +547,9 @@ fun EditProfileDialog(
                     dateOfBirth,
                     email,
                     phoneNumber,
-                    description
+                    description,
+                    profileImage,
+                    wantsNotifications
                 ) }
             ) { Text("Save") }
         },
@@ -434,4 +557,85 @@ fun EditProfileDialog(
             TextButton(onClick = onDismiss) { Text("Cancel") }
         }
     )
+}
+
+// ----- Profile picture (moved from EntrantImages.kt) -----
+
+/** Entrant images
+ * Entrant.profileImage can hold:
+ *  - ""                 : no profile picture, so a blank circle is shown
+ *  - a content:// URI   : an image picked with the Photo Picker (only readable on this device)
+ *  - TEST_PFP_* values  : TEMPORARY hardcoded images for testing
+ * TODO: Upload picked images to Firebase Storage and store the download URL instead, so the
+ *  picture shows up on other devices too.
+ * Image Locations: code\app\src\main\res\drawable
+ */
+
+// Constants to test Test Profile Pictures
+// TODO: Remove later once images start persisting
+const val TEST_PFP_PROFILE = "test:default_profile_image"
+const val TEST_PFP_GIFT = "test:default_gift_image"
+
+// TEMPORARY: maps the test values to their drawables (null if it isn't a test value)
+// TODO: Remove this later
+@DrawableRes
+fun testProfileImageRes(profileImage: String): Int? = when (profileImage) {
+    TEST_PFP_PROFILE -> R.drawable.default_profile_image
+    TEST_PFP_GIFT -> R.drawable.default_gift_image
+    else -> null
+}
+
+/** Draws an entrant's profile picture. Draws a blank placeholder when there is no picture
+ *  or the picked image can't be read.
+ */
+@Composable
+fun ProfilePicture(profileImage: String, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val testRes = testProfileImageRes(profileImage)
+
+    // Load picked images off the main thread
+    val bitmap by produceState<ImageBitmap?>(initialValue = null, profileImage) {
+        value = if (profileImage.isBlank() || testRes != null) null
+        else withContext(Dispatchers.IO) { loadImage(context, Uri.parse(profileImage)) }
+    }
+
+    val loaded = bitmap
+    if (loaded != null) {
+        Image(
+            bitmap = loaded,
+            contentDescription = "Profile picture",
+            modifier = modifier,
+            contentScale = ContentScale.Crop
+        )
+    } else if (testRes != null) {
+        // TEMPORARY: hardcoded test image
+        Image(
+            painter = painterResource(testRes),
+            contentDescription = "Profile picture",
+            modifier = modifier,
+            contentScale = ContentScale.Crop
+        )
+    } else {
+        // Blank placeholder (no picture yet)
+        Box(modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant))
+    }
+}
+
+// Reads an image from a content URI, shrunk so its smaller side is roughly maxSize pixels
+private fun loadImage(context: Context, uri: Uri, maxSize: Int = 512): ImageBitmap? = try {
+    val resolver = context.contentResolver
+    // First pass: only read the image's size
+    // Use Bitmap Object in order to decode it with a circle
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+    // Halve the resolution until it's close to maxSize, so big photos don't use too much memory
+    var sample = 1
+    while (bounds.outWidth / (sample * 2) >= maxSize && bounds.outHeight / (sample * 2) >= maxSize) {
+        sample *= 2
+    }
+    val options = BitmapFactory.Options().apply { inSampleSize = sample }
+    resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }?.asImageBitmap()
+} catch (e: Exception) {
+    android.util.Log.e("ProfilePicture", "Couldn't load profile picture $uri", e)
+    null
 }

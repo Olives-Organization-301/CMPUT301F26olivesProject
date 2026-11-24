@@ -1,6 +1,5 @@
 package com.example.code
 
-import android.app.AlertDialog
 import android.app.DatePickerDialog
 import android.content.Context
 import android.os.Build
@@ -70,10 +69,8 @@ import com.example.code.classes.AppState
 import com.example.code.classes.Campsite
 import com.example.code.classes.CampsiteOwner
 import com.example.code.classes.Coordinates
-import com.example.code.classes.Entrant
 import com.example.code.classes.PreviewCampsite
 import com.example.code.classes.WaitlistEntrant
-import com.google.api.HttpBody
 import java.time.LocalDateTime
 /** # Search Screen
  *  Implementation of the Entrants' Main Screen as seen in the Figma.
@@ -84,6 +81,9 @@ import java.time.LocalDateTime
  *
  */
 //https://claude.ai/share/a95788a4-8990-40f1-95c7-b5a744a1e94d: Prompt:I need to make a button to be able to go to campsitechatscreen
+
+// From Gabe; I edited Campsite Details in order to change the dates of the campsites,
+// so it requires this API for date parsing
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
@@ -120,7 +120,7 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
                                     previewCampsites.clear()
                                     for (c in campsites) {
                                         val cName = try { c.getName().ifBlank { "Campsite" } } catch (e: Exception) { "Campsite" }
-                                        val cLoc = try { c.getCoordinates()?.getFirstSubdivision()?.ifBlank { "Location" } ?: "Location" } catch (e: Exception) { "Location" }
+                                        val cLoc = try { c.getMainCoordinates()?.getCity()?.ifBlank { "Location" } ?: "Location" } catch (e: Exception) { "Location" }
                                         previewCampsites.add(
                                             PreviewCampsite(
                                                 name = cName,
@@ -141,7 +141,7 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
                                     previewCampsites.clear()
                                     for (c in campsites) {
                                         val cName = try { c.getName().ifBlank { "Campsite" } } catch (e: Exception) { "Campsite" }
-                                        val cLoc = try { c.getCoordinates()?.getFirstSubdivision()?.ifBlank { "Location" } ?: "Location" } catch (e: Exception) { "Location" }
+                                        val cLoc = try { c.getMainCoordinates()?.getCity()?.ifBlank { "Location" } ?: "Location" } catch (e: Exception) { "Location" }
                                         previewCampsites.add(
                                             PreviewCampsite(
                                                 name = cName,
@@ -447,18 +447,22 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
             onSave = { newCampsite ->
                 previewCampsites.add(newCampsite)
                 appState.campsites.generateUniqueCampsiteID { uniqueId ->
-                    val coords = Coordinates("Canada", newCampsite.location, -113.49, 53.54)
+                    val coords = Coordinates(
+                        country = "Canada",
+                        region = "",
+                        city = newCampsite.location,
+                        address = ""
+                    )
                     val realCampsite = Campsite(
                         name = newCampsite.name,
                         ownerID = appState.userID ?: "unknown_owner",
                         campsiteID = uniqueId,
-                        maxOccupancy = 4,
+                        maxOccupancy = mutableListOf(4),
                         price = 50.0f,
                         rating = 5.0f,
-                        capacity = 4,
-                        coordinates = coords,
-                        startDate = LocalDateTime.now(),
-                        endDate = LocalDateTime.now().plusDays(7)
+                        coordinates = mutableListOf(coords),
+                        lotteryStartDate = LocalDateTime.now(),
+                        lotteryEndDate = LocalDateTime.now().plusDays(7)
                     )
                     appState.campsites.addCampsite(realCampsite)
                 }

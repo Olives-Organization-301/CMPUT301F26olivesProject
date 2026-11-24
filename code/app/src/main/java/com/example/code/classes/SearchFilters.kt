@@ -16,10 +16,11 @@ data class SearchFilters(
     val minGuests: Int? = null,
     val maxGuests: Int? = null
 ) {
+    // Search filter has been modified in order to accomodate for country filtering, and Peak Occupancy change.
     fun matches(campsite: Campsite): Boolean =
         (country.isBlank() ||
-                campsite.getCoordinates().getCountry().equals(country, ignoreCase = true)) &&
+                campsite.getCoordinates().any { it.getCountry().equals(country, ignoreCase = true) }) &&
                 (fromDate?.let { f -> campsite.getStartDate()?.let { it >= f } ?: true } ?: true) &&
-                (minGuests?.let { campsite.getMaxOccupancy() >= it } ?: true) &&
-                (maxGuests?.let { campsite.getMaxOccupancy() <= it } ?: true)
+                (minGuests?.let { campsite.getPeakOccupancy() >= it } ?: true) &&
+                (maxGuests?.let { campsite.getPeakOccupancy() <= it } ?: true)
 }

@@ -25,11 +25,14 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -48,6 +51,7 @@ import com.example.code.classes.Campsite
 import com.example.code.classes.Entrant
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import java.time.LocalDateTime
 
 
 /**
@@ -86,17 +90,34 @@ fun ReservationsListScreen(
     var selectedList by remember { mutableStateOf("Active_Campsites") }
     var expanded by remember { mutableStateOf(false) }
 
+    // Bumped whenever campsites move between lists, so the shown list refreshes
+    var listVersion by remember { mutableIntStateOf(0) }
+
     // UI-observable copy of the currently selected list
-    val displayedCampsites = remember(entrant, selectedList) {
+    val displayedCampsites = remember(entrant, selectedList, listVersion) {
         mutableStateListOf<String>().apply {
             addAll(campsites[selectedList] ?: emptyList())
         }
     }
 
     val campsiteCache = remember { mutableStateMapOf<String, Campsite>() }
-    val dateFormatter = remember { DateTimeFormatter.ofPattern("MMM d, yyyy h:mm a", Locale.getDefault()) }
 
-    // Launch a Coroutine at the start of the app in order to
+    // Once a waiting-list campsite's lottery has started, move it to the Active Campsites list
+    // At launch, if there's anything on the waiting list whose lottery begun, it's active, so move it there.
+    LaunchedEffect(entrant) {
+        val e = entrant ?: return@LaunchedEffect
+        e.getCampsiteLists()[WAITING_LIST].orEmpty().toList().forEach { id ->
+            appState.campsites.searchCampsite(id) { found ->
+                if (found != null) {
+                    campsiteCache[id] = found
+                    if (moveToActiveLotteryIfStarted(appState, e, found)) listVersion++
+                }
+            }
+        }
+    }
+
+    // Launch a Coroutine at the start of the app in order to display campsites
+    // Then you search campsites and see if you can find their info for displaying
     LaunchedEffect(displayedCampsites.toList()) {
         displayedCampsites
             .filter { it !in campsiteCache }
@@ -122,7 +143,7 @@ fun ReservationsListScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = selectedList,
+                text = formatListName(selectedList),
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f)
@@ -140,7 +161,7 @@ fun ReservationsListScreen(
         // (Box is needed so the DropdownMenu anchors to the button)
         Box {
             OutlinedButton(onClick = { expanded = true }) {
-                Text("Select Your List: $selectedList  ▾")
+                Text("Select Your List: ${formatListName(selectedList)}  ▾")
             }
             DropdownMenu(
                 expanded = expanded,
@@ -149,7 +170,7 @@ fun ReservationsListScreen(
                 // Use Lambda to iterate
                 campsites.keys.forEach { list ->
                     DropdownMenuItem(
-                        text = { Text(list) },
+                        text = { Text(formatListName(list)) },
                         onClick = {
                             // TODO: Actually Switch between the Campsites
                             selectedList = list
@@ -172,15 +193,19 @@ fun ReservationsListScreen(
                 CampsiteCard(
                     campsiteID = campsite,
                     campsiteData = campsiteCache[campsite],
-                    dateFormatter = dateFormatter,
+                    onClick = {
+                        // Open this campsite's details screen
+                        appState.viewingCampsiteID = campsite
+                        navController.navigate("campsiteDetails")
+                    },
                     onRemove = {
                         // Remove the campsite from the entrant's own list
                         entrant?.let {
                             appState.entrants.removeEntrantCampsite(it, selectedList, campsite)
                         }
-                        // If it's the waiting list, also remove the entrant from the campsite's waitingList
+                        // If it's the waiting list or active lottery, also remove the entrant from the campsite
                         val userID = appState.userID
-                        if (selectedList == "Waiting_List" && userID != null) {
+                        if ((selectedList == WAITING_LIST || selectedList == ACTIVE_CAMPSITES) && userID != null) {
                             campsiteCache[campsite]?.removeEntrant(userID)
                             appState.campsites.removeFromWaitingList(campsite, userID)
                         }
@@ -206,83 +231,126 @@ fun ReservationsListScreen(
 fun CampsiteCard(
     campsiteID: String,
     campsiteData: Campsite?,
-    dateFormatter: DateTimeFormatter,
     onRemove: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit = {}
 ) {
     // Per-card UI state (placeholder until the Database exists)
     var starred by remember { mutableStateOf(false) }
     var showAlert by remember { mutableStateOf(false) }
 
     Card(
+        onClick = onClick,
         modifier = modifier
             .fillMaxWidth()
             .height(120.dp),
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xFFB0B0B0))
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
+        // Thumbnail fills the card (desaturated + black gradient), same as the search screen
+        // Card has been replaced to accomodate an image in the background
+        val thumbnail = campsiteThumbnailRes(campsiteData)
+        CampsiteImageBackground(
+            imageRes = thumbnail,
+            fallback = Color(0xFFB0B0B0),
+            modifier = Modifier.fillMaxSize()
         ) {
-            // TODO: Put the image in the background
-            Box(
-                modifier = Modifier
-                    .size(96.dp)
-                    .background(Color.DarkGray, RoundedCornerShape(16.dp))
-            )
-            Spacer(Modifier.width(12.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = campsiteData?.getName() ?: campsiteID,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp
-                )
-                Text(
-                    text = campsiteData?.getCoordinates()?.getCountry() ?: "Loading…",
-                    fontSize = 12.sp
-                )
-                Text(
-                    text = "Lottery Entry: ${campsiteData?.getStartDate()?.format(dateFormatter) ?: "—"}",
-                    fontSize = 12.sp
-                )
-                Text(
-                    text = "Lottery End: ${campsiteData?.getEndDate()?.format(dateFormatter) ?: "—"}",
-                    fontSize = 12.sp
-                )
-            }
-
-            // Action icons (remove / favorite / notifications)
-            Column(
-                modifier = Modifier.fillMaxHeight(),
-                verticalArrangement = Arrangement.SpaceBetween,
-                horizontalAlignment = Alignment.CenterHorizontally
+            // A Buffer to ensure text is coloured properly if thumbnail has loaded or not.
+            // It will be white if an image exists, black if an image doesn't exist.
+            CompositionLocalProvider(
+                LocalContentColor provides if (thumbnail != null) Color.White else Color.Black
             ) {
-                Text(
-                    text = "✕",
-                    fontSize = 22.sp,
-                    modifier = Modifier.clickable { onRemove() }
-                )
-                Text(
-                    text = if (starred) "★" else "☆",
-                    fontSize = 22.sp,
-                    modifier = Modifier.clickable { starred = !starred }
-                )
-                Box(modifier = Modifier.clickable { showAlert = !showAlert }) {
-                    Text("🔔", fontSize = 22.sp)
-                    if (showAlert) {
-                        Box(
-                            modifier = Modifier
-                                .size(10.dp)
-                                .align(Alignment.TopEnd)
-                                .background(Color.Red, CircleShape)
+                // Put text starts here
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(start = 20.dp, top = 12.dp, end = 12.dp, bottom = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = campsiteData?.getName() ?: campsiteID,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
                         )
+                        Text(
+                            text = campsiteData?.getLocationSummary() ?: "Loading…",
+                            fontSize = 12.sp
+                        )
+                        Text(
+                            text = "Start: ${formatLotteryDate(campsiteData?.getStartDate())}",
+                            fontSize = 12.sp
+                        )
+                        Text(
+                            text = "End: ${formatLotteryDate(campsiteData?.getEndDate())}",
+                            fontSize = 12.sp
+                        )
+                    }
+
+                    // Action icons (remove / favorite / notifications)
+                    Column(
+                        modifier = Modifier.fillMaxHeight(),
+                        verticalArrangement = Arrangement.SpaceBetween,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "✕",
+                            fontSize = 22.sp,
+                            modifier = Modifier.clickable { onRemove() }
+                        )
+                        Text(
+                            text = if (starred) "★" else "☆",
+                            fontSize = 22.sp,
+                            modifier = Modifier.clickable { starred = !starred }
+                        )
+                        Box(modifier = Modifier.clickable { showAlert = !showAlert }) {
+                            Text("🔔", fontSize = 22.sp)
+                            if (showAlert) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(10.dp)
+                                        .align(Alignment.TopEnd)
+                                        .background(Color.Red, CircleShape)
+                                )
+                            }
+                        }
                     }
                 }
             }
         }
     }
+}
+
+// ----- Entrant list keys + lottery helpers (moved from EntrantMoveCampsiteList.kt) -----
+
+/**
+ * Constant Keys of the entrant's campsite lists (as stored in Firestore)
+ * Used to subscribe to the three campsites
+ * Convo: https://claude.ai/share/e282e67a-f3db-4225-b23d-1cadc614a63f (Cite later)
+ */
+const val ACTIVE_CAMPSITES = "Active_Campsites"
+const val PAST_CAMPSITES = "Past_Campsites"
+const val RESERVED_CAMPSITES = "Reserved_Campsites" // Campsites the entrant actually reserved
+const val WAITING_LIST = "Waiting_List"
+
+/** List key shown to the user: "Waiting_List" -> "Waiting List"
+ * Display Keys without the underscore
+ */
+fun formatListName(key: String): String = key.replace('_', ' ')
+
+/** Format Lottery date shown on cards: "November 20, 2026" ("Not set" if there is no date) */
+@RequiresApi(Build.VERSION_CODES.O)
+fun formatLotteryDate(date: LocalDateTime?): String =
+    date?.format(DateTimeFormatter.ofPattern("MMMM d, yyyy", Locale.getDefault())) ?: "Not set"
+
+/** Once a campsite's lottery has started, moves it from the entrant's Waiting List to their
+ *  Active Campsites list. The entrant stays on the campsite's waitingList, which is the lottery pool.
+ *  @return true if anything was moved
+ */
+@RequiresApi(Build.VERSION_CODES.O)
+fun moveToActiveLotteryIfStarted(appState: AppState, entrant: Entrant, campsite: Campsite): Boolean {
+    if (!campsite.isLotteryActive()) return false
+    if (entrant.getCampsiteLists()[WAITING_LIST]?.contains(campsite.campsiteID) != true) return false
+    appState.entrants.moveEntrantCampsite(entrant, WAITING_LIST, ACTIVE_CAMPSITES, campsite.campsiteID)
+    return true
 }

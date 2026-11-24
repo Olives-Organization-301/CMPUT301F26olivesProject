@@ -1,4 +1,6 @@
 package com.example.code.classes
+import android.os.Build
+import androidx.annotation.RequiresApi
 import com.example.code.DatabaseCampsites
 /** CampsiteOwner Class used to represent the campsite Owner Actor
  *
@@ -15,6 +17,7 @@ class CampsiteOwner(
     /**
      * Asynchronously fetches all campsites owned by this CampsiteOwner from Firestore database.
      */
+    @RequiresApi(Build.VERSION_CODES.O)
     fun viewCampsites(databaseCampsites: DatabaseCampsites, onResult: (List<Campsite>) -> Unit) {
         databaseCampsites.getCampsitesForOwner(getUserID(), onResult)
     }
