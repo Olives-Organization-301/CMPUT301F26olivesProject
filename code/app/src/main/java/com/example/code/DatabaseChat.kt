@@ -40,6 +40,7 @@ class DatabaseChat {
      * toObject() throws if any field has the wrong type (e.g. sentAt saved as a Timestamp or
      * String, or fromOwner saved as "true" from the Firebase console), and that message would
      * silently vanish. Reading each field leniently keeps those messages.
+     * Prompt: https://claude.ai/share/a85f01c0-dfd7-4bfa-9315-8d607e4416f0
      */
     private fun parseMessage(doc: DocumentSnapshot): ChatMessage? {
         return try {
