@@ -431,7 +431,7 @@ private fun ChatBubble(
 /** Popup with the campsite's calendar where the winner taps the days they're available.
  *  Only the campsite's available days (light-blue band) can be picked.
  *  Under the calendar: "Decline reservation" and "Confirm reservation" (needs at least one day).
- *  Tapping outside the popup (or the back button) closes it without deciding.
+ *  The ✕ (or tapping outside the popup / the back button) closes it without deciding.
  */
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
@@ -448,7 +448,23 @@ fun ReserveDatesDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title) },
+        // Title + ✕ (closes the popup without confirming or declining)
+        title = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(title, modifier = Modifier.weight(1f))
+                Text(
+                    text = "✕",
+                    fontSize = 22.sp,
+                    modifier = Modifier
+                        .clickable { onDismiss() }
+                        .padding(start = 8.dp)
+                        .testTag("closeReserveDates")
+                )
+            }
+        },
         text = {
             Column {
                 Text("Tap the days you're available at ${campsite.getName()}.", fontSize = 14.sp)

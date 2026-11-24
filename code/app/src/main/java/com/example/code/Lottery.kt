@@ -58,8 +58,11 @@ fun drawLottery(appState: AppState, campsite: Campsite, onSaved: (Boolean) -> Un
  *  https://claude.ai/share/c834d783-5930-4800-8f67-da339fafedfd
  */
 fun sendLotteryMessages(appState: AppState, campsite: Campsite) {
+    // Get name and timestamp
     val name = campsite.getName()
     val now = System.currentTimeMillis()
+
+    // Notify each entrant on whether they won or not
     for (entrantID in campsite.getWaitingList()) {
         val won = campsite.getLocationsWon(entrantID)
         if (won.isEmpty()) {
