@@ -240,6 +240,8 @@ fun ProfileScreen(
                 current.profileImage = profileImage
                 current.wantsNotifications = wantsNotifications
                 appState.entrants.updateEntrant(current)
+                // If notifications were just turned on, show any lottery results waiting
+                if (wantsNotifications) notifyLotteryResults(context, appState)
                 refreshTick++
                 showEditDialog = false
             },
@@ -371,6 +373,23 @@ fun EditProfileDialog(
 
     // Photo Picker: lets the user pick an image from their gallery/files (no permissions needed)
     val context = LocalContext.current
+
+    // Whether the phone lets the app notify. The app only asks from here, never on its own.
+    var canNotify by remember { mutableStateOf(hasNotificationPermission(context)) }
+    var askedForPermission by remember { mutableStateOf(false) }
+    val notificationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        canNotify = granted
+        askedForPermission = true
+    }
+    // Opting in asks the phone for permission if it doesn't have it yet
+    fun setWantsNotifications(wants: Boolean) {
+        wantsNotifications = wants
+        if (wants && !canNotify && !askedForPermission) {
+            requestNotificationPermission(context, notificationPermission)
+        }
+    }
     val photoPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
     ) { uri ->
@@ -488,14 +507,25 @@ fun EditProfileDialog(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { wantsNotifications = !wantsNotifications },
+                        .clickable { setWantsNotifications(!wantsNotifications) },
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Checkbox(
                         checked = wantsNotifications,
-                        onCheckedChange = { wantsNotifications = it }
+                        onCheckedChange = { setWantsNotifications(it) }
                     )
                     Text("Opt in to notifications")
+                }
+                // Opted in, but the phone is blocking notifications for this app
+                if (wantsNotifications && !canNotify) {
+                    Text(
+                        "Notifications are turned off for this app on your phone.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                    TextButton(onClick = {
+                        requestNotificationPermission(context, notificationPermission, askedForPermission)
+                    }) { Text("Allow Notifications") }
                 }
 
                 Spacer(Modifier.height(8.dp))
