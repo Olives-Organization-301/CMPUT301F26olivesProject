@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.annotation.RequiresApi
+import androidx.compose.runtime.remember
 import com.example.code.classes.AppState
 import com.example.code.ui.theme.CodeTheme
 
@@ -16,7 +17,8 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             CodeTheme {
-                val appState = AppState()
+                val appState = remember { AppState() }
+                LotteryNotificationEffect(appState)
                 CampsiteNavController(appState)
             }
         }

@@ -2,6 +2,9 @@ package com.example.code.classes
 
 import android.os.Build
 import androidx.annotation.RequiresApi
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import com.example.code.DatabaseAdmins
 import com.example.code.DatabaseAlerts
 import com.example.code.DatabaseCampsiteOwners
@@ -25,7 +28,8 @@ class AppState @RequiresApi(Build.VERSION_CODES.O) constructor(
     val chat: DatabaseChat = DatabaseChat()
 ) {
 
-    var userID: String? = null
-    var role: String? = null
+    // State so screens/effects (e.g. lottery notifications) react to logging in and out
+    var userID: String? by mutableStateOf(null)
+    var role: String? by mutableStateOf(null)
     var viewingCampsiteID: String? = null
 }

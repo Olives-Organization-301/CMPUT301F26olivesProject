@@ -26,15 +26,15 @@ class Entrant(
 
     /**
      * (I was gonna add your own campsites, hence the map, but I don't think I'll have time for that)
-     * campsiteLists:      A Map of the 4 Campsite lists
-     *                     1. Active Campsites:   Entrant is on the waiting list and the date is
-     *                                            in-between the lottery start/end dates
-     *                     2. Reserved Campsites: Entrant has won the lottery and has a reservation
-     *                     3. Past Campsites:     Reservation date has passed but the campsite is on the list
-     *                     4. Waiting List:       Entrant has joined the campsite before the lottery starts
-     * messageCampsiteIDs: A List of CampsiteIDs (they message owners indirectly) that
-     *                     an entrant can manage
-     * reservationIDs:     A List of reservations from each reserved campsite
+     * [campsiteLists]:         A Map of the 4 Campsite lists
+     *                          1. Active Campsites:   Entrant is on the waiting list and the date is
+     *                                                 in-between the lottery start/end dates
+     *                          2. Reserved Campsites: Entrant has won the lottery and has a reservation
+     *                          3. Past Campsites:     Reservation date has passed but the campsite is on the list
+     *                          4. Waiting List:       Entrant has joined the campsite before the lottery starts
+     * [messageCampsiteIDs]:    A List of CampsiteIDs (they message owners indirectly) that
+     *                          an entrant can manage
+     * [reservationIDs]:        A List of reservations from each reserved campsite
      */
     var campsiteLists: MutableMap<String, MutableList<String>> = mutableMapOf(
         "Active_Campsites" to mutableListOf(),

@@ -27,6 +27,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -53,7 +54,6 @@ import com.example.code.classes.AppState
 import com.example.code.classes.Campsite
 import com.example.code.classes.ChatMessage
 import com.example.code.classes.Entrant
-import com.example.code.classes.LOTTERY_WON
 import java.text.SimpleDateFormat
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -70,7 +70,7 @@ import java.util.Locale
  * A "You won" lottery message has a Select Dates button that opens the campsite's calendar.
  * Date: November 22, 2026
  * Prompt: Make a message board for me
- * Conversation: https://claude.ai/share/c834d783-5930-4800-8f67-da339fafedfd
+ * Conversation: https://claude.ai/share/c834d783-5930-4800-8f67-da339fafedfd (All of it, the functions as well)
  */
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
@@ -113,9 +113,9 @@ fun EntrantMessagesScreen(navController: NavController, appState: AppState) {
     // Conversation that is open (null = showing the list)
     var openCampsiteID by remember { mutableStateOf<String?>(null) }
 
-    //
     val openID = openCampsiteID
     if (openID == null || userID == null) {
+        // Open Messaging for Conversations
         ConversationList(
             conversations = summaries,
             onOpen = { openCampsiteID = it },
@@ -123,6 +123,7 @@ fun EntrantMessagesScreen(navController: NavController, appState: AppState) {
         )
     } else {
         // Phone back button returns to the list instead of leaving the screen
+        // Open a Chat between Entrant and Campsite Owner
         BackHandler { openCampsiteID = null }
         ChatThread(
             appState = appState,
@@ -289,12 +290,20 @@ private fun ChatThread(
                     // Winning message: button to pick dates for that location
                     if (message.type == LOTTERY_WON && message.locationIndex >= 0) {
                         val picked = pickedDates[message.locationIndex].orEmpty()
-                        Button(
-                            onClick = { reservingLocation = message.locationIndex },
-                            enabled = campsite != null
-                        ) { Text(if (picked.isEmpty()) "Select Dates" else "Change Dates") }
-                        if (picked.isNotEmpty()) {
-                            Text("You picked ${picked.size} day(s).", fontSize = 13.sp)
+                        val status = reservationStatus(messages, message.locationIndex)
+                        if (status == RESERVATION_DECLINED) {
+                            // Declined: no new reservation can be made for this location
+                            Button(onClick = {}, enabled = false) { Text("Reservation Declined") }
+                        } else {
+                            // Button to pick dates
+                            val confirmed = status == RESERVATION_CONFIRMED || picked.isNotEmpty()
+                            Button(
+                                onClick = { reservingLocation = message.locationIndex },
+                                enabled = campsite != null
+                            ) { Text(if (confirmed) "Change Dates" else "Select Dates") }
+                            if (picked.isNotEmpty()) {
+                                Text("You picked ${picked.size} day(s).", fontSize = 13.sp)
+                            }
                         }
                     }
                 }
@@ -347,9 +356,14 @@ private fun ChatThread(
             onConfirm = { dates ->
                 pickedDates[location] = dates
                 reservingLocation = null
-                // Reserving a spot moves the campsite into the entrant's Reserved Campsites list
-                val e = entrant
-                if (e != null) reserveCampsite(appState, e, campsiteID)
+                // Message + moves the campsite into the entrant's Reserved Campsites list
+                confirmReservation(appState, site, entrant, entrantID, location)
+            },
+            onDecline = {
+                pickedDates.remove(location)
+                reservingLocation = null
+                // Message + notification, locks this location, updates the entrant's lists
+                declineReservation(appState, site, entrant, entrantID, location)
             }
         )
     }
@@ -386,6 +400,7 @@ private fun ChatBubble(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = if (mine) Alignment.End else Alignment.Start
     ) {
+        // Who sent the message
         Text(
             text = "${if (mine) "You" else campsiteName.ifBlank { "Campsite" }} · $timeText",
             fontSize = 12.sp,
@@ -403,6 +418,7 @@ private fun ChatBubble(
                 .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
+            // Contents of the message (Add automated header if it's a notification)
             if (message.automated) {
                 Text("AUTOMATED MESSAGE", fontSize = 11.sp, fontWeight = FontWeight.Bold)
             }
@@ -414,6 +430,8 @@ private fun ChatBubble(
 
 /** Popup with the campsite's calendar where the winner taps the days they're available.
  *  Only the campsite's available days (light-blue band) can be picked.
+ *  Under the calendar: "Decline reservation" and "Confirm reservation" (needs at least one day).
+ *  The ✕ (or tapping outside the popup / the back button) closes it without deciding.
  */
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
@@ -422,14 +440,31 @@ fun ReserveDatesDialog(
     title: String = "Reserve Dates",
     initiallySelected: Set<LocalDate>,
     onDismiss: () -> Unit,
-    onConfirm: (List<LocalDate>) -> Unit
+    onConfirm: (List<LocalDate>) -> Unit,
+    onDecline: () -> Unit
 ) {
     val ranges = campsite.getVacationStartTimes()
     var selected by remember(campsite) { mutableStateOf(initiallySelected) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title) },
+        // Title + ✕ (closes the popup without confirming or declining)
+        title = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(title, modifier = Modifier.weight(1f))
+                Text(
+                    text = "✕",
+                    fontSize = 22.sp,
+                    modifier = Modifier
+                        .clickable { onDismiss() }
+                        .padding(start = 8.dp)
+                        .testTag("closeReserveDates")
+                )
+            }
+        },
         text = {
             Column {
                 Text("Tap the days you're available at ${campsite.getName()}.", fontSize = 14.sp)
@@ -447,17 +482,29 @@ fun ReserveDatesDialog(
                 )
                 Spacer(Modifier.height(8.dp))
                 Text("${selected.size} day(s) selected", fontSize = 12.sp)
+                Spacer(Modifier.height(12.dp))
+
+                // Decline / Confirm buttons under the calendar
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onDecline,
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
+                    ) { Text("Decline reservation", fontSize = 13.sp, textAlign = TextAlign.Center) }
+                    Button(
+                        enabled = selected.isNotEmpty(),
+                        onClick = { onConfirm(selected.sorted()) },
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
+                    ) { Text("Confirm reservation", fontSize = 13.sp, textAlign = TextAlign.Center) }
+                }
             }
         },
-        confirmButton = {
-            TextButton(
-                enabled = selected.isNotEmpty(),
-                onClick = { onConfirm(selected.sorted()) }
-            ) { Text("Confirm") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
-        }
+        // The two buttons above replace the dialog's own Confirm / Cancel
+        confirmButton = {}
     )
 }
 
