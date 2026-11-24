@@ -2,7 +2,6 @@ package com.example.code
 
 import androidx.compose.runtime.mutableStateListOf
 import com.example.code.classes.ChatMessage
-import com.example.code.classes.MESSAGE_TEXT
 import com.google.firebase.Firebase
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentSnapshot
