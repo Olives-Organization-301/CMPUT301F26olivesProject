@@ -74,7 +74,11 @@ import java.util.Locale
  */
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
-fun EntrantMessagesScreen(navController: NavController, appState: AppState) {
+fun EntrantMessagesScreen(
+    navController: NavController,
+    appState: AppState,
+    initialCampsiteID: String? = null // Set when opened from a campsite's chat button
+) {
     // Initialize UserID
     val userID = appState.userID
 
@@ -111,7 +115,12 @@ fun EntrantMessagesScreen(navController: NavController, appState: AppState) {
                 .sortedBy { it.campsiteName }
 
     // Conversation that is open (null = showing the list)
-    var openCampsiteID by remember { mutableStateOf<String?>(null) }
+    var openCampsiteID by remember { mutableStateOf(initialCampsiteID) }
+
+    // Opened straight into a chat (e.g. from the Reservations list): Back returns to that screen
+    val closeChat: () -> Unit = {
+        if (initialCampsiteID != null) navController.popBackStack() else openCampsiteID = null
+    }
 
     val openID = openCampsiteID
     if (openID == null || userID == null) {
@@ -122,16 +131,21 @@ fun EntrantMessagesScreen(navController: NavController, appState: AppState) {
             onClose = { navController.popBackStack() }
         )
     } else {
+<<<<<<< Updated upstream
         // Phone back button returns to the list instead of leaving the screen
         // Open a Chat between Entrant and Campsite Owner
         BackHandler { openCampsiteID = null }
+=======
+        // Phone back button: back to the list, or to the previous screen if opened straight into this chat
+        BackHandler { closeChat() }
+>>>>>>> Stashed changes
         ChatThread(
             appState = appState,
             campsiteID = openID,
             entrantID = userID,
             entrant = entrant,
             messages = appState.chat.conversation(openID, userID),
-            onBack = { openCampsiteID = null }
+            onBack = closeChat
         )
     }
 }
