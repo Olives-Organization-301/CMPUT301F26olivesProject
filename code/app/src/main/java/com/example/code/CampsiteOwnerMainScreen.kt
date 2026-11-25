@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -34,6 +35,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
@@ -137,6 +140,7 @@ fun CampsiteOwnerMainScreen(
     var showEdit by remember { mutableStateOf<PreviewCampsite?>(null) }
     var showLottery by remember { mutableStateOf<PreviewCampsite?>(null) }
     var showAlert by remember { mutableStateOf<PreviewCampsite?>(null) }
+    var showReservations by remember { mutableStateOf<PreviewCampsite?>(null) }
     val format = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
 
     val colors = if (darkTheme) OwnerDarkColors else OwnerLightColors
@@ -300,30 +304,57 @@ fun CampsiteOwnerMainScreen(
 
                                             Spacer(Modifier.width(8.dp))
 
-                                            Column(
-                                                verticalArrangement = Arrangement.spacedBy(6.dp),
-                                                horizontalAlignment = Alignment.End
-                                            ) {
-                                                Button(
-                                                    onClick = { showEdit = preview },
-                                                    shape = RoundedCornerShape(20.dp),
-                                                    colors = ButtonDefaults.buttonColors(containerColor = colors.primaryButton, contentColor = colors.primaryText),
-                                                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
-                                                ) { Text("Edit", maxLines = 1, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                                            var menuExpanded by remember { mutableStateOf(false) }
 
+                                            Box(modifier = Modifier.wrapContentSize(Alignment.TopEnd)) {
                                                 Button(
-                                                    onClick = { showLottery = preview },
+                                                    onClick = { menuExpanded = true },
                                                     shape = RoundedCornerShape(20.dp),
                                                     colors = ButtonDefaults.buttonColors(containerColor = colors.primaryButton, contentColor = colors.primaryText),
                                                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
-                                                ) { Text("Lottery", maxLines = 1, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                                                ) {
+                                                    Row(
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                                    ) {
+                                                        Text("Menu", maxLines = 1, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                                        Text("▼", fontSize = 10.sp)
+                                                    }
+                                                }
 
-                                                Button(
-                                                    onClick = { showAlert = preview },
-                                                    shape = RoundedCornerShape(20.dp),
-                                                    colors = ButtonDefaults.buttonColors(containerColor = colors.primaryButton, contentColor = colors.primaryText),
-                                                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
-                                                ) { Text("Alert", maxLines = 1, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                                                DropdownMenu(
+                                                    expanded = menuExpanded,
+                                                    onDismissRequest = { menuExpanded = false }
+                                                ) {
+                                                    DropdownMenuItem(
+                                                        text = { Text("Edit") },
+                                                        onClick = {
+                                                            menuExpanded = false
+                                                            showEdit = preview
+                                                        }
+                                                    )
+                                                    DropdownMenuItem(
+                                                        text = { Text("Lottery") },
+                                                        onClick = {
+                                                            menuExpanded = false
+                                                            showLottery = preview
+                                                        }
+                                                    )
+                                                    DropdownMenuItem(
+                                                        text = { Text("Alert") },
+                                                        onClick = {
+                                                            menuExpanded = false
+                                                            showAlert = preview
+                                                        }
+                                                    )
+                                                    DropdownMenuItem(
+                                                        text = { Text("Reservations") },
+                                                        onClick = {
+                                                            menuExpanded = false
+                                                            showReservations = preview
+                                                        }
+                                                    )
+                                                }
                                             }
                                         }
                                     }
@@ -608,6 +639,83 @@ fun CampsiteOwnerMainScreen(
             onDismiss = {showAlert = null},
             ownerName = ownerName,
             appState = appState
+        )
+    }
+
+    showReservations?.let { current ->
+        val matchedCampsite = appState.campsites.campsites.firstOrNull { it.getName() == current.name }
+        val previousEntrants = appState.entrants.entrants.filter { entrant ->
+            val lists = entrant.getCampsiteLists()
+            val past = lists["Past_Campsites"] ?: emptyList()
+            val reserved = lists["Reserved_Campsites"] ?: emptyList()
+            val campsiteId = matchedCampsite?.campsiteID ?: ""
+            val campsiteName = current.name
+
+            campsiteId in past || campsiteId in reserved ||
+            campsiteName in past || campsiteName in reserved
+        }
+
+        AlertDialog(
+            onDismissRequest = { showReservations = null },
+            title = {
+                Text(
+                    text = "Previous Reservations: ${current.name}",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 350.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    if (previousEntrants.isEmpty()) {
+                        Text(
+                            text = "No previous reservations found for this campsite.",
+                            color = Color.Gray,
+                            fontSize = 14.sp
+                        )
+                    } else {
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            items(previousEntrants) { entrant ->
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(12.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Text(
+                                            text = entrant.name.ifBlank { entrant.username.ifBlank { entrant.email } },
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 15.sp
+                                        )
+                                        if (entrant.email.isNotBlank()) {
+                                            Text(text = entrant.email, fontSize = 12.sp, color = Color.DarkGray)
+                                        }
+                                        if (entrant.phoneNumber.isNotBlank()) {
+                                            Text(text = "Phone: ${entrant.phoneNumber}", fontSize = 12.sp, color = Color.DarkGray)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showReservations = null }) {
+                    Text("Close")
+                }
+            }
         )
     }
 }
