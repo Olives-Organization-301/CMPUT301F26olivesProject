@@ -41,6 +41,8 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.example.code.classes.Administrator
 import com.example.code.classes.AppState
+import com.example.code.classes.CampsiteOwner
+import com.example.code.classes.Entrant
 
 private val ScreenBackground = Color(0xFFFEF9F3)
 private val FieldBackground = Color(0xFFF0E0D0)
@@ -115,14 +117,23 @@ fun AdminLoginScreen(
                             if (existing != null) {
                                 errorMessage = "exists"
                             } else {
+                                // claude used to add entrant and campsite owner profiles with the same credentials as the new
+                                // admin profile just created
+                                // chat: https://claude.ai/share/cdf52d32-f73c-4fc2-b19e-b7015e307051
                                 val newID = java.util.UUID.randomUUID().toString()
-                                val newAdmin = Administrator(
-                                    username = adminName.ifBlank { cleanEmail.substringBefore("@") },
-                                    email = cleanEmail,
-                                    userID = newID
+                                val username = adminName.ifBlank { cleanEmail.substringBefore("@") }
+
+                                appState.admins.addAdmin(
+                                    Administrator(username = username, email = cleanEmail, userID = newID)
                                 )
-                                appState.admins.addAdmin(newAdmin)
-                                appState.userID = newAdmin.getUserID()
+                                appState.entrants.addEntrant(
+                                    Entrant(username = username, email = cleanEmail, userID = newID)
+                                )
+                                appState.owners.addCampsiteOwner(
+                                    CampsiteOwner(username = username, email = cleanEmail, userID = newID)
+                                )
+
+                                appState.userID = newID
                                 appState.role = "admin"
                                 navController.navigate("AdminMainSearchScreen") {
                                     popUpTo(ADMIN_LOGIN_ROUTE) { inclusive = true }
