@@ -3,9 +3,13 @@ package com.example.code
 import android.app.DatePickerDialog
 import android.content.Context
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import androidx.annotation.RequiresApi
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,6 +23,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -31,9 +36,12 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,6 +49,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -63,6 +72,8 @@ import java.util.Calendar
 import java.util.Date
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.window.DialogProperties
 import com.example.code.classes.Alert
 import com.example.code.classes.AppState
@@ -72,21 +83,49 @@ import com.example.code.classes.Coordinates
 import com.example.code.classes.PreviewCampsite
 import com.example.code.classes.WaitlistEntrant
 import java.time.LocalDateTime
-/** # Search Screen
- *  Implementation of the Entrants' Main Screen as seen in the Figma.
- *
- *  Prototype was gained from this conversation with Claude Sonnet 5.0:
- *  https://claude.ai/chat/fa52c57a-03b0-486b-b988-87d2f36ff18a
- *  Prompt: "How do I Correctly pad this Main screen? How do I make the Cards?"
- *
- */
-//https://claude.ai/share/a95788a4-8990-40f1-95c7-b5a744a1e94d: Prompt:I need to make a button to be able to go to campsitechatscreen
+import java.util.Random
+import java.util.UUID
 
-// From Gabe; I edited Campsite Details in order to change the dates of the campsites,
-// so it requires this API for date parsing
+data class OwnerThemeColors(
+    val gradient: List<Color>,
+    val title: Color,
+    val subtitle: Color,
+    val footer: Color,
+    val primaryButton: Color,
+    val primaryText: Color,
+    val secondaryButton: Color,
+    val secondaryText: Color
+)
+
+private val OwnerLightColors = OwnerThemeColors(
+    gradient = listOf(Color(0xFFFFF8EE), Color(0xFFFDE8CB)),
+    title = Color(0xFF2B1B17),
+    subtitle = Color(0xFF7A6A62),
+    footer = Color(0xFF1A1A1A),
+    primaryButton = Color(0xFF45238A),
+    primaryText = Color.White,
+    secondaryButton = Color(0xFF6B49B0),
+    secondaryText = Color.White
+)
+
+private val OwnerDarkColors = OwnerThemeColors(
+    gradient = listOf(Color(0xFF101828), Color(0xFF1F2B45)),
+    title = Color.White,
+    subtitle = Color(0xFF9AA5BD),
+    footer = Color.White,
+    primaryButton = Color(0xFFFFB84D),
+    primaryText = Color(0xFF1A1A1A),
+    secondaryButton = Color(0xFFFFE7BF),
+    secondaryText = Color(0xFF1A1A1A)
+)
+
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
-fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
+fun CampsiteOwnerMainScreen(
+    navController: NavController,
+    appState: AppState,
+    darkTheme: Boolean = isSystemInDarkTheme()
+) {
     val context = LocalContext.current
     var searchString by remember { mutableStateOf("") }
     var showAdd by remember { mutableStateOf(false) }
@@ -100,11 +139,13 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
     var showAlert by remember { mutableStateOf<PreviewCampsite?>(null) }
     val format = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
 
+    val colors = if (darkTheme) OwnerDarkColors else OwnerLightColors
+
     val previewCampsites = remember {
         mutableStateListOf<PreviewCampsite>()
     }
 
-    val mainHandler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
+    val mainHandler = remember { Handler(Looper.getMainLooper()) }
 
     // Load real campsites and owner name using viewCampsites function
     LaunchedEffect(appState.userID) {
@@ -171,108 +212,173 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
         previewCampsites.filter { it.name.contains(searchString, ignoreCase = true) }
     }
 
-    // Column Wrapping the Search/Card Screens and Menu bar
-    Column(modifier = Modifier.fillMaxSize()) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Brush.horizontalGradient(colors.gradient))
+            .systemBarsPadding()
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
 
-        Box(modifier = Modifier.weight(1f)) {
+            Box(modifier = Modifier.weight(1f)) {
 
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-            ) {
-                // To avoid clipping it into the top of the screen
-                Spacer(Modifier.height(48.dp))
-
-                // Signed in owner verification banner
-                Text(
-                    text = "Signed in as: $ownerName",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp,
-                    color = Color(0xFF274690),
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-
-                // Search Bar
-                TextField(
-                    value = searchString,
-                    onValueChange = { searchString = it },
-                    label = { Text("Search for your campsite") },
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 16.dp)
-                )
-
-                // The Cards of Campsites
-                LazyColumn(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    contentPadding = PaddingValues(vertical = 12.dp)
+                        .fillMaxSize()
+                        .padding(horizontal = 20.dp, vertical = 12.dp)
                 ) {
-                    items(filteredCampsites) { preview ->
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(120.dp),
-                            shape = RoundedCornerShape(24.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFFB0B0B0))
-                        ) {
-                            Row(
+                    // Signed in owner verification banner
+                    Text(
+                        text = "Signed in as: $ownerName",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = colors.title,
+                        modifier = Modifier.padding(bottom = 12.dp, top = 8.dp)
+                    )
+
+                    // Search Bar
+                    TextField(
+                        value = searchString,
+                        onValueChange = { searchString = it },
+                        placeholder = { Text("Search for your campsite", color = colors.subtitle) },
+                        shape = RoundedCornerShape(28.dp),
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = colors.title.copy(alpha = 0.06f),
+                            unfocusedContainerColor = colors.title.copy(alpha = 0.04f),
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                            focusedTextColor = colors.title,
+                            unfocusedTextColor = colors.title
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp)
+                    )
+
+                    // The Cards of Campsites
+                    LazyColumn(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        contentPadding = PaddingValues(vertical = 12.dp)
+                    ) {
+                        items(filteredCampsites) { preview ->
+                            val matchedCampsite = appState.campsites.campsites.firstOrNull { it.getName() == preview.name }
+                            val thumbnail = matchedCampsite?.let { campsiteThumbnailRes(it) }
+
+                            Card(
                                 modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                    .fillMaxWidth()
+                                    .height(135.dp),
+                                shape = RoundedCornerShape(24.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFFB0B0B0))
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(96.dp)
-                                        .background(Color.DarkGray, RoundedCornerShape(16.dp))
-                                )
-                                Spacer(Modifier.width(12.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(preview.name, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.White)
-                                    Text(preview.location, color = Color.White)
-                                    Text("Entry: " + (preview.startMillis?.let { format.format(Date(it)) } ?: "Not set"), color = Color.White)
-                                    Text("End: " + (preview.endMillis?.let { format.format(Date(it)) } ?: "Not set"), color = Color.White)
-                                }
-
-                                Spacer(Modifier.width(8.dp))
-
-                                Column(
-                                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                                    horizontalAlignment = Alignment.End
+                                CampsiteImageBackground(
+                                    imageRes = thumbnail,
+                                    fallback = Color(0xFFB0B0B0),
+                                    modifier = Modifier.fillMaxSize()
                                 ) {
-                                    Button(onClick = { showEdit = preview }) { Text("  Edit  ", maxLines = 1) }
-                                    Button(onClick = { showLottery = preview }) { Text("Lottery", maxLines = 1) }
-                                    Button(onClick = { showAlert = preview }) { Text(" Alert ", maxLines = 1)}
+                                    CompositionLocalProvider(
+                                        LocalContentColor provides if (thumbnail != null) Color.White else Color.Black
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .padding(horizontal = 20.dp, vertical = 12.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column(
+                                                modifier = Modifier.weight(1f),
+                                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                                            ) {
+                                                Text(preview.name, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.White)
+                                                if (preview.location.isNotBlank()) {
+                                                    Text(preview.location, fontSize = 12.sp, color = Color.White.copy(alpha = 0.9f))
+                                                }
+                                                Text("Entry: " + (preview.startMillis?.let { format.format(Date(it)) } ?: "Not set"), fontSize = 11.sp, color = Color.White.copy(alpha = 0.8f))
+                                                Text("End: " + (preview.endMillis?.let { format.format(Date(it)) } ?: "Not set"), fontSize = 11.sp, color = Color.White.copy(alpha = 0.8f))
+                                            }
+
+                                            Spacer(Modifier.width(8.dp))
+
+                                            Column(
+                                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                                                horizontalAlignment = Alignment.End
+                                            ) {
+                                                Button(
+                                                    onClick = { showEdit = preview },
+                                                    shape = RoundedCornerShape(20.dp),
+                                                    colors = ButtonDefaults.buttonColors(containerColor = colors.primaryButton, contentColor = colors.primaryText),
+                                                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                                                ) { Text("Edit", maxLines = 1, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+
+                                                Button(
+                                                    onClick = { showLottery = preview },
+                                                    shape = RoundedCornerShape(20.dp),
+                                                    colors = ButtonDefaults.buttonColors(containerColor = colors.primaryButton, contentColor = colors.primaryText),
+                                                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                                                ) { Text("Lottery", maxLines = 1, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+
+                                                Button(
+                                                    onClick = { showAlert = preview },
+                                                    shape = RoundedCornerShape(20.dp),
+                                                    colors = ButtonDefaults.buttonColors(containerColor = colors.primaryButton, contentColor = colors.primaryText),
+                                                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                                                ) { Text("Alert", maxLines = 1, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
+                FloatingActionButton(
+                    onClick = { showAdd = true },
+                    containerColor = colors.primaryButton,
+                    contentColor = colors.primaryText,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(16.dp)
+                ) { Icon(Icons.Filled.Add, contentDescription = "Add campsite") }
             }
-            FloatingActionButton(
-                onClick = { showAdd = true },
+
+            // Bottom Navigation Bar
+            Row(
                 modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(16.dp)
-            ) { Icon(Icons.Filled.Add, contentDescription = "Add campsite") }
-        }
-/**
- * Displays Account details for campsite owner and allows user to log out
- * **/
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(Color.LightGray)
-                .navigationBarsPadding()
-                .padding(8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Button(onClick = { }, modifier = Modifier.weight(1f)) { Text("List", maxLines = 1) }
-            Button(onClick = { showQRCodeDialog = true }, modifier = Modifier.weight(1f)) { Text("QR Code", maxLines = 1) }
-            Button(onClick = { showAccountDialog = true }, modifier = Modifier.weight(1f)) { Text("Account", maxLines = 1) }
-            Button(onClick = { navController.navigate("campsiteChat") }, modifier = Modifier.weight(1f)) { Text("Message Entrants", maxLines = 1) }
+                    .fillMaxWidth()
+                    .background(colors.title.copy(alpha = 0.05f))
+                    .navigationBarsPadding()
+                    .padding(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = { },
+                    shape = RoundedCornerShape(20.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = colors.secondaryButton.copy(alpha = 0.4f), contentColor = colors.title),
+                    modifier = Modifier.weight(1f)
+                ) { Text("List", maxLines = 1, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
+
+                Button(
+                    onClick = { showQRCodeDialog = true },
+                    shape = RoundedCornerShape(20.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = colors.secondaryButton.copy(alpha = 0.4f), contentColor = colors.title),
+                    modifier = Modifier.weight(1f)
+                ) { Text("QR Code", maxLines = 1, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
+
+                Button(
+                    onClick = { showAccountDialog = true },
+                    shape = RoundedCornerShape(20.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = colors.secondaryButton.copy(alpha = 0.4f), contentColor = colors.title),
+                    modifier = Modifier.weight(1f)
+                ) { Text("Account", maxLines = 1, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
+
+                Button(
+                    onClick = { navController.navigate("campsiteChat") },
+                    shape = RoundedCornerShape(20.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = colors.secondaryButton.copy(alpha = 0.4f), contentColor = colors.title),
+                    modifier = Modifier.weight(1f)
+                ) { Text("Messages", maxLines = 1, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+            }
         }
     }
 
@@ -625,12 +731,6 @@ fun AddEditCampsite(
     }
 }
 
-/*
-Implementation of owner screen as outlined in the figma. Search screen was used as reference.
-AddCampsite, pickdate, and parts of campsiteOwnerMainScreen UI were developed using claude 3.5 in
-this chat: https://claude.ai/share/140477f9-42aa-4b16-8189-dad57b7d8afb
-Prompt: "How do I change this so that the delete and edit buttons are on top of each other at the end of each card"
- */
 @Composable
 fun LotteryDialog(
     campsite: PreviewCampsite,
@@ -655,22 +755,6 @@ fun LotteryDialog(
     var numLotteryWinners by remember { mutableStateOf(5) }
     var showSetWinnersDialog by remember { mutableStateOf(false) }
     var inputWinnersText by remember { mutableStateOf(numLotteryWinners.toString()) }
-
-    fun startLottery() {
-        val calendar = Calendar.getInstance().apply {
-            timeInMillis = now
-            set(Calendar.HOUR_OF_DAY, 0)
-            set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-        }
-        val sMillis = calendar.timeInMillis
-        calendar.add(Calendar.DAY_OF_YEAR, 7)
-        val eMillis = calendar.timeInMillis
-
-        startMillis = sMillis
-        endMillis = eMillis
-    }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -759,29 +843,14 @@ fun LotteryDialog(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Button(
-                                onClick = { pickDate(context, null) { s ->
-                                    startMillis = s
-                                    val cal = Calendar.getInstance().apply {
-                                        timeInMillis = s
-                                        add(Calendar.DAY_OF_YEAR, 7)
-                                    }
-
-                                } },
+                                onClick = { pickDate(context, null) { s -> startMillis = s } },
                                 modifier = Modifier.weight(1f)
                             ) {
                                 Text("Start date", maxLines = 1, fontSize = 12.sp)
                             }
 
                             Button(
-                                onClick = {
-                                    pickDate(context, null) { s ->
-                                        endMillis = s
-                                        val cal = Calendar.getInstance().apply {
-                                            timeInMillis = s
-                                            add(Calendar.DAY_OF_YEAR, 7)
-                                        }
-                                    }
-                                },
+                                onClick = { pickDate(context, null) { s -> endMillis = s } },
                                 modifier = Modifier.weight(1f)
                             ) {
                                 Text("End date", maxLines = 1, fontSize = 12.sp)
@@ -948,7 +1017,7 @@ fun LotteryDialog(
                                 onClick = {
                                     if (newEntrantName.isNotBlank()) {
                                         val newEntrant = WaitlistEntrant(
-                                            id = java.util.UUID.randomUUID().toString(),
+                                            id = UUID.randomUUID().toString(),
                                             name = newEntrantName,
                                             email = newEntrantEmail.ifBlank { "entrant@example.com" },
                                             joinedMillis = System.currentTimeMillis()
@@ -968,18 +1037,13 @@ fun LotteryDialog(
         }
     }
 }
-/**
- * Prompts :
- * 1. so when Qr code in campsiteOwners is clicked, I want it to display the campsites the campsite owner has with
- * a small button beside each of them with the word generate qr code
- * 2. make a random qr code appear that will appear when generate qr code is clicked,
- * and will link the campsite details to the entrant when scanned**/
+
 @Composable
 fun QRCodeImage(
     data: String,
     modifier: Modifier = Modifier
 ) {
-    androidx.compose.foundation.Canvas(modifier = modifier) {
+    Canvas(modifier = modifier) {
         val sizeInPx = size.minDimension
         val gridCount = 21
         val cellSize = sizeInPx / gridCount
@@ -987,7 +1051,7 @@ fun QRCodeImage(
         drawRect(Color.White)
 
         val hash = data.hashCode()
-        val random = java.util.Random(hash.toLong())
+        val random = Random(hash.toLong())
 
         val grid = Array(gridCount) { BooleanArray(gridCount) }
 
@@ -1017,54 +1081,15 @@ fun QRCodeImage(
                 if (grid[r][c]) {
                     drawRect(
                         color = Color.Black,
-                        topLeft = androidx.compose.ui.geometry.Offset(c * cellSize, r * cellSize),
-                        size = androidx.compose.ui.geometry.Size(cellSize, cellSize)
+                        topLeft = Offset(c * cellSize, r * cellSize),
+                        size = Size(cellSize, cellSize)
                     )
                 }
             }
         }
     }
 }
-/*
-WAITLIST implemented in order to facilitate the lottery function.
-Users/entrants will be allowed to join this waitlist for a period of
-one week until it expires (IMPLEMENTED), at which point 5 (or less,
-depending on waitlist size) random users on the list will be selected,
-on a first-come first-serve basis, to reserve their spots.
 
-They will be notified by the system and are free to turn down these
-requests at will.
-
-The owner can spectate the waiting list as it fills up (or not), right
-until the deadline for waiting list closure. (IMPLEMENTED) Optionally
-they may also be able to see the status of each selected member of the
-waiting list - whether they have signed on or not.
-
-THIS CODE WAS IMPLEMENTED BY GOOGLE GEMINI 11-06-2026, WITH THE PROMPT
-"This button allows a campsite owner to place their campsite into a
-lottery system for a certain period of time. Such a lottery will allow
-for customers/entrants to join a "waiting list" for one week. The owner
-can spectate this waiting list until its expiry."
-
-The following code has been commented and slightly altered from the
-version it provided for the sake of bringing it into line stylistically
-with the rest of our code, and removing any extraneous/redundant features
-it added.
- */
-/*
-                AGENT USED: GEMINI
-                DATE OF PROMPT: 11-06-2026
-                PROMPT USED:
-                "Upon click, basic pop-up window with "ok" button
-                where the owner can reset the value of numLotteryWinners"
-
-                Some modifications have been performed to the original LLM output.
-                 */
-
-/*
-This function was also implemented using the above prompt. It is useful
-for picking a date, as with the "custom" lottery date feature.
- */
 private fun pickDate(context: Context, minDateMillis: Long?, onSelected: (Long) -> Unit) {
     val cal = Calendar.getInstance()
     val dialog = DatePickerDialog(
@@ -1095,11 +1120,10 @@ fun NotificationDialog(
 
     fun CreateAlert(campsite: PreviewCampsite, owner: String, title: String, body: String){
         for(entrant in campsite.waitingList){
-            val alertID = java.util.UUID.randomUUID()
+            val alertID = UUID.randomUUID()
             val newAlert = Alert(alertID.toString(), title, body, entrant.id, owner )
             appState.alerts.addAlert(newAlert)
         }
-
     }
 
     Dialog(
@@ -1148,16 +1172,10 @@ fun NotificationDialog(
                         onDismiss()
                     },
                     modifier = Modifier.fillMaxWidth().padding(5.dp)
-                ){
+                ) {
                     Text("Send Alert")
                 }
-                Spacer(modifier = Modifier.weight(1f))
-
-
             }
         }
-
     }
-
-
 }
