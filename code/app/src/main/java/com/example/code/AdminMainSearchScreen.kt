@@ -51,7 +51,17 @@ import androidx.compose.ui.unit.sp
 import com.example.code.classes.AppState
 import com.example.code.classes.Campsite
 
-data class AdminThemeColors(
+/*
+the following admin theme colors code (light and dark) was
+implemented with the assistance of Google Gemini, prompted
+on November 24th, 2026, in an attempt to bring it more in
+line visually with the main log-in screen
+
+PROMPT: bring it visually into line with the "fancy" theming
+of the main login screen. Only modify code in a way that
+changes the visual output
+ */
+data class AdminThemeColors( // data class that stores the colors
     val gradient: List<Color>,
     val title: Color,
     val subtitle: Color,
@@ -62,7 +72,7 @@ data class AdminThemeColors(
     val secondaryText: Color
 )
 
-private val AdminLightColors = AdminThemeColors(
+private val AdminLightColors = AdminThemeColors( // creating specific palette for light mode
     gradient = listOf(Color(0xFFFFF8EE), Color(0xFFFDE8CB)),
     title = Color(0xFF2B1B17),
     subtitle = Color(0xFF7A6A62),
@@ -73,7 +83,7 @@ private val AdminLightColors = AdminThemeColors(
     secondaryText = Color.White
 )
 
-private val AdminDarkColors = AdminThemeColors(
+private val AdminDarkColors = AdminThemeColors( // another one for dark mode
     gradient = listOf(Color(0xFF101828), Color(0xFF1F2B45)),
     title = Color.White,
     subtitle = Color(0xFF9AA5BD),
@@ -83,6 +93,7 @@ private val AdminDarkColors = AdminThemeColors(
     secondaryButton = Color(0xFFFFE7BF),
     secondaryText = Color(0xFF1A1A1A)
 )
+// END OF GEMINI-ASSISTED CODE
 
 data class Profile(val id: String, val name: String, val role: String)
 data class PendingRemoval(val message: String, val onConfirm: () -> Unit)
@@ -92,13 +103,13 @@ data class PendingRemoval(val message: String, val onConfirm: () -> Unit)
 fun AdminMainSearchScreen(
     navController: NavController,
     appState: AppState,
-    darkTheme: Boolean = isSystemInDarkTheme()
+    darkTheme: Boolean = isSystemInDarkTheme() // added by Gemini 11.24.26
 ) {
     var searchString by remember { mutableStateOf("") }
     var selectedTop by remember { mutableStateOf("Campsites")}
     var pendingRemoval by remember {mutableStateOf<PendingRemoval?>(null)}
 
-    val colors = if (darkTheme) AdminDarkColors else AdminLightColors
+    val colors = if (darkTheme) AdminDarkColors else AdminLightColors // added by Gemini 11.24.26
 
     val campsiteDb = appState.campsites
     val entrantDb = appState.entrants
@@ -130,12 +141,13 @@ fun AdminMainSearchScreen(
         }
     }
 
-    Box(
+    Box( // added by Gemini 11.24.26 / wrapping it in a box in order to have a gradient background
         modifier = Modifier
             .fillMaxSize()
             .background(Brush.horizontalGradient(colors.gradient))
             .systemBarsPadding()
     ) {
+        // added by Gemini 11.24.26 / wrapping search/card screens + menu bar in a column
         Column(modifier = Modifier.fillMaxSize()) {
             TopTabs(selected = selectedTop, onSelect = { selectedTop = it }, colors = colors)
 
@@ -208,6 +220,7 @@ fun AdminMainSearchScreen(
     }
 }
 
+// modified by Gemini 11.24.26 / also affected the theme colors for this one
 @Composable
 fun TopTabs(selected: String, onSelect: (String) -> Unit, colors: AdminThemeColors){
     Row(
@@ -236,6 +249,7 @@ fun TopTabs(selected: String, onSelect: (String) -> Unit, colors: AdminThemeColo
     }
 }
 
+// modified by Gemini 11.24.26 / also affected the theme colors for this one
 @Composable
 fun RemoveButton(text: String = "Remove", onClick: () -> Unit, colors: AdminThemeColors){
     Button(
@@ -267,6 +281,7 @@ fun ConfirmRemoveDialog(message: String, onConfirm: () -> Unit, onDismiss: () ->
     )
 }
 
+// modified by Gemini 11.24.26 / also affected the theme colors for this one
 @Composable
 fun EmptyState(text: String, colors: AdminThemeColors){
     Box(modifier = Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center){
@@ -274,6 +289,7 @@ fun EmptyState(text: String, colors: AdminThemeColors){
     }
 }
 
+// modified by Gemini 11.24.26 / everything with "AdminThemeColors" was modified by Gemini
 @Composable
 fun UserDatabaseTab(
     profiles: List<Profile>,
@@ -320,6 +336,7 @@ fun UserDatabaseTab(
     }
 }
 
+// modified by Gemini 11.24.26 / affected the theme colors for this one
 @Composable
 fun CampsitesTab(
     campsites: List<Campsite>,
@@ -339,6 +356,7 @@ fun CampsitesTab(
     }
 }
 
+// modified by Gemini 11.24.26 / affected the theme colors for this one
 @Composable
 fun CampsiteCard(campsite: Campsite, onRemove: () -> Unit, colors: AdminThemeColors){
     Card(
