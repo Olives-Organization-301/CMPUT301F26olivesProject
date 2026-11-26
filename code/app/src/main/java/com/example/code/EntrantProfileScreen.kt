@@ -65,6 +65,20 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import androidx.compose.runtime.staticCompositionLocalOf
+import android.graphics.Bitmap
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.runtime.LaunchedEffect
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.BinaryBitmap
+import com.google.zxing.DecodeHintType
+import com.google.zxing.MultiFormatReader
+import com.google.zxing.NotFoundException
+import com.google.zxing.RGBLuminanceSource
+import com.google.zxing.common.HybridBinarizer
 
 /** Main Profile Screen
  * I Used Sonnet 5.0 in order to finish the GUI and then integrate the backend
@@ -98,6 +112,7 @@ fun ProfileScreen(
     val recentCampsites = entrant?.getCampsiteLists()?.get("Past_Campsites") ?: emptyList()
     var showEditDialog by remember { mutableStateOf(false) }
     var showPolicyDialog by remember { mutableStateOf(false) }
+    var showQrDialog by remember { mutableStateOf(false) }
     var refreshTick by remember { mutableStateOf(0) }
     val tick = refreshTick   // read so the screen recomposes after a save
 
@@ -138,6 +153,20 @@ fun ProfileScreen(
                 Text(entrant?.email ?: "")
                 Text(entrant?.phoneNumber?.ifBlank { "No phone number" } ?: "")
             }
+
+            // Scan QR Code Box
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .border(3.dp, outline, CircleShape)
+                    .clickable { showQrDialog = true },
+                contentAlignment = Alignment.Center
+            ) {
+                Text("QR", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            }
+
+            Spacer(Modifier.width(8.dp))
 
             // Cancel Box
             Box(
@@ -264,6 +293,19 @@ fun ProfileScreen(
 
     if (showPolicyDialog) {
         PolicyDialog(onDismiss = { showPolicyDialog = false })
+    }
+
+    // Scan a campsite's QR code, then open that campsite's details
+    if (showQrDialog) {
+        QrCodeScanDialog(
+            appState = appState,
+            onCampsiteFound = { campsiteID ->
+                showQrDialog = false
+                appState.viewingCampsiteID = campsiteID
+                navController.navigate("campsiteDetails")
+            },
+            onDismiss = { showQrDialog = false }
+        )
     }
 }
 
@@ -638,4 +680,169 @@ private fun loadImage(context: Context, uri: Uri, maxSize: Int = 512): ImageBitm
 } catch (e: Exception) {
     android.util.Log.e("ProfilePicture", "Couldn't load profile picture $uri", e)
     null
+}
+
+
+/* ---------------------------------------------------------------------------------------------
+ * QR CODE SCANNING (entrants only)
+ * The entrant picks an image of a campsite's QR code; ZXing reads the text in it, the text is
+ * matched to a campsite (by ID, or by name for older codes), and the entrant is taken to that
+ * campsite's details.
+ * Conversation (All 4 functions underneath: https://claude.ai/share/6448aa90-1673-4617-9624-eac3afb21ef4)
+ * ------------------------------------------------------------------------------------------- */
+
+/**
+ * For tests only: when set, tapping the square uses this image instead of opening the system
+ * photo picker (tests can't tap inside the picker, it's another app). Null in the real app.
+ */
+val LocalQrTestImage = staticCompositionLocalOf<(() -> Bitmap?)?> { null }
+
+/** Pop-up with a square input field: tap it to choose a QR code image from the phone. */
+@RequiresApi(Build.VERSION_CODES.O)
+@Composable
+fun QrCodeScanDialog(
+    appState: AppState,
+    onCampsiteFound: (campsiteID: String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    // What was picked: a Uri from the photo picker, or a Bitmap from LocalQrTestImage
+    var picked by remember { mutableStateOf<Any?>(null) }
+    var bitmap by remember { mutableStateOf<Bitmap?>(null) }
+    var foundCampsite by remember { mutableStateOf<Campsite?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var scanning by remember { mutableStateOf(false) }
+
+    // System photo picker (no storage permission needed)
+    val pickImage = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia()
+    ) { uri -> if (uri != null) picked = uri }
+    val testImage = LocalQrTestImage.current
+    val openPicker: () -> Unit = {
+        if (testImage != null) {
+            picked = testImage()
+        } else {
+            pickImage.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+        }
+    }
+
+    // Load + decode off the main thread whenever a new image is picked
+    LaunchedEffect(picked) {
+        val choice = picked ?: return@LaunchedEffect
+        scanning = true
+        error = null
+        foundCampsite = null
+        val (bmp, text) = withContext(Dispatchers.Default) {
+            val loaded = when (choice) {
+                is Uri -> loadScaledBitmap(context, choice)
+                is Bitmap -> choice
+                else -> null
+            }
+            loaded to loaded?.let { decodeQrCode(it) }
+        }
+        bitmap = bmp
+        when {
+            bmp == null -> error = "Couldn't open that image."
+            text == null -> error = "No QR code found in that image."
+            else -> {
+                foundCampsite = findCampsiteForQr(appState, text)
+                if (foundCampsite == null) error = "That QR code isn't for a campsite in this app."
+            }
+        }
+        scanning = false
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Scan QR Code") },
+        text = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                // Square input field
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(1f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .border(2.dp, MaterialTheme.colorScheme.onSurface, RoundedCornerShape(12.dp))
+                        .clickable { openPicker() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    val bmp = bitmap
+                    if (bmp != null) {
+                        Image(
+                            bitmap = bmp.asImageBitmap(),
+                            contentDescription = "Selected QR code",
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.fillMaxSize().padding(8.dp)
+                        )
+                    } else {
+                        Text(
+                            if (scanning) "Reading image…" else "Tap to choose a QR code image",
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(16.dp)
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+                when {
+                    scanning -> Text("Scanning…")
+                    error != null -> Text(error!!, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center)
+                    foundCampsite != null -> Text("Found: ${foundCampsite!!.getName()}", fontWeight = FontWeight.Bold)
+                }
+                if (bitmap != null) {
+                    TextButton(onClick = { openPicker() }) { Text("Choose a different image") }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = foundCampsite != null && !scanning,
+                onClick = { foundCampsite?.let { onCampsiteFound(it.campsiteID) } }
+            ) { Text("View Campsite") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
+/** Loads the picked image, shrunk so its longest side is about [maxSide] px (keeps decoding fast). */
+private fun loadScaledBitmap(context: Context, uri: Uri, maxSide: Int = 1024): Bitmap? = runCatching {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+    var sample = 1
+    while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= maxSide) sample *= 2
+    val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+    context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, opts) }
+}.getOrNull()
+
+/** Reads the text stored in a QR code image with ZXing. Returns null if there's no readable QR code. */
+fun decodeQrCode(bitmap: Bitmap): String? {
+    val width = bitmap.width
+    val height = bitmap.height
+    val pixels = IntArray(width * height)
+    bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+    val binary = BinaryBitmap(HybridBinarizer(RGBLuminanceSource(width, height, pixels)))
+    val hints = mapOf(
+        DecodeHintType.POSSIBLE_FORMATS to listOf(BarcodeFormat.QR_CODE),
+        DecodeHintType.TRY_HARDER to true
+    )
+    return try {
+        MultiFormatReader().decode(binary, hints).text
+    } catch (e: NotFoundException) {
+        null
+    } catch (e: Exception) {
+        null
+    }
+}
+
+/** Matches QR text to a campsite: by campsite ID first, then by exact name. */
+@RequiresApi(Build.VERSION_CODES.O)
+fun findCampsiteForQr(appState: AppState, qrText: String): Campsite? {
+    val text = qrText.trim()
+    val campsites = appState.campsites.campsites
+    return campsites.firstOrNull { it.campsiteID == text }
+        ?: campsites.firstOrNull { it.getName() == text }
 }
