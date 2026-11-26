@@ -190,14 +190,15 @@ fun MainSearchScreen(
                     ) {
                         // Thumbnail fills the card (desaturated + black gradient), info on top at the start
                         // Turn Card into Campsite background for prettier card
-                        val thumbnail = campsiteThumbnailRes(campsite)
+                        val thumbnail = campsite.thumbnailPhoto()
                         CampsiteImageBackground(
-                            imageRes = thumbnail,
+                            image = thumbnail,
+                            defaultImage = R.drawable.campsite_thumbnail,
                             fallback = Color(0xFFB0B0B0),
                             modifier = Modifier.fillMaxSize()
                         ) {
                             CompositionLocalProvider(
-                                LocalContentColor provides if (thumbnail != null) Color.White else Color.Black
+                                LocalContentColor provides Color.White
                             ) {
                                 Column(
                                     modifier = Modifier

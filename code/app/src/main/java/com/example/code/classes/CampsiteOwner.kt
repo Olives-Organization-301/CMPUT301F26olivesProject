@@ -1,14 +1,21 @@
 package com.example.code.classes
+
 import android.os.Build
 import androidx.annotation.RequiresApi
 import com.example.code.DatabaseCampsites
+
 /** CampsiteOwner Class used to represent the campsite Owner Actor
- *
  */
 class CampsiteOwner(
     username: String = "",
     email: String = "",
-    userID: String = ""
+    userID: String = "",
+    var phoneNumber: String = "",
+    var description: String = "",
+    var name: String = "",
+    var dateOfBirth: String = "",
+    var wantsNotifications: Boolean = true,
+    var profileImage: String = "",
 ): User(username, email, userID) {
 
     // Have a list of Campsites
@@ -21,5 +28,4 @@ class CampsiteOwner(
     fun viewCampsites(databaseCampsites: DatabaseCampsites, onResult: (List<Campsite>) -> Unit) {
         databaseCampsites.getCampsitesForOwner(getUserID(), onResult)
     }
-
 }

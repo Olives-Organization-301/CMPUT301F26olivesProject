@@ -68,7 +68,9 @@ class Campsite(
         return if (others > 0) "$first (+$others more)" else first
     }
     fun getThumbnailImage(): String? = thumbnailImage
+    fun setThumbnailImage(img: String?) { thumbnailImage = img }
     fun getDetailsImage(): String? = detailsImage
+    fun setDetailsImage(img: String?) { detailsImage = img }
     fun getReviews(): Map<String, List<String>> = reviews
     fun getName(): String = name
     fun getMaxOccupancy(): List<Int> = maxOccupancy

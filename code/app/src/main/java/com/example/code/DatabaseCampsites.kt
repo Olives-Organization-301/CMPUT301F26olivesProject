@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateListOf
 import com.example.code.classes.Campsite
 import com.example.code.classes.Coordinates
 import com.google.firebase.Firebase
+import com.google.android.gms.tasks.Task
 import com.google.android.gms.tasks.Tasks
 import com.google.firebase.firestore.DocumentReference
 import com.google.firebase.firestore.DocumentSnapshot
@@ -29,6 +30,7 @@ import kotlin.random.Random
 class DatabaseCampsites {
     private val db = Firebase.firestore
     private val campsitesRef = db.collection("campsites")
+    private val imagesRef = db.collection("images")
     private val _campsites = mutableStateListOf<Campsite>()
 
     val campsites: List<Campsite> get() = _campsites
@@ -162,8 +164,8 @@ class DatabaseCampsites {
                 price = price,
                 rating = rating,
                 coordinates = coords,
-                thumbnailImage = doc.getString("thumbnailImage"),
-                detailsImage = doc.getString("detailsImage"),
+                thumbnailImage = doc.get("thumbnailImage") as? String,
+                detailsImage = doc.get("detailsImage") as? String,
                 lotteryStartDate = start,
                 lotteryEndDate = end,
                 vacationStartTimes = vacationTimes.toMutableList(),
@@ -234,16 +236,59 @@ class DatabaseCampsites {
             }
     }
 
-    fun addCampsite(campsite: Campsite) {
-        try {
-            if (!_campsites.any { it.campsiteID == campsite.campsiteID }) {
-                _campsites.add(campsite)
+    fun addCampsite(campsite: Campsite): Task<Void> {
+        if (_campsites.none { it.campsiteID == campsite.campsiteID }) {
+            _campsites.add(campsite)
+        }
+        val batch = db.batch()
+        val campsiteID = campsite.campsiteID
+        batch.set(campsitesRef.document(campsiteID), campsite.toMap())
+        campsite.detailsPhoto()?.takeIf { it.isNotBlank() }?.let { photo ->
+            batch.set(
+                campsiteImageRef(campsiteID),
+                campsiteImageRecord(campsiteID, campsite.getOwnerID(), campsite.getName(), photo)
+            )
+        }
+        return batch.commit()
+            .addOnFailureListener { _campsites.remove(campsite) }
+    }
+
+    /** A null image leaves both fields untouched. An empty image removes the saved photo. */
+    fun updateCampsiteListing(campsiteID: String, name: String, image: String?): Task<Void> {
+        val campsiteRef = campsitesRef.document(campsiteID)
+        val imageRef = campsiteImageRef(campsiteID)
+        return db.runTransaction<Void> { transaction ->
+            val campsite = transaction.get(campsiteRef)
+            val fields = mutableMapOf<String, Any?>("name" to name)
+            if (image != null) {
+                fields["detailsImage"] = image.ifBlank { null }
+                fields["thumbnailImage"] = image.ifBlank { null }
             }
-            campsitesRef.document(campsite.campsiteID).set(campsite.toMap())
-        } catch (e: Exception) {
-            // Catch exception
+            val photo = image ?: (campsite.get("detailsImage") as? String)
+                ?.takeIf { it.isNotBlank() } ?: (campsite.get("thumbnailImage") as? String)
+            transaction.update(campsiteRef, fields)
+            if (!photo.isNullOrBlank()) {
+                val ownerID = (campsite.get("ownerID") ?: campsite.get("OwnerID")
+                    ?: campsite.get("ownerId") ?: campsite.get("owner_id"))?.toString().orEmpty()
+                transaction.set(imageRef, campsiteImageRecord(campsiteID, ownerID, name, photo))
+            } else if (image != null) {
+                transaction.delete(imageRef)
+            }
+            null
         }
     }
+
+    private fun campsiteImageRef(campsiteID: String) = imagesRef.document("campsite_$campsiteID")
+
+    private fun campsiteImageRecord(campsiteID: String, ownerID: String, name: String, photo: String) =
+        mapOf(
+            "campsiteID" to campsiteID,
+            "campsiteownerID" to ownerID,
+            "campsiteName" to name,
+            "campsiteImage" to photo,
+            "imageData" to photo,
+            "timestamp" to System.currentTimeMillis()
+        )
 
     fun updateCampsiteName(campsite: Campsite, newName: String) {
         try {
@@ -369,7 +414,10 @@ class DatabaseCampsites {
     fun deleteCampsite(campsite: Campsite) {
         try {
             _campsites.removeAll { it.campsiteID == campsite.campsiteID }
-            campsitesRef.document(campsite.campsiteID).delete()
+            db.batch()
+                .delete(campsitesRef.document(campsite.campsiteID))
+                .delete(campsiteImageRef(campsite.campsiteID))
+                .commit()
         } catch (e: Exception) {
             // Catch exception
         }
