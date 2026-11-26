@@ -13,7 +13,8 @@ class ReviewReply(
     val parentReviewID: String,
     val entrantID: String,
     val campsiteID: String,
-    var contents: String = ""
+    var contents: String = "",
+    val authorName: String = ""
 ) {
 
 }
