@@ -4,6 +4,7 @@ package com.example.code
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,24 +14,29 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -39,33 +45,71 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.sp
 import com.example.code.classes.AppState
 import com.example.code.classes.Campsite
 
-/** # Search Screen
- *  Implementation of the Admins' Main Screen as seen in the Figma.
- *
- *  Prototype was gained from this conversation with Claude Sonnet 5.0:
- *  https://claude.ai/chat/fa52c57a-03b0-486b-b988-87d2f36ff18a
- *  Prompt: "I want to change this UI code to make it look like this--how do I do that?"
- *  Images attacthed: Figma write ups and beta code done in production
+/*
+the following admin theme colors code (light and dark) was
+implemented with the assistance of Google Gemini, prompted
+on November 24th, 2026, in an attempt to bring it more in
+line visually with the main log-in screen
+
+PROMPT: bring it visually into line with the "fancy" theming
+of the main login screen. Only modify code in a way that
+changes the visual output
  */
-// https://claude.ai/share/cdce4c2a-2c1a-4c36-895d-ad4fb811582b
-// one of the prompts used : now when User Database is clicked, I want both collections "Entrants" and
-// "CampsiteOwners" displayed as how the logic for displaying collection "campsites" were in Admin
+data class AdminThemeColors( // data class that stores the colors
+    val gradient: List<Color>,
+    val title: Color,
+    val subtitle: Color,
+    val footer: Color,
+    val primaryButton: Color,
+    val primaryText: Color,
+    val secondaryButton: Color,
+    val secondaryText: Color
+)
+
+private val AdminLightColors = AdminThemeColors( // creating specific palette for light mode
+    gradient = listOf(Color(0xFFFFF8EE), Color(0xFFFDE8CB)),
+    title = Color(0xFF2B1B17),
+    subtitle = Color(0xFF7A6A62),
+    footer = Color(0xFF1A1A1A),
+    primaryButton = Color(0xFF45238A),
+    primaryText = Color.White,
+    secondaryButton = Color(0xFF6B49B0),
+    secondaryText = Color.White
+)
+
+private val AdminDarkColors = AdminThemeColors( // another one for dark mode
+    gradient = listOf(Color(0xFF101828), Color(0xFF1F2B45)),
+    title = Color.White,
+    subtitle = Color(0xFF9AA5BD),
+    footer = Color.White,
+    primaryButton = Color(0xFFFFB84D),
+    primaryText = Color(0xFF1A1A1A),
+    secondaryButton = Color(0xFFFFE7BF),
+    secondaryText = Color(0xFF1A1A1A)
+)
+// END OF GEMINI-ASSISTED CODE
 
 data class Profile(val id: String, val name: String, val role: String)
 data class PendingRemoval(val message: String, val onConfirm: () -> Unit)
 
-// From Gabe; I edited Campsite Details in order to change the dates of the campsites, so it requires this API (Sorry)
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
-fun AdminMainSearchScreen(navController: NavController, appState: AppState) {
+fun AdminMainSearchScreen(
+    navController: NavController,
+    appState: AppState,
+    darkTheme: Boolean = isSystemInDarkTheme() // added by Gemini 11.24.26
+) {
     var searchString by remember { mutableStateOf("") }
     var selectedTop by remember { mutableStateOf("Campsites")}
     var pendingRemoval by remember {mutableStateOf<PendingRemoval?>(null)}
+
+    val colors = if (darkTheme) AdminDarkColors else AdminLightColors // added by Gemini 11.24.26
 
     val campsiteDb = appState.campsites
     val entrantDb = appState.entrants
@@ -88,7 +132,7 @@ fun AdminMainSearchScreen(navController: NavController, appState: AppState) {
         pendingRemoval = PendingRemoval(message, action)
     }
 
-    androidx.compose.runtime.LaunchedEffect(selectedTop) {
+    LaunchedEffect(selectedTop) {
         if (selectedTop == "Campsites") {
             campsiteDb.fetchAllCampsites { _ -> }
         } else if (selectedTop == "User Database") {
@@ -97,70 +141,74 @@ fun AdminMainSearchScreen(navController: NavController, appState: AppState) {
         }
     }
 
-    // Column Wrapping the Search/Card Screens and Menu bar
-    Column(modifier = Modifier.fillMaxSize()) {
-        TopTabs(selected = selectedTop, onSelect = { selectedTop = it } )
+    Box( // added by Gemini 11.24.26 / wrapping it in a box in order to have a gradient background
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Brush.horizontalGradient(colors.gradient))
+            .systemBarsPadding()
+    ) {
+        // added by Gemini 11.24.26 / wrapping search/card screens + menu bar in a column
+        Column(modifier = Modifier.fillMaxSize()) {
+            TopTabs(selected = selectedTop, onSelect = { selectedTop = it }, colors = colors)
 
-        Box(modifier = Modifier.weight(1f)){
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-            ) {
-                //search bar
-                TextField(
-                    value = searchString,
-                    onValueChange = { searchString = it },
-                    placeholder = { Text("Search for a campsite") },
-                    leadingIcon = { Icon(Icons.Default.Menu, contentDescription = "Sidebar") },
-                    shape = RoundedCornerShape(24.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                val query = searchString.trim()
-
-                when (selectedTop) {
-                    "User Database" -> UserDatabaseTab(
-                        profiles = profiles.filter { it.name.contains(query, ignoreCase = true) },
-                        onRemoveProfile = { profile ->
-                            askRemove("Remove \"${profile.name}\" for violating app policy?") {
-                                deleteProfile(profile)
-                            }
-                        },
-                        onRemoveOwner = { profile ->
-                            askRemove("Remove \"${profile.name}\" for violating app policy?") {
-                                deleteProfile(profile)
-                            }
-                        },
-                        modifier = Modifier.weight(1f)
+            Box(modifier = Modifier.weight(1f)){
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 20.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    // search bar
+                    TextField(
+                        value = searchString,
+                        onValueChange = { searchString = it },
+                        placeholder = { Text("Search for a campsite", color = colors.subtitle) },
+                        leadingIcon = { Icon(Icons.Default.Menu, contentDescription = "Sidebar", tint = colors.title) },
+                        shape = RoundedCornerShape(28.dp),
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = colors.title.copy(alpha = 0.06f),
+                            unfocusedContainerColor = colors.title.copy(alpha = 0.04f),
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                            focusedTextColor = colors.title,
+                            unfocusedTextColor = colors.title
+                        ),
+                        modifier = Modifier.fillMaxWidth()
                     )
 
-                    "Campsites" -> CampsitesTab(
-                        campsites = campsiteDb.campsites.filter {it.getName().contains(query, ignoreCase = true)},
-                        onRemove = { campsite ->
-                            askRemove("Remove the campsite \"${campsite.getName()}\"?"){
-                                campsiteDb.deleteCampsite(campsite)
-                            }
-                        },
-                        modifier = Modifier.weight(1f)
+                    val query = searchString.trim()
 
-                    )
+                    when (selectedTop) {
+                        "User Database" -> UserDatabaseTab(
+                            profiles = profiles.filter { it.name.contains(query, ignoreCase = true) },
+                            onRemoveProfile = { profile ->
+                                askRemove("Remove \"${profile.name}\" for violating app policy?") {
+                                    deleteProfile(profile)
+                                }
+                            },
+                            onRemoveOwner = { profile ->
+                                askRemove("Remove \"${profile.name}\" for violating app policy?") {
+                                    deleteProfile(profile)
+                                }
+                            },
+                            colors = colors,
+                            modifier = Modifier.weight(1f)
+                        )
 
+                        "Campsites" -> CampsitesTab(
+                            campsites = campsiteDb.campsites.filter {it.getName().contains(query, ignoreCase = true)},
+                            onRemove = { campsite ->
+                                askRemove("Remove the campsite \"${campsite.getName()}\"?"){
+                                    campsiteDb.deleteCampsite(campsite)
+                                }
+                            },
+                            colors = colors,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
             }
         }
-
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(Color(0xFFF3EDF7))
-                .navigationBarsPadding()
-                .padding(vertical = 8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text("", fontSize = 12.sp)
-        }
-
     }
 
     pendingRemoval?.let { pending ->
@@ -170,37 +218,51 @@ fun AdminMainSearchScreen(navController: NavController, appState: AppState) {
             onDismiss = { pendingRemoval = null }
         )
     }
-
-
-
 }
 
+// modified by Gemini 11.24.26 / also affected the theme colors for this one
 @Composable
-fun TopTabs(selected: String, onSelect: (String) -> Unit ){
+fun TopTabs(selected: String, onSelect: (String) -> Unit, colors: AdminThemeColors){
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ){
         listOf("User Database", "Campsites").forEach { tab ->
+            val isSelected = selected == tab
             Button(
                 onClick = { onSelect(tab) },
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(8.dp),
-                contentPadding = PaddingValues(horizontal = 4.dp)
-            ){ Text(tab, maxLines = 1, fontSize = 12.sp)}
+                modifier = Modifier
+                    .weight(1f)
+                    .height(48.dp),
+                shape = RoundedCornerShape(24.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isSelected) colors.primaryButton else colors.secondaryButton.copy(alpha = 0.3f),
+                    contentColor = if (isSelected) colors.primaryText else colors.title
+                ),
+                contentPadding = PaddingValues(horizontal = 8.dp)
+            ){
+                Text(tab, maxLines = 1, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            }
         }
     }
 }
 
+// modified by Gemini 11.24.26 / also affected the theme colors for this one
 @Composable
-fun RemoveButton(text: String = "Remove", onClick: () -> Unit){
+fun RemoveButton(text: String = "Remove", onClick: () -> Unit, colors: AdminThemeColors){
     Button(
         onClick = onClick,
-        shape = RoundedCornerShape(8.dp),
-        contentPadding = PaddingValues(horizontal = 12.dp),
-    ){ Text(text, maxLines = 1, fontSize = 12.sp)}
+        shape = RoundedCornerShape(20.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = colors.primaryButton,
+            contentColor = colors.primaryText
+        ),
+        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+    ){
+        Text(text, maxLines = 1, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+    }
 }
 
 @Composable
@@ -219,114 +281,126 @@ fun ConfirmRemoveDialog(message: String, onConfirm: () -> Unit, onDismiss: () ->
     )
 }
 
+// modified by Gemini 11.24.26 / also affected the theme colors for this one
 @Composable
-fun EmptyState(text: String){
+fun EmptyState(text: String, colors: AdminThemeColors){
     Box(modifier = Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center){
-        Text(text)
+        Text(text, color = colors.subtitle, fontSize = 14.sp)
     }
 }
 
+// modified by Gemini 11.24.26 / everything with "AdminThemeColors" was modified by Gemini
 @Composable
 fun UserDatabaseTab(
     profiles: List<Profile>,
     onRemoveProfile: (Profile) -> Unit,
     onRemoveOwner: (Profile) -> Unit,
+    colors: AdminThemeColors,
     modifier: Modifier = Modifier
 ){
     LazyColumn(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(12.dp),
-        contentPadding = PaddingValues(vertical = 12.dp)
+        contentPadding = PaddingValues(vertical = 4.dp)
     ) {
-        if(profiles.isEmpty()) item {EmptyState("No profiles found")}
+        if(profiles.isEmpty()) item {EmptyState("No profiles found", colors)}
         items(profiles) { profile ->
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(24.dp)
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = colors.title.copy(alpha = 0.05f)
+                )
             ){
                 Row(
-                    modifier = Modifier.padding(12.dp),
+                    modifier = Modifier.padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ){
-                    Spacer(Modifier.width(12.dp))
+                    Spacer(Modifier.width(4.dp))
                     Column(modifier = Modifier.weight(1f)){
-                        Text(profile.name)
-                        Text(profile.role, fontSize = 12.sp)
+                        Text(profile.name, fontWeight = FontWeight.Bold, color = colors.title, fontSize = 16.sp)
+                        Text(profile.role, fontSize = 12.sp, color = colors.subtitle)
                     }
                     Column(
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                         horizontalAlignment = Alignment.End
                     ){
-                        RemoveButton("Remove"){ onRemoveProfile(profile)}
+                        RemoveButton("Remove", onClick = { onRemoveProfile(profile) }, colors = colors)
                         if(profile.role == "Campsite Owner"){
-                            RemoveButton("Policy Violation") { onRemoveOwner(profile)}
+                            RemoveButton("Policy Violation", onClick = { onRemoveOwner(profile) }, colors = colors)
                         }
                     }
                 }
             }
-
         }
     }
 }
 
+// modified by Gemini 11.24.26 / affected the theme colors for this one
 @Composable
 fun CampsitesTab(
     campsites: List<Campsite>,
     onRemove: (Campsite) -> Unit,
+    colors: AdminThemeColors,
     modifier: Modifier = Modifier
 ){
     LazyColumn(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(12.dp),
-        contentPadding = PaddingValues(vertical = 12.dp)
+        contentPadding = PaddingValues(vertical = 4.dp)
     ){
-        if(campsites.isEmpty()) item {EmptyState("No campsites found")}
+        if(campsites.isEmpty()) item {EmptyState("No campsites found", colors)}
         items(campsites){ campsite ->
-            CampsiteCard(campsite, onRemove = { onRemove(campsite)})
+            CampsiteCard(campsite, onRemove = { onRemove(campsite)}, colors = colors)
         }
     }
 }
 
+// modified by Gemini 11.24.26 / affected the theme colors for this one
 @Composable
-fun CampsiteCard(campsite: Campsite,  onRemove: () -> Unit){
+fun CampsiteCard(campsite: Campsite, onRemove: () -> Unit, colors: AdminThemeColors){
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(130.dp),
-        shape = RoundedCornerShape(24.dp)
+            .height(135.dp),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFB0B0B0))
     ){
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ){
-            Box(
-                modifier = Modifier
-                    .size(80.dp)
-                    .background(Color.DarkGray, RoundedCornerShape(16.dp))
-            )
-            Spacer(Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)){
-                Text(campsite.getName(), fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                val sub = campsite.getMainCoordinates()?.getCity() ?: "" // I Changed getfirstSubdivision to get City
-                val country = campsite.getMainCoordinates()?.getCountry() ?: "" // Also get country now
-                val locText = if (sub.isNotBlank()) "$sub, $country" else country
-                Text(locText, fontSize = 12.sp, color = Color.Gray)
-                if (campsite.getOwnerID().isNotBlank()) {
-                    Text("Owner ID: ${campsite.getOwnerID()}", fontSize = 11.sp, color = Color.DarkGray)
+        val thumbnail = campsiteThumbnailRes(campsite)
+        CampsiteImageBackground(
+            imageRes = thumbnail,
+            fallback = Color(0xFFB0B0B0),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            CompositionLocalProvider(
+                LocalContentColor provides if (thumbnail != null) Color.White else Color.Black
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 20.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Text(campsite.getName(), fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        val sub = campsite.getMainCoordinates()?.getCity() ?: ""
+                        val country = campsite.getMainCoordinates()?.getCountry() ?: ""
+                        val locText = if (sub.isNotBlank()) "$sub, $country" else country
+                        if (locText.isNotBlank()) {
+                            Text(locText, fontSize = 12.sp, color = Color.White.copy(alpha = 0.9f))
+                        }
+                        if (campsite.getOwnerID().isNotBlank()) {
+                            Text("Owner ID: ${campsite.getOwnerID()}", fontSize = 11.sp, color = Color.White.copy(alpha = 0.8f))
+                        }
+                        Text("Price: \$${campsite.getPrice()} | Max Occupancy: ${campsite.getTotalOccupancy()}", fontSize = 11.sp, color = Color.White.copy(alpha = 0.8f))
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    RemoveButton("Remove", onClick = onRemove, colors = colors)
                 }
-                // Since I Changed Max Occupancy as how many spots there were in a day, total occupancy should just be the sum of it
-                Text("Price: \$${campsite.getPrice()} | Max Occupancy: ${campsite.getTotalOccupancy()}", fontSize = 11.sp, color = Color.DarkGray)
             }
-            RemoveButton(onClick = onRemove)
         }
     }
 }
-
-
-
-
-
-
-
