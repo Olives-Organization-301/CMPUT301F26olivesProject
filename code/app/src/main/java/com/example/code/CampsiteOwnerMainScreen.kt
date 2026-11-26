@@ -306,7 +306,7 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
             Button(onClick = { }, modifier = Modifier.weight(1f)) { Text("List", maxLines = 1) }
             Button(onClick = { showQRCodeDialog = true }, modifier = Modifier.weight(1f)) { Text("QR Code", maxLines = 1) }
             Button(onClick = { navController.navigate("campsiteOwnerProfileScreen") }, modifier = Modifier.weight(1f)) { Text("Account", maxLines = 1) }
-            Button(onClick = { navController.navigate("campsiteChat") }, modifier = Modifier.weight(1f)) { Text("Message Entrants", maxLines = 1) }
+            Button(onClick = { navController.navigate("campsiteChat") }, modifier = Modifier.weight(1f)) { Text("Messages", maxLines = 1) }
         }
     }
 
