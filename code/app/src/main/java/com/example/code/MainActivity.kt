@@ -12,14 +12,27 @@ import com.example.code.ui.theme.CodeTheme
 
 @RequiresApi(Build.VERSION_CODES.O)
 class MainActivity : ComponentActivity() {
+    companion object {
+        var isTestMode = false
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+<<<<<<< Updated upstream
         setContent {
             CodeTheme {
                 val appState = remember { AppState() }
                 LotteryNotificationEffect(appState)
                 CampsiteNavController(appState)
+=======
+        if (!isTestMode) {
+            setContent {
+                CodeTheme {
+                    val campsiteDatabase = remember { mutableStateListOf<Campsite>() }
+                    CampsiteNavController(campsiteDatabase)
+                }
+>>>>>>> Stashed changes
             }
         }
     }

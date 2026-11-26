@@ -57,8 +57,15 @@ fun CampsiteNavController(
         }
 
         // CAMPSITE OWNER SCREENS
+<<<<<<< Updated upstream
         composable("campsiteOwnerMainScreen") { CampsiteOwnerMainScreen(navController, appState) }
-        composable("campsiteChat") { CampsiteChatScreen(navController) }
+        composable("campsiteChat") { CampsiteChatScreen(navController, appState) }
+=======
+        composable("campsiteOwnerLogin") { CampsiteOwnerLoginScreen(navController) }
+        composable("campsiteOwnerMainScreen"){ CampsiteOwnerMainScreen(navController) }
+        composable("campsiteChat"){CampsiteChatScreen(navController)}
+
+>>>>>>> Stashed changes
         // ADMIN SCREENS
         composable("AdminMainSearchScreen") { AdminMainSearchScreen(navController, appState) }
     }

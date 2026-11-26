@@ -46,6 +46,7 @@ class Campsite(
      * Reviews:             A Map of Reviews and their Corresponding replies, stored as IDs.
      */
     private var description: String = ""
+    private var tags: MutableList<String> = mutableListOf()
     private var waitingList = mutableListOf<String>()
     private var finalList = mutableListOf<String>() // Use Entrant IDs instead
     // Lottery winners per location: "0" -> entrant IDs who won location 1, "1" -> location 2, ...
@@ -68,6 +69,9 @@ class Campsite(
         return if (others > 0) "$first (+$others more)" else first
     }
     fun getThumbnailImage(): String? = thumbnailImage
+    fun setThumbnailImage(image: String?) { thumbnailImage = image }
+    fun getTags(): List<String> = tags
+    fun setTags(values: List<String>) { tags = values.toMutableList() }
     fun getDetailsImage(): String? = detailsImage
     fun getReviews(): Map<String, List<String>> = reviews
     fun getName(): String = name
@@ -187,6 +191,9 @@ class Campsite(
         "lotteryStartDate" to lotteryStartDate?.toString(),
         "lotteryEndDate" to lotteryEndDate?.toString(),
         "detailsImage" to detailsImage,
+        "description" to description,
+        "tags" to tags,
+        "rules" to rules,
         // Stored as ISO-8601 strings, since Firestore can't store LocalDateTime or Pair
         "vacationStartTimes" to vacationStartTimes.map { (start, end) ->
             mapOf("start" to start.toString(), "end" to end.toString())

@@ -192,6 +192,10 @@ class DatabaseCampsites {
                         if (key is String && ids != null) key to ids else null
                     }?.toMap()
                 if (winners != null) campsite.setLocationWinners(winners)
+                doc.getString("description")?.let { campsite.setDescription(it) }
+                (doc.get("tags") as? List<*>)?.filterIsInstance<String>()?.let { campsite.setTags(it) }
+                val rulesList = (doc.get("rules") as? List<*>)?.filterIsInstance<String>()
+                if (rulesList != null) campsite.setRules(rulesList)
             }
         } catch (e: Exception) {
             android.util.Log.e("DB", "Failed to parse document ${doc.id}", e)

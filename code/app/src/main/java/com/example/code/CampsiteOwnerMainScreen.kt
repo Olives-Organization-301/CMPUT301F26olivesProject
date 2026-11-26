@@ -22,8 +22,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -129,7 +131,8 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
                                                 endMillis = null,
                                                 startMillisRegis = null,
                                                 endMillisRegis = null,
-                                                waitingList = emptyList()
+                                                waitingList = emptyList(),
+                                                rules = c.getRules()
                                             )
                                         )
                                     }
@@ -150,7 +153,8 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
                                                 endMillis = null,
                                                 startMillisRegis = null,
                                                 endMillisRegis = null,
-                                                waitingList = emptyList()
+                                                waitingList = emptyList(),
+                                                rules = c.getRules()
                                             )
                                         )
                                     }
@@ -464,6 +468,10 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
                         lotteryStartDate = LocalDateTime.now(),
                         lotteryEndDate = LocalDateTime.now().plusDays(7)
                     )
+                    realCampsite.setRules(newCampsite.rules)
+                    realCampsite.setDescription(newCampsite.description)
+                    realCampsite.setTags(newCampsite.tags)
+                    realCampsite.setThumbnailImage(newCampsite.imageUrl)
                     appState.campsites.addCampsite(realCampsite)
                 }
                 showAdd = false
@@ -479,6 +487,10 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
             onSave = { updated ->
                 val i = previewCampsites.indexOfFirst { it === current }
                 if (i >= 0) previewCampsites[i] = updated
+                appState.campsites.campsites.firstOrNull { it.getName() == current.name }?.let { site ->
+                    site.setRules(updated.rules)
+                    appState.campsites.addCampsite(site)
+                }
                 showEdit = null
             }
         )
@@ -492,6 +504,10 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
                 val i = previewCampsites.indexOfFirst { it === current }
                 if (i >= 0) previewCampsites[i] = updated
                 showLottery = null
+            },
+            onMessageEntrant = {
+                showLottery = null
+                navController.navigate("campsiteChat")
             }
         )
     }
@@ -506,6 +522,14 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
     }
 }
 
+/** Popup form for campsite owners to add or edit campsite details.
+ *  Captures name, location, description and amenities, maximum occupancy, map coordinates,
+ *  optional image URL, tags, booking dates, registration dates, and rules and policies.
+ *
+ *  US 02.01.02: As a campsite owner, I want to provide campsite details including name,
+ *  location, description (amenities), maximum occupancy, map location, optional image, and tags.
+ *  Implemented with Android Studio AI Agent
+ */
 @Composable
 fun AddEditCampsite(
     title: String,
@@ -515,6 +539,13 @@ fun AddEditCampsite(
 ) {
     var name by remember { mutableStateOf(initial?.name ?: "") }
     var location by remember { mutableStateOf(initial?.location ?: "") }
+    var rulesText by remember { mutableStateOf(initial?.rules?.joinToString("\n") ?: "") }
+    var description by remember { mutableStateOf(initial?.description ?: "") }
+    var occupancy by remember { mutableStateOf(initial?.maxOccupancy?.toString() ?: "4") }
+    var tagsText by remember { mutableStateOf(initial?.tags?.joinToString(", ") ?: "") }
+    var imageUrl by remember { mutableStateOf(initial?.imageUrl ?: "") }
+    var latitude by remember { mutableStateOf(initial?.latitude?.toString() ?: "") }
+    var longitude by remember { mutableStateOf(initial?.longitude?.toString() ?: "") }
     var startMillis by remember { mutableStateOf(initial?.startMillis) }
     var endMillis by remember { mutableStateOf(initial?.endMillis) }
     var startMillisRegis by remember { mutableStateOf(initial?.startMillisRegis) }
@@ -549,6 +580,7 @@ fun AddEditCampsite(
                     )
                     TextButton(
                         onClick = {
+                            val rulesList = rulesText.lines().map { it.trim() }.filter { it.isNotEmpty() }
                             onSave(
                                 PreviewCampsite(
                                     name = name,
@@ -557,7 +589,14 @@ fun AddEditCampsite(
                                     endMillis = endMillis,
                                     startMillisRegis = startMillisRegis,
                                     endMillisRegis = endMillisRegis,
-                                    waitingList = initial?.waitingList ?: emptyList()
+                                    waitingList = initial?.waitingList ?: emptyList(),
+                                    rules = rulesList,
+                                    description = description.trim(),
+                                    maxOccupancy = occupancy.toIntOrNull() ?: 4,
+                                    tags = tagsText.split(",").map { it.trim() }.filter { it.isNotEmpty() },
+                                    imageUrl = imageUrl.trim().ifEmpty { null },
+                                    latitude = latitude.toDoubleOrNull(),
+                                    longitude = longitude.toDoubleOrNull()
                                 )
                             )
                         },
@@ -568,7 +607,9 @@ fun AddEditCampsite(
                 }
 
                 Column(
-                    modifier = Modifier.padding(horizontal = 20.dp),
+                    modifier = Modifier
+                        .padding(horizontal = 20.dp)
+                        .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     OutlinedTextField(
@@ -586,6 +627,63 @@ fun AddEditCampsite(
                         label = { Text("Address or place name") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
+                    )
+
+                    OutlinedTextField(
+                        value = description,
+                        onValueChange = { description = it },
+                        label = { Text("Description and amenities") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 3,
+                        maxLines = 6
+                    )
+                    OutlinedTextField(
+                        value = occupancy,
+                        onValueChange = { occupancy = it.filter(Char::isDigit) },
+                        label = { Text("Maximum occupancy") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = latitude,
+                        onValueChange = { latitude = it },
+                        label = { Text("Map latitude (optional)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = longitude,
+                        onValueChange = { longitude = it },
+                        label = { Text("Map longitude (optional)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = imageUrl,
+                        onValueChange = { imageUrl = it },
+                        label = { Text("Image URL (optional)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = tagsText,
+                        onValueChange = { tagsText = it },
+                        label = { Text("Tags (comma separated)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Text("Campsite rules & policies")
+                    OutlinedTextField(
+                        value = rulesText,
+                        onValueChange = { rulesText = it },
+                        label = { Text("Rules & policies (one per line)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 3,
+                        maxLines = 5
                     )
 
                     Text("Booking dates")
@@ -636,6 +734,7 @@ fun LotteryDialog(
     campsite: PreviewCampsite,
     onDismiss: () -> Unit,
     onSave: (PreviewCampsite) -> Unit,
+    onMessageEntrant: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val format = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
@@ -901,6 +1000,14 @@ fun LotteryDialog(
                                             style = MaterialTheme.typography.bodySmall,
                                             color = Color.Gray
                                         )
+                                    }
+                                    Button(
+                                        onClick = {
+                                            onMessageEntrant?.invoke() ?: onDismiss()
+                                        },
+                                        modifier = Modifier.padding(end = 4.dp)
+                                    ) {
+                                        Text("Message", fontSize = 11.sp)
                                     }
                                     IconButton(
                                         onClick = {

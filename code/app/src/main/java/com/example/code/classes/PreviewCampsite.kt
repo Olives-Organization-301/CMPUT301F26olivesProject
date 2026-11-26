@@ -36,5 +36,12 @@ class PreviewCampsite(
     val startMillisRegis: Long?,
     val endMillisRegis: Long?,
     val waitingList: List<WaitlistEntrant> = emptyList(),
+    val rules: List<String> = emptyList(),
+    val description: String = "",
+    val maxOccupancy: Int = 4,
+    val tags: List<String> = emptyList(),
+    val imageUrl: String? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
 )
 // waitingList for the lottery system
