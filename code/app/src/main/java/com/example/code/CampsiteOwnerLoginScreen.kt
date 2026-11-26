@@ -67,6 +67,13 @@ fun CampsiteOwnerLoginScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
+        TextButton(
+            onClick = { navController.popBackStack() },
+            modifier = Modifier.align(Alignment.Start)
+        ) {
+            Text("Back", color = ButtonBlue)
+        }
+
         Text(
             text = if (isSignUp) "Campsite Owner Sign Up" else "Campsite Owner Login",
             fontSize = 28.sp,

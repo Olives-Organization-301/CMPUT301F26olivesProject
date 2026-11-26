@@ -2,7 +2,6 @@ package com.example.code
 
 import android.os.Build
 import androidx.annotation.RequiresApi
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,11 +14,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -42,6 +39,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -73,7 +72,8 @@ fun ReservationsListScreen(
 
     val entrant by produceState<Entrant?>(
         initialValue = null,
-        key1 = appState.userID
+        key1 = appState.userID,
+        key2 = appState.entrants.reservationArchiveVersion
     ) {
         val id = appState.userID
         if (id == null) {
@@ -198,6 +198,10 @@ fun ReservationsListScreen(
                         appState.viewingCampsiteID = campsite
                         navController.navigate("campsiteDetails")
                     },
+                    onChat = {
+                        // Open the chat between this entrant and this campsite
+                        navController.navigate("entrantMessages/$campsite")
+                    },
                     onRemove = {
                         // Remove the campsite from the entrant's own list
                         entrant?.let {
@@ -233,11 +237,11 @@ fun CampsiteCard(
     campsiteData: Campsite?,
     onRemove: () -> Unit,
     modifier: Modifier = Modifier,
-    onClick: () -> Unit = {}
+    onClick: () -> Unit = {},
+    onChat: () -> Unit = {}
 ) {
     // Per-card UI state (placeholder until the Database exists)
     var starred by remember { mutableStateOf(false) }
-    var showAlert by remember { mutableStateOf(false) }
 
     Card(
         onClick = onClick,
@@ -249,16 +253,15 @@ fun CampsiteCard(
     ) {
         // Thumbnail fills the card (desaturated + black gradient), same as the search screen
         // Card has been replaced to accomodate an image in the background
-        val thumbnail = campsiteThumbnailRes(campsiteData)
+        val thumbnail = campsiteData.thumbnailPhoto()
         CampsiteImageBackground(
-            imageRes = thumbnail,
+            image = thumbnail,
+            defaultImage = R.drawable.campsite_thumbnail,
             fallback = Color(0xFFB0B0B0),
             modifier = Modifier.fillMaxSize()
         ) {
-            // A Buffer to ensure text is coloured properly if thumbnail has loaded or not.
-            // It will be white if an image exists, black if an image doesn't exist.
             CompositionLocalProvider(
-                LocalContentColor provides if (thumbnail != null) Color.White else Color.Black
+                LocalContentColor provides Color.White
             ) {
                 // Put text starts here
                 Row(
@@ -287,7 +290,7 @@ fun CampsiteCard(
                         )
                     }
 
-                    // Action icons (remove / favorite / notifications)
+                    // Action icons (remove / favorite / chat)
                     Column(
                         modifier = Modifier.fillMaxHeight(),
                         verticalArrangement = Arrangement.SpaceBetween,
@@ -303,17 +306,14 @@ fun CampsiteCard(
                             fontSize = 22.sp,
                             modifier = Modifier.clickable { starred = !starred }
                         )
-                        Box(modifier = Modifier.clickable { showAlert = !showAlert }) {
-                            Text("🔔", fontSize = 22.sp)
-                            if (showAlert) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(10.dp)
-                                        .align(Alignment.TopEnd)
-                                        .background(Color.Red, CircleShape)
-                                )
-                            }
-                        }
+                        // Chat: opens this campsite's conversation in Messages
+                        Text(
+                            text = "💬",
+                            fontSize = 22.sp,
+                            modifier = Modifier
+                                .clickable { onChat() }
+                                .semantics { contentDescription = "Message campsite" }
+                        )
                     }
                 }
             }

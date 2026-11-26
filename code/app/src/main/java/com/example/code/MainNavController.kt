@@ -34,6 +34,16 @@ fun CampsiteNavController(
         composable("profileScreen") { ProfileScreen(navController, appState) }
         composable("entrantAlerts") { EntrantAlertsScreen(navController, appState)}
         composable("entrantMessages") { EntrantMessagesScreen(navController, appState) }
+        // Opens Messages straight into one campsite's chat (e.g. from the Reservations list)
+        composable(
+            "entrantMessages/{campsiteID}",
+            arguments = listOf(navArgument("campsiteID") { type = NavType.StringType })
+        ) { entry ->
+            EntrantMessagesScreen(
+                navController, appState,
+                initialCampsiteID = entry.arguments?.getString("campsiteID")
+            )
+        }
 
         // LOGIN SCREENS
         // "?signUp=true" opens the screen in sign-up mode; plain "entrantLogin" etc. still works (defaults to login)
@@ -58,7 +68,8 @@ fun CampsiteNavController(
 
         // CAMPSITE OWNER SCREENS
         composable("campsiteOwnerMainScreen") { CampsiteOwnerMainScreen(navController, appState) }
-        composable("campsiteChat") { CampsiteChatScreen(navController) }
+        composable("campsiteOwnerProfileScreen") { CampsiteOwnerProfileScreen(navController, appState) }
+        composable("campsiteChat") { CampsiteChatScreen(navController, appState) }
         // ADMIN SCREENS
         composable("AdminMainSearchScreen") { AdminMainSearchScreen(navController, appState) }
     }

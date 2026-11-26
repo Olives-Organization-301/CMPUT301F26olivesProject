@@ -163,6 +163,16 @@ class EntrantMessagesTest {
         every { entrants.searchEntrants(any(), any()) } answers {
             secondArg<(Entrant?) -> Unit>()(if (firstArg<String>() == entrant.getUserID()) entrant else null)
         }
+        every { entrants.confirmStay(any(), any(), any()) } answers {
+            val current = firstArg<Entrant>()
+            val message = secondArg<ChatMessage>()
+            val latest = latestReservation(chat.conversation(message.campsiteID, message.entrantID), message.locationIndex)
+            if (latest?.stayDates != message.stayDates) chat.addMessage(message)
+            current.removeCampsite(ACTIVE_CAMPSITES, message.campsiteID)
+            current.removeCampsite(WAITING_LIST, message.campsiteID)
+            current.addCampsite(RESERVED_CAMPSITES, message.campsiteID)
+            thirdArg<(Boolean) -> Unit>()(true)
+        }
         every { entrants.moveEntrantCampsite(any(), any(), any(), any(), any()) } answers {
             val e = firstArg<Entrant>()
             val id = arg<String>(3)
@@ -200,7 +210,7 @@ class EntrantMessagesTest {
         appState.role = "entrant"   // lottery notifications are only for entrants
 
         // Same automated messages drawLottery() sends
-        allSites.forEach { sendLotteryMessages(appState, it) }
+        allSites.flatMap { lotteryResultMessages(it, System.currentTimeMillis()) }.forEach(appState.chat::addMessage)
         return appState
     }
 

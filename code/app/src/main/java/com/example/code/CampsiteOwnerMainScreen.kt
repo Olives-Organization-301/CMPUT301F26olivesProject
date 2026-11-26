@@ -2,7 +2,11 @@ package com.example.code
 
 import android.app.DatePickerDialog
 import android.content.Context
+import android.graphics.Bitmap
 import android.os.Build
+import android.widget.Toast
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.Image
 import android.os.Handler
 import android.os.Looper
 import androidx.annotation.RequiresApi
@@ -29,7 +33,6 @@ import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -47,13 +50,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.FontWeight
@@ -67,7 +71,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.window.Dialog
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -84,8 +87,12 @@ import com.example.code.classes.Campsite
 import com.example.code.classes.CampsiteOwner
 import com.example.code.classes.Coordinates
 import com.example.code.classes.PreviewCampsite
-import com.example.code.classes.WaitlistEntrant
+import java.time.Instant
 import java.time.LocalDateTime
+import java.time.ZoneId
+import kotlinx.coroutines.delay
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.qrcode.QRCodeWriter
 import java.util.Random
 import java.util.UUID
 
@@ -177,6 +184,26 @@ fun CampsiteOwnerMainScreen(
 
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
 
+    LaunchedEffect(appState.userID, appState.campsites.campsites.toList()) {
+        val ownerID = appState.userID ?: return@LaunchedEffect
+        val attempted = mutableSetOf<String>()
+        while (true) {
+            val now = LocalDateTime.now()
+            appState.campsites.campsites
+                .filter { it.getOwnerID() == ownerID && it.isReadyToDraw(now) }
+                .forEach { campsite ->
+                    if (attempted.add(campsite.campsiteID)) {
+                        appState.campsites.drawClosedLottery(campsite.campsiteID, ownerID)
+                            .addOnFailureListener { error ->
+                                attempted.remove(campsite.campsiteID)
+                                android.util.Log.e("DB", "Closing lottery failed for ${campsite.campsiteID}", error)
+                            }
+                    }
+                }
+            delay(1_000)
+        }
+    }
+
     // Load real campsites and owner name using viewCampsites function
     LaunchedEffect(appState.userID) {
         val ownerID = appState.userID
@@ -192,15 +219,18 @@ fun CampsiteOwnerMainScreen(
                                     for (c in campsites) {
                                         val cName = try { c.getName().ifBlank { "Campsite" } } catch (e: Exception) { "Campsite" }
                                         val cLoc = try { c.getMainCoordinates()?.getCity()?.ifBlank { "Location" } ?: "Location" } catch (e: Exception) { "Location" }
+                                        val cImage = c.thumbnailPhoto().orEmpty()
                                         previewCampsites.add(
                                             PreviewCampsite(
                                                 name = cName,
                                                 location = cLoc,
-                                                startMillis = null,
-                                                endMillis = null,
+                                                startMillis = c.getStartDate()?.atZone(ZoneId.systemDefault())?.toInstant()?.toEpochMilli(),
+                                                endMillis = c.getEndDate()?.atZone(ZoneId.systemDefault())?.toInstant()?.toEpochMilli(),
                                                 startMillisRegis = null,
                                                 endMillisRegis = null,
-                                                waitingList = emptyList()
+                                                waitingList = emptyList(),
+                                                campsiteImage = cImage,
+                                                campsiteID = c.campsiteID
                                             )
                                         )
                                     }
@@ -213,15 +243,18 @@ fun CampsiteOwnerMainScreen(
                                     for (c in campsites) {
                                         val cName = try { c.getName().ifBlank { "Campsite" } } catch (e: Exception) { "Campsite" }
                                         val cLoc = try { c.getMainCoordinates()?.getCity()?.ifBlank { "Location" } ?: "Location" } catch (e: Exception) { "Location" }
+                                        val cImage = c.thumbnailPhoto().orEmpty()
                                         previewCampsites.add(
                                             PreviewCampsite(
                                                 name = cName,
                                                 location = cLoc,
-                                                startMillis = null,
-                                                endMillis = null,
+                                                startMillis = c.getStartDate()?.atZone(ZoneId.systemDefault())?.toInstant()?.toEpochMilli(),
+                                                endMillis = c.getEndDate()?.atZone(ZoneId.systemDefault())?.toInstant()?.toEpochMilli(),
                                                 startMillisRegis = null,
                                                 endMillisRegis = null,
-                                                waitingList = emptyList()
+                                                waitingList = emptyList(),
+                                                campsiteImage = cImage,
+                                                campsiteID = c.campsiteID
                                             )
                                         )
                                     }
@@ -529,7 +562,7 @@ fun CampsiteOwnerMainScreen(
                     Spacer(Modifier.height(16.dp))
 
                     QRCodeImage(
-                        data = campsite.name,
+                        data = campsite.campsiteID,
                         modifier = Modifier
                             .size(180.dp)
                             .background(Color.White, RoundedCornerShape(8.dp))
@@ -542,7 +575,7 @@ fun CampsiteOwnerMainScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        val matchedCampsite = appState.campsites.campsites.firstOrNull { it.getName() == campsite.name }
+                        val matchedCampsite = appState.campsites.campsites.firstOrNull { it.campsiteID == campsite.campsiteID }
                         if (matchedCampsite != null) {
                             appState.viewingCampsiteID = matchedCampsite.campsiteID
                             selectedQRCampsite = null
@@ -612,7 +645,6 @@ fun CampsiteOwnerMainScreen(
             initial = null,
             onDismiss = { showAdd = false },
             onSave = { newCampsite ->
-                previewCampsites.add(newCampsite)
                 appState.campsites.generateUniqueCampsiteID { uniqueId ->
                     val coords = Coordinates(
                         country = "Canada",
@@ -628,10 +660,29 @@ fun CampsiteOwnerMainScreen(
                         price = 50.0f,
                         rating = 5.0f,
                         coordinates = mutableListOf(coords),
+                        detailsImage = newCampsite.campsiteImage.ifBlank { null },
+                        thumbnailImage = newCampsite.campsiteImage.ifBlank { null },
                         lotteryStartDate = LocalDateTime.now(),
                         lotteryEndDate = LocalDateTime.now().plusDays(7)
                     )
                     appState.campsites.addCampsite(realCampsite)
+                        .addOnSuccessListener {
+                            previewCampsites.add(
+                                PreviewCampsite(
+                                    name = newCampsite.name,
+                                    location = newCampsite.location,
+                                    startMillis = newCampsite.startMillis,
+                                    endMillis = newCampsite.endMillis,
+                                    startMillisRegis = newCampsite.startMillisRegis,
+                                    endMillisRegis = newCampsite.endMillisRegis,
+                                    campsiteImage = newCampsite.campsiteImage,
+                                    campsiteID = uniqueId
+                                )
+                            )
+                        }
+                        .addOnFailureListener {
+                            Toast.makeText(context, "Could not save campsite", Toast.LENGTH_LONG).show()
+                        }
                 }
                 showAdd = false
             }
@@ -644,8 +695,15 @@ fun CampsiteOwnerMainScreen(
             initial = current,
             onDismiss = { showEdit = null },
             onSave = { updated ->
-                val i = previewCampsites.indexOfFirst { it === current }
-                if (i >= 0) previewCampsites[i] = updated
+                val changedImage = updated.campsiteImage.takeIf { it != current.campsiteImage }
+                appState.campsites.updateCampsiteListing(current.campsiteID, updated.name, changedImage)
+                    .addOnSuccessListener {
+                        val index = previewCampsites.indexOfFirst { it.campsiteID == current.campsiteID }
+                        if (index >= 0) previewCampsites[index] = updated
+                    }
+                    .addOnFailureListener {
+                        Toast.makeText(context, "Could not save campsite changes", Toast.LENGTH_LONG).show()
+                    }
                 showEdit = null
             }
         )
@@ -654,11 +712,35 @@ fun CampsiteOwnerMainScreen(
     showLottery?.let { current ->
         LotteryDialog(
             campsite = current,
+            liveCampsite = appState.campsites.campsites.firstOrNull { it.campsiteID == current.campsiteID },
+            entrantNames = appState.entrants.entrants.associate { it.getUserID() to it.name.ifBlank { it.username } },
             onDismiss = { showLottery = null },
-            onSave = { updated ->
-                val i = previewCampsites.indexOfFirst { it === current }
-                if (i >= 0) previewCampsites[i] = updated
-                showLottery = null
+            onSave = { startMillis, endMillis ->
+                val ownerID = appState.userID
+                val start = startMillis?.let { Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate() }
+                val end = endMillis?.let { Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate() }
+                if (ownerID != null && start != null && end != null && !end.isBefore(start)) {
+                    if (startMillis == current.startMillis && endMillis == current.endMillis) {
+                        showLottery = null
+                    } else {
+                        appState.campsites.updateLotteryDates(current.campsiteID, ownerID, start.atStartOfDay(), end.atTime(23, 59, 59))
+                            .addOnCompleteListener { result ->
+                                if (result.isSuccessful && result.result == true) {
+                                    val index = previewCampsites.indexOfFirst { it.campsiteID == current.campsiteID }
+                                    if (index >= 0) previewCampsites[index] = PreviewCampsite(
+                                        current.name, current.location, startMillis, endMillis,
+                                        current.startMillisRegis, current.endMillisRegis, current.waitingList,
+                                        current.campsiteImage, current.campsiteID
+                                    )
+                                    showLottery = null
+                                } else {
+                                    Toast.makeText(context, "Could not save lottery dates", Toast.LENGTH_LONG).show()
+                                }
+                            }
+                    }
+                } else {
+                    Toast.makeText(context, "Choose a valid start and end date", Toast.LENGTH_LONG).show()
+                }
             }
         )
     }
@@ -763,8 +845,12 @@ fun AddEditCampsite(
     var endMillis by remember { mutableStateOf(initial?.endMillis) }
     var startMillisRegis by remember { mutableStateOf(initial?.startMillisRegis) }
     var endMillisRegis by remember { mutableStateOf(initial?.endMillisRegis) }
+    var campsiteImage by remember { mutableStateOf(initial?.campsiteImage ?: "") }
+
     val context = LocalContext.current
     val format = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
+
+    val (processingPhoto, takePhoto, openPhotoPicker) = rememberPhotoPicker { campsiteImage = it }
 
     val startText = startMillis?.let { format.format(Date(it)) } ?: "Not set"
     val endText = endMillis?.let { format.format(Date(it)) } ?: "Not set"
@@ -801,11 +887,13 @@ fun AddEditCampsite(
                                     endMillis = endMillis,
                                     startMillisRegis = startMillisRegis,
                                     endMillisRegis = endMillisRegis,
-                                    waitingList = initial?.waitingList ?: emptyList()
+                                    waitingList = initial?.waitingList ?: emptyList(),
+                                    campsiteImage = campsiteImage,
+                                    campsiteID = initial?.campsiteID.orEmpty()
                                 )
                             )
                         },
-                        enabled = name.isNotBlank()
+                        enabled = name.isNotBlank() && !processingPhoto
                     ) {
                         Text("Save")
                     }
@@ -831,6 +919,55 @@ fun AddEditCampsite(
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
+
+                    Text("Campsite Picture", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        ProfilePicture(
+                            profileImage = campsiteImage,
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                        )
+
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Button(
+                                onClick = takePhoto,
+                                enabled = !processingPhoto,
+                                shape = RoundedCornerShape(12.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Text("Take a Picture", fontSize = 11.sp, maxLines = 1)
+                            }
+
+                            Button(
+                                onClick = openPhotoPicker,
+                                enabled = !processingPhoto,
+                                shape = RoundedCornerShape(12.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Text("Choose from Gallery", fontSize = 11.sp, maxLines = 1)
+                            }
+
+                            if (campsiteImage.isNotBlank()) {
+                                OutlinedButton(
+                                    onClick = { campsiteImage = "" },
+                                    enabled = !processingPhoto,
+                                    shape = RoundedCornerShape(12.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                ) {
+                                    Text("Remove", fontSize = 11.sp, maxLines = 1)
+                                }
+                            }
+                        }
+                    }
 
                     Text("Booking dates")
                     Row(
@@ -875,14 +1012,22 @@ AddCampsite, pickdate, and parts of campsiteOwnerMainScreen UI were developed us
 this chat: https://claude.ai/share/140477f9-42aa-4b16-8189-dad57b7d8afb
 Prompt: "How do I change this so that the delete and edit buttons are on top of each other at the end of each card"
  */
+/** Codex prompt: Show the real waiting list and per-location draw results in the owner dialog. */
+@RequiresApi(Build.VERSION_CODES.O)
 @Composable
-fun LotteryDialog(
+private fun LotteryDialog(
     campsite: PreviewCampsite,
+    liveCampsite: Campsite?,
+    entrantNames: Map<String, String>,
     onDismiss: () -> Unit,
-    onSave: (PreviewCampsite) -> Unit,
+    onSave: (Long?, Long?) -> Unit,
 ) {
     val context = LocalContext.current
     val format = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
+    var start by remember(campsite.campsiteID) { mutableStateOf(campsite.startMillis) }
+    var end by remember(campsite.campsiteID) { mutableStateOf(campsite.endMillis) }
+    val drawn = liveCampsite?.isLotteryDrawn() == true
+    val entrants = liveCampsite?.getWaitingList().orEmpty()
 
     var startMillis by remember { mutableStateOf(campsite.startMillis) }
     var endMillis by remember { mutableStateOf(campsite.endMillis) }
@@ -902,74 +1047,19 @@ fun LotteryDialog(
 
     Dialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        Surface(modifier = Modifier.fillMaxSize()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp)
+        title = { Text("Lottery: ${campsite.name}") },
+        text = {
+            LazyColumn(
+                modifier = Modifier.heightIn(max = 420.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Filled.Close, contentDescription = "Close")
-                    }
-                    Text(
-                        text = "Lottery: ${campsite.name}",
-                        style = MaterialTheme.typography.titleLarge,
-                        modifier = Modifier.weight(1f)
-                    )
-                    TextButton(
-                        onClick = {
-                            onSave(
-                                PreviewCampsite(
-                                    name = campsite.name,
-                                    location = campsite.location,
-                                    startMillis = startMillis,
-                                    endMillis = endMillis,
-                                    startMillisRegis = startMillis,
-                                    endMillisRegis = endMillis,
-                                    waitingList = waitingList
-                                )
-                            )
-                        }
-                    ) {
-                        Text("Save")
-                    }
-                }
-
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            text = "Information for this lottery",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        val startText = startMillis?.let { format.format(Date(it)) } ?: "Not set"
-                        val endText = endMillis?.let { format.format(Date(it)) } ?: "Not set"
-
-                        Text("Lottery started on: $startText", fontSize = 14.sp)
-                        Text("Lottery will expire on: $endText", fontSize = 14.sp)
-                        Text("Lottery will have $numLotteryWinners winners", fontSize = 14.sp)
-
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        val statusText = when {
-                            !isLotteryConfigured -> "Status: Lottery not placed yet"
-                            isLotteryActive -> {
-                                val daysLeft = endMillis?.let { ((it - now) / (1000 * 60 * 60 * 24)).coerceAtLeast(0) } ?: 0
-                                "Status: Lottery in progress ($daysLeft days until draw)"
+                item {
+                    Text("Starts: " + (start?.let { format.format(Date(it)) } ?: "Not set"))
+                    Text("Closes: " + (end?.let { format.format(Date(it)) } ?: "Not set"))
+                    if (!drawn) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(onClick = { pickDate(context, null) { start = it } }) {
+                                Text("Start date")
                             }
                             else -> "Status: Lottery has expired"
                         }
@@ -1176,7 +1266,14 @@ fun LotteryDialog(
                             }
                         }
                     }
+                    Text("Waiting list (${entrants.size} entrants)", fontWeight = FontWeight.Bold)
                 }
+                items(entrants, key = { it }) { entrantID ->
+                    Text(entrantNames[entrantID]?.ifBlank { null } ?: entrantID)
+                    if (drawn) {
+                        val locations = liveCampsite?.getLocationsWon(entrantID).orEmpty()
+                        Text(if (locations.isEmpty()) "Not selected"
+                            else locations.joinToString { "Location ${it + 1}" })
             }
         }
     }
@@ -1213,31 +1310,26 @@ fun QRCodeImage(
                     }
                 }
             }
-        }
-
-        drawFinderPattern(0, 0)
-        drawFinderPattern(0, gridCount - 7)
-        drawFinderPattern(gridCount - 7, 0)
-
-        for (r in 0 until gridCount) {
-            for (c in 0 until gridCount) {
-                if ((r < 7 && c < 7) || (r < 7 && c >= gridCount - 7) || (r >= gridCount - 7 && c < 7)) continue
-                grid[r][c] = random.nextBoolean()
+        },
+        confirmButton = {
+            if (!drawn) {
+                TextButton(enabled = start != null && end != null, onClick = {
+                    onSave(start, end)
+                }) { Text("Save dates") }
             }
-        }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } }
+    )
+}
 
-        for (r in 0 until gridCount) {
-            for (c in 0 until gridCount) {
-                if (grid[r][c]) {
-                    drawRect(
-                        color = Color.Black,
-                        topLeft = Offset(c * cellSize, r * cellSize),
-                        size = Size(cellSize, cellSize)
-                    )
-                }
-            }
-        }
+/** Codex prompt: Generate a scannable campsite QR code from its Firestore document ID. */
+internal fun createCampsiteQrBitmap(campsiteID: String): Bitmap {
+    val matrix = QRCodeWriter().encode(campsiteID, BarcodeFormat.QR_CODE, 384, 384)
+    val pixels = IntArray(matrix.width * matrix.height) { index ->
+        if (matrix[index % matrix.width, index / matrix.width]) android.graphics.Color.BLACK
+        else android.graphics.Color.WHITE
     }
+    return Bitmap.createBitmap(pixels, matrix.width, matrix.height, Bitmap.Config.ARGB_8888)
 }
 
 /*
@@ -1272,14 +1364,13 @@ it added.
                 PROMPT USED:
                 "Upon click, basic pop-up window with "ok" button
                 where the owner can reset the value of numLotteryWinners"
+*/
 
-                Some modifications have been performed to the original LLM output.
-                 */
-
-/*
-This function was also implemented using the above prompt. It is useful
-for picking a date, as with the "custom" lottery date feature.
- */
+@Composable
+fun QRCodeImage(data: String, modifier: Modifier = Modifier) {
+    val image = remember(data) { createCampsiteQrBitmap(data).asImageBitmap() }
+    Image(bitmap = image, contentDescription = "Campsite QR code", modifier = modifier)
+}
 private fun pickDate(context: Context, minDateMillis: Long?, onSelected: (Long) -> Unit) {
     val cal = Calendar.getInstance()
     val dialog = DatePickerDialog(
