@@ -249,16 +249,15 @@ fun CampsiteCard(
     ) {
         // Thumbnail fills the card (desaturated + black gradient), same as the search screen
         // Card has been replaced to accomodate an image in the background
-        val thumbnail = campsiteThumbnailRes(campsiteData)
+        val thumbnail = campsiteData.thumbnailPhoto()
         CampsiteImageBackground(
-            imageRes = thumbnail,
+            image = thumbnail,
+            defaultImage = R.drawable.campsite_thumbnail,
             fallback = Color(0xFFB0B0B0),
             modifier = Modifier.fillMaxSize()
         ) {
-            // A Buffer to ensure text is coloured properly if thumbnail has loaded or not.
-            // It will be white if an image exists, black if an image doesn't exist.
             CompositionLocalProvider(
-                LocalContentColor provides if (thumbnail != null) Color.White else Color.Black
+                LocalContentColor provides Color.White
             ) {
                 // Put text starts here
                 Row(

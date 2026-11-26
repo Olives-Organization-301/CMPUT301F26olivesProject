@@ -12,7 +12,6 @@ class DatabaseCampsiteOwners {
     private val campsiteOwnersRef = db.collection("CampsiteOwners")
     private val _campsiteOwners = mutableStateListOf<CampsiteOwner>()
 
-
     val campsiteOwners: List<CampsiteOwner> get() = _campsiteOwners
 
     init {
@@ -23,11 +22,9 @@ class DatabaseCampsiteOwners {
             }
             if (snapshots == null) return@addSnapshotListener
             val list = snapshots.documents.map { doc ->
-                CampsiteOwner(
-                    username = doc.getString("username") ?: doc.getString("name") ?: doc.id,
-                    email = doc.getString("email") ?: "",
-                    userID = doc.id
-                )
+                val owner = doc.toObject(CampsiteOwner::class.java) ?: CampsiteOwner()
+                owner.setUserID(doc.id)
+                owner
             }
             _campsiteOwners.clear()
             _campsiteOwners.addAll(list)
@@ -39,11 +36,9 @@ class DatabaseCampsiteOwners {
         campsiteOwnersRef.get()
             .addOnSuccessListener { snapshot ->
                 val list = snapshot.documents.map { doc ->
-                    CampsiteOwner(
-                        username = doc.getString("username") ?: doc.getString("name") ?: doc.id,
-                        email = doc.getString("email") ?: "",
-                        userID = doc.id
-                    )
+                    val owner = doc.toObject(CampsiteOwner::class.java) ?: CampsiteOwner()
+                    owner.setUserID(doc.id)
+                    owner
                 }
                 _campsiteOwners.clear()
                 _campsiteOwners.addAll(list)
@@ -59,6 +54,14 @@ class DatabaseCampsiteOwners {
             _campsiteOwners.add(campsiteOwner)
         }
         campsiteOwnersRef.document(campsiteOwner.getUserID()).set(campsiteOwner)
+    }
+
+    fun updateCampsiteOwner(owner: CampsiteOwner) {
+        val index = _campsiteOwners.indexOfFirst { it.getUserID() == owner.getUserID() }
+        if (index != -1) {
+            _campsiteOwners[index] = owner
+        }
+        campsiteOwnersRef.document(owner.getUserID()).set(owner)
     }
 
     fun updateCampsiteOwnerUsername(campsiteOwner: CampsiteOwner, newUsername: String) {
@@ -83,8 +86,26 @@ class DatabaseCampsiteOwners {
                     val owner = doc.toObject(CampsiteOwner::class.java)
                     if (owner != null) {
                         owner.setUserID(doc.id)
+                        // Scope image to this owner using campsiteownerID
+                        db.collection("images")
+                            .whereEqualTo("campsiteownerID", ownerID)
+                            .get()
+                            .addOnSuccessListener { imgSnap ->
+                                val latestImgDoc = imgSnap.documents
+                                    .filterNot { it.contains("campsiteID") }
+                                    .maxByOrNull { it.getLong("timestamp") ?: 0L }
+                                val pfpData = latestImgDoc?.getString("imageData") ?: latestImgDoc?.getString("profileImage")
+                                if (!pfpData.isNullOrBlank() && latestImgDoc?.getString("campsiteownerID") == ownerID) {
+                                    owner.profileImage = pfpData
+                                }
+                                onResult(owner)
+                            }
+                            .addOnFailureListener {
+                                onResult(owner)
+                            }
+                    } else {
+                        onResult(null)
                     }
-                    onResult(owner)
                 } else {
                     onResult(null)
                 }
@@ -107,6 +128,9 @@ class DatabaseCampsiteOwners {
                     val owner = matchingDoc.toObject(CampsiteOwner::class.java)
                     if (owner != null) {
                         owner.setUserID(matchingDoc.id)
+                        searchCampsiteOwner(owner.getUserID()) { fullyLoaded ->
+                            onResult(fullyLoaded ?: owner)
+                        }
                     } else {
                         val fallback = CampsiteOwner(
                             username = matchingDoc.getString("username") ?: cleanEmail.substringBefore("@"),
@@ -114,9 +138,7 @@ class DatabaseCampsiteOwners {
                             userID = matchingDoc.id
                         )
                         onResult(fallback)
-                        return@addOnSuccessListener
                     }
-                    onResult(owner)
                 } else {
                     onResult(null)
                 }

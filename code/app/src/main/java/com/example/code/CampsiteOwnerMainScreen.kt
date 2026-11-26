@@ -3,7 +3,9 @@ package com.example.code
 import android.app.DatePickerDialog
 import android.content.Context
 import android.os.Build
+import android.widget.Toast
 import androidx.annotation.RequiresApi
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -36,9 +38,9 @@ import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -121,6 +123,7 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
                                     for (c in campsites) {
                                         val cName = try { c.getName().ifBlank { "Campsite" } } catch (e: Exception) { "Campsite" }
                                         val cLoc = try { c.getMainCoordinates()?.getCity()?.ifBlank { "Location" } ?: "Location" } catch (e: Exception) { "Location" }
+                                        val cImage = c.thumbnailPhoto().orEmpty()
                                         previewCampsites.add(
                                             PreviewCampsite(
                                                 name = cName,
@@ -129,7 +132,9 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
                                                 endMillis = null,
                                                 startMillisRegis = null,
                                                 endMillisRegis = null,
-                                                waitingList = emptyList()
+                                                waitingList = emptyList(),
+                                                campsiteImage = cImage,
+                                                campsiteID = c.campsiteID
                                             )
                                         )
                                     }
@@ -142,6 +147,7 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
                                     for (c in campsites) {
                                         val cName = try { c.getName().ifBlank { "Campsite" } } catch (e: Exception) { "Campsite" }
                                         val cLoc = try { c.getMainCoordinates()?.getCity()?.ifBlank { "Location" } ?: "Location" } catch (e: Exception) { "Location" }
+                                        val cImage = c.thumbnailPhoto().orEmpty()
                                         previewCampsites.add(
                                             PreviewCampsite(
                                                 name = cName,
@@ -150,7 +156,9 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
                                                 endMillis = null,
                                                 startMillisRegis = null,
                                                 endMillisRegis = null,
-                                                waitingList = emptyList()
+                                                waitingList = emptyList(),
+                                                campsiteImage = cImage,
+                                                campsiteID = c.campsiteID
                                             )
                                         )
                                     }
@@ -223,10 +231,11 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
                                     .padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Box(
+                                ProfilePicture(
+                                    profileImage = preview.campsiteImage,
                                     modifier = Modifier
                                         .size(96.dp)
-                                        .background(Color.DarkGray, RoundedCornerShape(16.dp))
+                                        .clip(RoundedCornerShape(16.dp))
                                 )
                                 Spacer(Modifier.width(12.dp))
                                 Column(modifier = Modifier.weight(1f)) {
@@ -271,7 +280,7 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
         ) {
             Button(onClick = { }, modifier = Modifier.weight(1f)) { Text("List", maxLines = 1) }
             Button(onClick = { showQRCodeDialog = true }, modifier = Modifier.weight(1f)) { Text("QR Code", maxLines = 1) }
-            Button(onClick = { showAccountDialog = true }, modifier = Modifier.weight(1f)) { Text("Account", maxLines = 1) }
+            Button(onClick = { navController.navigate("campsiteOwnerProfileScreen") }, modifier = Modifier.weight(1f)) { Text("Account", maxLines = 1) }
             Button(onClick = { navController.navigate("campsiteChat") }, modifier = Modifier.weight(1f)) { Text("Message Entrants", maxLines = 1) }
         }
     }
@@ -445,7 +454,6 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
             initial = null,
             onDismiss = { showAdd = false },
             onSave = { newCampsite ->
-                previewCampsites.add(newCampsite)
                 appState.campsites.generateUniqueCampsiteID { uniqueId ->
                     val coords = Coordinates(
                         country = "Canada",
@@ -461,10 +469,29 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
                         price = 50.0f,
                         rating = 5.0f,
                         coordinates = mutableListOf(coords),
+                        detailsImage = newCampsite.campsiteImage.ifBlank { null },
+                        thumbnailImage = newCampsite.campsiteImage.ifBlank { null },
                         lotteryStartDate = LocalDateTime.now(),
                         lotteryEndDate = LocalDateTime.now().plusDays(7)
                     )
                     appState.campsites.addCampsite(realCampsite)
+                        .addOnSuccessListener {
+                            previewCampsites.add(
+                                PreviewCampsite(
+                                    name = newCampsite.name,
+                                    location = newCampsite.location,
+                                    startMillis = newCampsite.startMillis,
+                                    endMillis = newCampsite.endMillis,
+                                    startMillisRegis = newCampsite.startMillisRegis,
+                                    endMillisRegis = newCampsite.endMillisRegis,
+                                    campsiteImage = newCampsite.campsiteImage,
+                                    campsiteID = uniqueId
+                                )
+                            )
+                        }
+                        .addOnFailureListener {
+                            Toast.makeText(context, "Could not save campsite", Toast.LENGTH_LONG).show()
+                        }
                 }
                 showAdd = false
             }
@@ -477,8 +504,15 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
             initial = current,
             onDismiss = { showEdit = null },
             onSave = { updated ->
-                val i = previewCampsites.indexOfFirst { it === current }
-                if (i >= 0) previewCampsites[i] = updated
+                val changedImage = updated.campsiteImage.takeIf { it != current.campsiteImage }
+                appState.campsites.updateCampsiteListing(current.campsiteID, updated.name, changedImage)
+                    .addOnSuccessListener {
+                        val index = previewCampsites.indexOfFirst { it.campsiteID == current.campsiteID }
+                        if (index >= 0) previewCampsites[index] = updated
+                    }
+                    .addOnFailureListener {
+                        Toast.makeText(context, "Could not save campsite changes", Toast.LENGTH_LONG).show()
+                    }
                 showEdit = null
             }
         )
@@ -519,8 +553,12 @@ fun AddEditCampsite(
     var endMillis by remember { mutableStateOf(initial?.endMillis) }
     var startMillisRegis by remember { mutableStateOf(initial?.startMillisRegis) }
     var endMillisRegis by remember { mutableStateOf(initial?.endMillisRegis) }
+    var campsiteImage by remember { mutableStateOf(initial?.campsiteImage ?: "") }
+
     val context = LocalContext.current
     val format = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
+
+    val (processingPhoto, takePhoto, openPhotoPicker) = rememberPhotoPicker { campsiteImage = it }
 
     val startText = startMillis?.let { format.format(Date(it)) } ?: "Not set"
     val endText = endMillis?.let { format.format(Date(it)) } ?: "Not set"
@@ -557,11 +595,13 @@ fun AddEditCampsite(
                                     endMillis = endMillis,
                                     startMillisRegis = startMillisRegis,
                                     endMillisRegis = endMillisRegis,
-                                    waitingList = initial?.waitingList ?: emptyList()
+                                    waitingList = initial?.waitingList ?: emptyList(),
+                                    campsiteImage = campsiteImage,
+                                    campsiteID = initial?.campsiteID.orEmpty()
                                 )
                             )
                         },
-                        enabled = name.isNotBlank()
+                        enabled = name.isNotBlank() && !processingPhoto
                     ) {
                         Text("Save")
                     }
@@ -587,6 +627,55 @@ fun AddEditCampsite(
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
+
+                    Text("Campsite Picture", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        ProfilePicture(
+                            profileImage = campsiteImage,
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                        )
+
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Button(
+                                onClick = takePhoto,
+                                enabled = !processingPhoto,
+                                shape = RoundedCornerShape(12.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Text("Take a Picture", fontSize = 11.sp, maxLines = 1)
+                            }
+
+                            Button(
+                                onClick = openPhotoPicker,
+                                enabled = !processingPhoto,
+                                shape = RoundedCornerShape(12.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Text("Choose from Gallery", fontSize = 11.sp, maxLines = 1)
+                            }
+
+                            if (campsiteImage.isNotBlank()) {
+                                OutlinedButton(
+                                    onClick = { campsiteImage = "" },
+                                    enabled = !processingPhoto,
+                                    shape = RoundedCornerShape(12.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                ) {
+                                    Text("Remove", fontSize = 11.sp, maxLines = 1)
+                                }
+                            }
+                        }
+                    }
 
                     Text("Booking dates")
                     Row(

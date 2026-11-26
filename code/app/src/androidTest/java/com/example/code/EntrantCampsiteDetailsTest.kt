@@ -71,7 +71,7 @@ class EntrantCampsiteDetailsTest {
             val id = firstArg<String>()
             secondArg<(Campsite?) -> Unit>()(sites.find { it.campsiteID == id })
         }
-        every { campsites.addToWaitingList(any(), any(), any()) } answers {
+        every { campsites.addToWaitingList(any<Campsite>(), any(), any()) } answers {
             firstArg<Campsite>().addEntrant(secondArg())
             thirdArg<(Boolean) -> Unit>()(true)
         }

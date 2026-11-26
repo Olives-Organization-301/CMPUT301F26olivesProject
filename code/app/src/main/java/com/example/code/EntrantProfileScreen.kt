@@ -2,9 +2,7 @@ package com.example.code
 
 import android.os.Build
 import androidx.annotation.RequiresApi
-import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.OutlinedButton
@@ -14,6 +12,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.ui.graphics.Color
@@ -40,6 +39,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.key
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -260,6 +260,13 @@ fun ProfileScreen(
                 current.email = email
                 current.phoneNumber = phone
                 current.description = description
+                if (profileImage != current.profileImage) {
+                    if (profileImage.isBlank()) {
+                        deleteEntrantImagesFromFirestore(current.getUserID())
+                    } else {
+                        saveImageRecordToFirestore(context, current.getUserID(), username, email, profileImage)
+                    }
+                }
                 current.profileImage = profileImage
                 current.wantsNotifications = wantsNotifications
                 appState.entrants.updateEntrant(current)
@@ -394,7 +401,6 @@ fun EditProfileDialog(
     var description by remember { mutableStateOf(entrant.description) }
     var profileImage by remember { mutableStateOf(entrant.profileImage) }
     var wantsNotifications by remember { mutableStateOf(entrant.wantsNotifications) }
-    var hasUploaded by remember { mutableStateOf(false) }
 
     // Photo Picker: lets the user pick an image from their gallery/files (no permissions needed)
     val context = LocalContext.current
@@ -415,47 +421,7 @@ fun EditProfileDialog(
             requestNotificationPermission(context, notificationPermission)
         }
     }
-    val cameraLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.TakePicturePreview()
-    ) { bitmap ->
-        if (bitmap != null) {
-            val stream = java.io.ByteArrayOutputStream()
-            bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 95, stream)
-            val bytes = stream.toByteArray()
-            val base64String = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
-            profileImage = base64String
-        }
-    }
-
-    val photoPicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.PickVisualMedia()
-    ) { uri ->
-        if (uri != null) {
-            try {
-                context.contentResolver.takePersistableUriPermission(
-                    uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
-                )
-            } catch (e: SecurityException) {
-                android.util.Log.w("EditProfile", "No persistable permission for $uri", e)
-            }
-            try {
-                val inputStream = context.contentResolver.openInputStream(uri)
-                val bytes = inputStream?.readBytes()
-                inputStream?.close()
-                if (bytes != null) {
-                    val base64String = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
-                    profileImage = base64String
-                } else {
-                    profileImage = uri.toString()
-                }
-            } catch (e: Exception) {
-                profileImage = uri.toString()
-            }
-        }
-    }
-    val openPhotoPicker = {
-        photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-    }
+    val (processingPhoto, takePhoto, openPhotoPicker) = rememberPhotoPicker { profileImage = it }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -527,13 +493,13 @@ fun EditProfileDialog(
                             .clip(CircleShape)
                     )
 
-                    Row(
+                    FlowRow(
                         modifier = Modifier.weight(1f),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Button(
-                            onClick = { cameraLauncher.launch(null) },
+                            onClick = takePhoto,
+                            enabled = !processingPhoto,
                             shape = RoundedCornerShape(12.dp),
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                         ) {
@@ -542,6 +508,7 @@ fun EditProfileDialog(
 
                         Button(
                             onClick = openPhotoPicker,
+                            enabled = !processingPhoto,
                             shape = RoundedCornerShape(12.dp),
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                         ) {
@@ -552,8 +519,6 @@ fun EditProfileDialog(
                             OutlinedButton(
                                 onClick = {
                                     profileImage = ""
-                                    hasUploaded = false
-                                    deleteEntrantImagesFromFirestore(entrant.getUserID())
                                 },
                                 shape = RoundedCornerShape(12.dp),
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
@@ -585,7 +550,6 @@ fun EditProfileDialog(
                             )
                             .clickable {
                                 profileImage = TEST_PFP_PROFILE
-                                hasUploaded = false
                             }
                     ) {
                         Image(
@@ -608,7 +572,6 @@ fun EditProfileDialog(
                             )
                             .clickable {
                                 profileImage = TEST_PFP_GIFT
-                                hasUploaded = false
                             }
                     ) {
                         Image(
@@ -659,8 +622,8 @@ fun EditProfileDialog(
         },
         confirmButton = {
             TextButton(
+                enabled = !processingPhoto,
                 onClick = {
-                    saveImageRecordToFirestore(context, entrant.getUserID(), username, email, profileImage)
                     onSave(
                         name,
                         username,
@@ -821,15 +784,17 @@ fun ProfilePicture(profileImage: String, modifier: Modifier = Modifier) {
     val testRes = testProfileImageRes(profileImage)
 
     // Load picked images off the main thread
-    val bitmap by produceState<ImageBitmap?>(initialValue = null, profileImage) {
-        value = if (profileImage.isBlank() || testRes != null) null
-        else withContext(Dispatchers.IO) {
-            if (profileImage.startsWith("content://") || profileImage.startsWith("file://")) {
-                loadImage(context, Uri.parse(profileImage))
-            } else {
-                decodeBase64ToImageBitmap(profileImage)
+    val bitmap = key(context, profileImage) {
+        produceState<ImageBitmap?>(initialValue = null) {
+            value = if (profileImage.isBlank() || testRes != null) null
+            else withContext(Dispatchers.IO) {
+                if (profileImage.startsWith("content://") || profileImage.startsWith("file://")) {
+                    loadImage(context, Uri.parse(profileImage))
+                } else {
+                    decodeBase64ToImageBitmap(profileImage)
+                }
             }
-        }
+        }.value
     }
 
     val loaded = bitmap
@@ -855,7 +820,7 @@ fun ProfilePicture(profileImage: String, modifier: Modifier = Modifier) {
 }
 
 // Reads an image from a content URI, shrunk so its smaller side is roughly maxSize pixels
-private fun loadImage(context: Context, uri: Uri, maxSize: Int = 512): ImageBitmap? = try {
+internal fun loadImage(context: Context, uri: Uri, maxSize: Int = 512): ImageBitmap? = try {
     val resolver = context.contentResolver
     // First pass: only read the image's size
     // Use Bitmap Object in order to decode it with a circle
