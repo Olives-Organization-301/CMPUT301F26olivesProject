@@ -16,6 +16,7 @@ Firestore server reads confirmed 91 records. Ten focused emulator tests passed, 
 
 ## Lottery, stays, and reviews
 
+- **Owner Messages** lists entrants with confirmed reservations at the signed-in owner's campsites. In the seeded data, Owner 1 has lottery winners awaiting confirmation. To see a reservation appear, sign in as Entrant 06 and confirm dates for Demo 2 under **Messages**. Owner 2 starts with Demo Entrant 03 listed for Demo 5.
 - The owner dashboard draws a lottery at its saved close time while it is open. If the dashboard is closed, it catches up the next time the owner opens it. The owner's Lottery dialog shows the actual participants and results by location.
 - A confirmed stay moves to Past Campsites after the last selected day across all confirmed locations. The app reconciles overdue stays when the entrant signs in or keeps the app open. Older reservations without saved dates remain in Reserved.
 - On Demo 5, open **Reviews** as a demo entrant, select a rating, and post. Sign in as another entrant to reply. Reopen the tab to see both entries again.
