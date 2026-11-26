@@ -366,14 +366,15 @@ fun CampsiteCard(campsite: Campsite, onRemove: () -> Unit, colors: AdminThemeCol
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xFFB0B0B0))
     ){
-        val thumbnail = campsiteThumbnailRes(campsite)
+        val thumbnail = campsite.thumbnailPhoto()
         CampsiteImageBackground(
-            imageRes = thumbnail,
+            image = thumbnail,
+            defaultImage = R.drawable.campsite_thumbnail,
             fallback = Color(0xFFB0B0B0),
             modifier = Modifier.fillMaxSize()
         ) {
             CompositionLocalProvider(
-                LocalContentColor provides if (thumbnail != null) Color.White else Color.Black
+                LocalContentColor provides Color.White
             ) {
                 Row(
                     modifier = Modifier
