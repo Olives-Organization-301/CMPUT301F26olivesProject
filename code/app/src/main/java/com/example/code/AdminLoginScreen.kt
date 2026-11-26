@@ -70,6 +70,13 @@ fun AdminLoginScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
+        TextButton(
+            onClick = { navController.popBackStack() },
+            modifier = Modifier.align(Alignment.Start)
+        ) {
+            Text("Back", color = ButtonBlue)
+        }
+
         Text(
             text = if (isSignUp) "Admin Sign Up" else "Admin Login",
             fontSize = 28.sp,

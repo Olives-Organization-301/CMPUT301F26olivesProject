@@ -32,15 +32,13 @@ import io.mockk.mockk
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.time.LocalDateTime
+import java.time.LocalDate
 
 /** Test Entrant QR Code Scanning
- * The QR images are made in the test with ZXing's QRCodeWriter, so no image files are needed
- * (and the owner's QRCodeImage isn't used). Each test can make as many as it wants in a loop.
+ * The suite checks generated QR codes, the owner's QR encoder, and a stored image fixture.
  *
  * - decodeQrCode: generated codes are read back exactly, including resized, rotated, and
  *   "photo-like" versions (code sitting in a bigger picture); images with no code give null
@@ -49,7 +47,7 @@ import java.time.LocalDateTime
  * - Scanning a campsite's code and pressing View Campsite opens that campsite's details
  *   (LocalQrTestImage hands the dialog a generated image instead of opening the photo picker)
  * - Unknown codes / images with no code don't open anything
- * - Optional: real images dropped in androidTest/assets/qr/ are all checked too
+ * - Stored QR image fixtures in androidTest/assets/qr/ decode to their filenames
  *
  * Not tested: the system photo picker itself (it's another app, outside Compose).
  * Conversation (All 4 functions underneath: https://claude.ai/share/6448aa90-1673-4617-9624-eac3afb21ef4)
@@ -142,17 +140,14 @@ class QrCodeScanTest {
     }
 
     /**
-     * Real images (photos/screenshots) in app/src/androidTest/assets/qr/, named after the text the
-     * code holds (c_2.png -> "c_2"). Skipped if the folder has no images.
-     * Will Fail if list is empty
-     * TODO: Test this with actual QR Codes
+     * Decodes packaged image files and compares each result with the payload in its filename.
      */
     @Test
-    fun realImagesInAssets() {
+    fun decodesPackagedQrImages() {
         val assets = InstrumentationRegistry.getInstrumentation().context.assets
         val images = assets.list("qr").orEmpty()
             .filter { it.substringAfterLast('.').lowercase() in setOf("png", "jpg", "jpeg", "webp") }
-        assumeTrue("No images in androidTest/assets/qr/", images.isNotEmpty())
+        assertTrue("Expected a packaged QR image in androidTest/assets/qr/", images.isNotEmpty())
 
         val failures = images.mapNotNull { file ->
             val expected = file.substringBeforeLast('.')
@@ -172,8 +167,8 @@ class QrCodeScanTest {
         maxOccupancy = mutableListOf(4),
         price = 50.0f,
         coordinates = mutableListOf(Coordinates("Canada", "Alberta", name, "")),
-        lotteryStartDate = LocalDateTime.of(2026, 11, 1, 9, 0),
-        lotteryEndDate = LocalDateTime.of(2026, 11, 7, 17, 0)
+        lotteryStartDate = LocalDate.now().plusDays(1).atStartOfDay(),
+        lotteryEndDate = LocalDate.now().plusDays(2).atTime(23, 59)
     )
 
     private val banff = site("c_1", "Banff National Park")
@@ -192,7 +187,15 @@ class QrCodeScanTest {
         }
 
         val entrants = mockk<DatabaseEntrants>(relaxed = true)
+        every { campsites.addToWaitingList(any<Campsite>(), any(), any()) } answers {
+            firstArg<Campsite>().addEntrant(secondArg())
+            thirdArg<(Boolean) -> Unit>()(true)
+        }
         every { entrants.entrants } returns listOf(entrant)
+        every { entrants.addEntrantCampsite(any(), any(), any(), any()) } answers {
+            firstArg<Entrant>().addCampsite(secondArg(), thirdArg())
+            arg<(Boolean) -> Unit>(3)(true)
+        }
         every { entrants.searchEntrants(any(), any()) } answers {
             secondArg<(Entrant?) -> Unit>()(if (firstArg<String>() == entrant.getUserID()) entrant else null)
         }
@@ -344,6 +347,21 @@ class QrCodeScanTest {
         composeTestRule.onNodeWithText("Found: Jasper Lake").assertIsDisplayed()
         viewCampsite()
         assertDetailsShowing(jasper)
+    }
+
+    /** Codex prompt: Scan a campsite QR code, enter the lottery, and check both lists. */
+    @Test
+    fun scanThenJoinUpdatesBothWaitingLists() {
+        openApp("mainSearchScreen")
+        openScanDialog()
+        scan(createCampsiteQrBitmap(jasper.campsiteID))
+        viewCampsite()
+        composeTestRule.onNodeWithText("Join Waiting List").performClick()
+        composeTestRule.runOnIdle {
+            assertEquals(listOf(entrant.getUserID()), jasper.getWaitingList())
+            assertEquals(listOf(jasper.campsiteID), entrant.getCampsiteLists()[WAITING_LIST])
+            assertTrue(banff.getWaitingList().isEmpty())
+        }
     }
 
     @Test

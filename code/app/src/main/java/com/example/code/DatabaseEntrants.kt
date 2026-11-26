@@ -1,7 +1,11 @@
 package com.example.code
 
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateListOf
 import com.example.code.classes.Entrant
+import com.example.code.classes.ChatMessage
 import com.google.firebase.Firebase
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldPath
@@ -16,6 +20,8 @@ class DatabaseEntrants {
     private val _entrants = mutableStateListOf<Entrant>()
 
     val entrants: List<Entrant> get() = _entrants
+    internal var reservationArchiveVersion by mutableIntStateOf(0)
+        private set
 
     private fun docToEntrant(doc: DocumentSnapshot): Entrant {
         val entrant = Entrant(
@@ -83,7 +89,7 @@ class DatabaseEntrants {
         if (index != -1) {
             _entrants[index] = entrant
         }
-        entrantsRef.document(entrant.getUserID()).set(entrant)
+        entrantsRef.document(entrant.getUserID()).update("username", newUsername)
     }
 
     fun deleteEntrant(entrant: Entrant) {
@@ -205,6 +211,64 @@ class DatabaseEntrants {
                 android.util.Log.e("DB", "moveEntrantCampsite failed for ${entrant.getUserID()}", e)
                 onComplete(false)
             }
+    }
+
+    internal fun confirmStay(entrant: Entrant, message: ChatMessage, onComplete: (Boolean) -> Unit) {
+        val campsiteID = message.campsiteID
+        val ref = entrantsRef.document(entrant.getUserID())
+        val messageRef = db.collection("messages").document()
+        val revision = FieldPath.of("reservationRevision", campsiteID)
+        val dates = FieldPath.of("reservationDates", campsiteID, message.locationIndex.toString())
+        db.runTransaction { transaction ->
+            val snapshot = transaction.get(ref)
+            val previous = snapshot.get(dates) as? List<*>
+            val previousRevision = (snapshot.get(revision) as? Number)?.toLong() ?: 0L
+            val reserved = snapshot.get(FieldPath.of("campsiteLists", RESERVED_CAMPSITES)) as? List<*>
+            if (message.stayDates != previous || reserved?.contains(campsiteID) != true) {
+                val sentAt = maxOf(message.sentAt, previousRevision + 1)
+                transaction.update(ref,
+                    dates, message.stayDates,
+                    revision, sentAt,
+                    FieldPath.of("campsiteLists", ACTIVE_CAMPSITES), FieldValue.arrayRemove(campsiteID),
+                    FieldPath.of("campsiteLists", WAITING_LIST), FieldValue.arrayRemove(campsiteID),
+                    FieldPath.of("campsiteLists", PAST_CAMPSITES), FieldValue.arrayRemove(campsiteID),
+                    FieldPath.of("campsiteLists", RESERVED_CAMPSITES), FieldValue.arrayUnion(campsiteID)
+                )
+                transaction.set(messageRef, message.copy(messageID = messageRef.id, sentAt = sentAt))
+            }
+        }.addOnSuccessListener {
+            entrant.removeCampsite(ACTIVE_CAMPSITES, campsiteID)
+            entrant.removeCampsite(WAITING_LIST, campsiteID)
+            entrant.removeCampsite(PAST_CAMPSITES, campsiteID)
+            entrant.addCampsite(RESERVED_CAMPSITES, campsiteID)
+            onComplete(true)
+        }.addOnFailureListener { error ->
+            android.util.Log.e("DB", "Could not confirm reservation for $campsiteID", error)
+            onComplete(false)
+        }
+    }
+
+    internal fun archiveReservation(entrant: Entrant, campsiteID: String, revision: Long) {
+        val ref = entrantsRef.document(entrant.getUserID())
+        db.runTransaction { transaction ->
+            val snapshot = transaction.get(ref)
+            val reserved = snapshot.get(FieldPath.of("campsiteLists", RESERVED_CAMPSITES)) as? List<*>
+            val currentRevision = (snapshot.get(FieldPath.of("reservationRevision", campsiteID)) as? Number)?.toLong()
+            if (reserved?.contains(campsiteID) != true || currentRevision != revision) return@runTransaction false
+            transaction.update(ref,
+                FieldPath.of("campsiteLists", RESERVED_CAMPSITES), FieldValue.arrayRemove(campsiteID),
+                FieldPath.of("campsiteLists", PAST_CAMPSITES), FieldValue.arrayUnion(campsiteID)
+            )
+            true
+        }.addOnSuccessListener { moved ->
+            if (moved) {
+                entrant.removeCampsite(RESERVED_CAMPSITES, campsiteID)
+                entrant.addCampsite(PAST_CAMPSITES, campsiteID)
+                reservationArchiveVersion++
+            }
+        }.addOnFailureListener { error ->
+            android.util.Log.e("DB", "Could not archive reservation for $campsiteID", error)
+        }
     }
 
     fun removeEntrantCampsite(entrant: Entrant, listKey: String, campsiteID: String) {

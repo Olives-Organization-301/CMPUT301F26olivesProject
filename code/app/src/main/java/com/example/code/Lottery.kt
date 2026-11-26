@@ -1,5 +1,8 @@
 package com.example.code
 
+import java.time.LocalDate
+import kotlinx.coroutines.delay
+import java.time.format.DateTimeParseException
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.NotificationChannel
@@ -34,54 +37,24 @@ const val LOTTERY_LOST = "lottery_lost"
 const val RESERVATION_CONFIRMED = "reservation_confirmed"
 const val RESERVATION_DECLINED = "reservation_declined"
 
-/** Draws [campsite]'s lottery, saves the result, and sends every entrant an automated message
- *  in their conversation with the campsite:
- *  - one "You won a place in location N!" message per location they won
- *  - one "you lost" message if they won nothing
- *  Does nothing if the lottery was already drawn.
- *  TODO: nothing calls this yet; call it when the lottery ends (e.g. an owner "Draw Lottery" button)
- *  @return true if the lottery was drawn
- *  https://claude.ai/share/c834d783-5930-4800-8f67-da339fafedfd
- */
-@RequiresApi(Build.VERSION_CODES.O)
-fun drawLottery(appState: AppState, campsite: Campsite, onSaved: (Boolean) -> Unit = {}): Boolean {
-    if (campsite.isLotteryDrawn()) return false
-
-    campsite.generateFinalList()
-    appState.campsites.saveLotteryResults(campsite, onSaved)
-    sendLotteryMessages(appState, campsite)
-    return true
-}
-
-/** Sends every entrant on [campsite]'s waiting list their automated lottery result
- *  (uses the winners already stored in the campsite, so it can also be used with set results)
- *  https://claude.ai/share/c834d783-5930-4800-8f67-da339fafedfd
- */
-fun sendLotteryMessages(appState: AppState, campsite: Campsite) {
-    // Get name and timestamp
-    val name = campsite.getName()
-    val now = System.currentTimeMillis()
-
-    // Notify each entrant on whether they won or not
-    for (entrantID in campsite.getWaitingList()) {
-        val won = campsite.getLocationsWon(entrantID)
-        if (won.isEmpty()) {
-            appState.chat.addMessage(
-                lotteryMessage(campsite, entrantID, LOTTERY_LOST, -1, now,
-                    "I'm Sorry, you lost the lottery for $name.")
-            )
+/** One result message per won location, or one loss when none were won. */
+internal fun lotteryResultMessages(campsite: Campsite, now: Long): List<ChatMessage> =
+    campsite.getWaitingList().distinct().flatMap { entrantID ->
+        val locations = campsite.getLocationsWon(entrantID)
+        if (locations.isEmpty()) {
+            listOf(lotteryMessage(campsite, entrantID, LOTTERY_LOST, -1, now,
+                "I'm Sorry, you lost the lottery for ${campsite.getName()}."))
         } else {
-            for (location in won) {
-                appState.chat.addMessage(
-                    // + location keeps several wins in location order
-                    lotteryMessage(campsite, entrantID, LOTTERY_WON, location, now + location,
-                        "Congratulations! You won a place in location ${location + 1} at $name. " +
-                            "Use the button below to select your dates.")
-                )
+            locations.map { location ->
+                lotteryMessage(campsite, entrantID, LOTTERY_WON, location, now + location,
+                    "Congratulations! You won a place in location ${location + 1} at ${campsite.getName()}. " +
+                        "Use the button below to select your dates.")
             }
         }
     }
-}
+
+internal fun Campsite.isReadyToDraw(now: java.time.LocalDateTime): Boolean =
+    getEndDate()?.let { !now.isBefore(it) } == true && !isLotteryDrawn()
 
 // ---------------------------------------------------------------------------------------------
 // Confirming / declining a won location (the two buttons in ReserveDatesDialog)
@@ -91,36 +64,72 @@ fun sendLotteryMessages(appState: AppState, campsite: Campsite) {
 /** The entrant's latest decision for [locationIndex] in one conversation:
  *  RESERVATION_CONFIRMED, RESERVATION_DECLINED, or null if they haven't decided yet */
 fun reservationStatus(messages: List<ChatMessage>, locationIndex: Int): String? =
-    // Check if they confirmed or denied their reservations from a message
-    messages.filter {
-        it.locationIndex == locationIndex &&
-            (it.type == RESERVATION_CONFIRMED || it.type == RESERVATION_DECLINED)
-    }.maxByOrNull { it.sentAt }?.type
+    latestReservation(messages, locationIndex)?.type
 
 /** Display name of a campsite location: "Country, Province, City", or "location N" if it has none */
 fun locationName(campsite: Campsite, locationIndex: Int): String =
     campsite.getCoordinates().getOrNull(locationIndex)?.getLocationText()?.ifBlank { null }
         ?: "location ${locationIndex + 1}"
 
-/** "Confirm reservation": sends the automated "You reserved spots..." message (only the first
- *  time this location is confirmed, so changing dates later doesn't repeat it) and moves the
- *  campsite from Active Campsites into Reserved Campsites. */
+internal fun latestReservation(messages: List<ChatMessage>, locationIndex: Int): ChatMessage? =
+    messages.filter {
+        it.locationIndex == locationIndex &&
+            (it.type == RESERVATION_CONFIRMED || it.type == RESERVATION_DECLINED)
+    }.maxByOrNull { it.sentAt }
+
+internal fun ChatMessage.reservationDates(): List<LocalDate> =
+    stayDates.mapNotNull { date ->
+        try { LocalDate.parse(date) } catch (_: DateTimeParseException) { null }
+    }
+
+internal fun reservationHasEnded(messages: List<ChatMessage>, today: LocalDate): Boolean {
+    val confirmed = messages.filter { it.locationIndex >= 0 }
+        .map { it.locationIndex }.distinct().mapNotNull { latestReservation(messages, it) }
+        .filter { it.type == RESERVATION_CONFIRMED }
+    return confirmed.isNotEmpty() && confirmed.all { message ->
+        val dates = message.reservationDates()
+        dates.isNotEmpty() && dates.size == message.stayDates.size && dates.all { it.isBefore(today) }
+    }
+}
+
+/** Reconciles expired stays while the entrant is signed in, including after a relaunch. */
+@Composable
+internal fun ReservationHistoryEffect(appState: AppState) {
+    val entrantID = appState.userID
+    if (appState.role != "entrant" || entrantID.isNullOrBlank()) return
+    val entrant = appState.entrants.entrants.firstOrNull { it.getUserID() == entrantID } ?: return
+    val conversations = appState.chat.messages
+        .filter { it.entrantID == entrantID && it.type in listOf(RESERVATION_CONFIRMED, RESERVATION_DECLINED) }
+        .groupBy { it.campsiteID }
+    LaunchedEffect(entrant, conversations) {
+        while (true) {
+            val today = LocalDate.now()
+            entrant.getCampsiteLists()[RESERVED_CAMPSITES].orEmpty().toList().forEach { id ->
+                val messages = conversations[id].orEmpty()
+                if (reservationHasEnded(messages, today)) {
+                    val revision = messages.filter { it.type == RESERVATION_CONFIRMED }.maxOf { it.sentAt }
+                    appState.entrants.archiveReservation(entrant, id, revision)
+                }
+            }
+            delay(30_000)
+        }
+    }
+}
+
 fun confirmReservation(
     appState: AppState,
     campsite: Campsite,
-    entrant: Entrant?,
-    entrantID: String,
-    locationIndex: Int
+    entrant: Entrant,
+    locationIndex: Int,
+    dates: List<LocalDate>,
+    onComplete: (Boolean) -> Unit
 ) {
-    val messages = appState.chat.conversation(campsite.campsiteID, entrantID)
-    if (reservationStatus(messages, locationIndex) != RESERVATION_CONFIRMED) {
-        appState.chat.addMessage(
-            lotteryMessage(campsite, entrantID, RESERVATION_CONFIRMED, locationIndex,
-                System.currentTimeMillis(),
-                "You reserved spots for location ${locationIndex + 1} for ${campsite.getName()}")
-        )
-    }
-    if (entrant != null) reserveCampsite(appState, entrant, campsite.campsiteID)
+    val storedDates = dates.distinct().sorted().map(LocalDate::toString)
+    val message = lotteryMessage(
+        campsite, entrant.getUserID(), RESERVATION_CONFIRMED, locationIndex,
+        System.currentTimeMillis(), "You reserved spots for location ${locationIndex + 1} for ${campsite.getName()}"
+    ).copy(stayDates = storedDates)
+    appState.entrants.confirmStay(entrant, message, onComplete)
 }
 
 /** "Decline reservation": sends the automated "You declined..." message (which also becomes a
