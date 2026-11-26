@@ -89,6 +89,16 @@ import java.time.LocalDateTime
 import java.util.Random
 import java.util.UUID
 
+/*
+the following owner theme colors code (light and dark) was
+implemented with the assistance of Google Gemini, prompted
+on November 24th, 2026, in an attempt to bring it more in
+line visually with the main log-in screen
+
+PROMPT: Bring the owner main screen into alignment with the
+"fancy" theming of the main login screen (see above) and,
+now, the admin main search screen
+ */
 data class OwnerThemeColors(
     val gradient: List<Color>,
     val title: Color,
@@ -121,7 +131,23 @@ private val OwnerDarkColors = OwnerThemeColors(
     secondaryButton = Color(0xFFFFE7BF),
     secondaryText = Color(0xFF1A1A1A)
 )
+// end of Gemini-assisted code (it will be implemented
+// in various ways throughout, so wherever you see the
+// OwnerLightColors and OwnerDarkColors, that is also
+// part of the Gemini additions to the code
 
+/** # Search Screen
+ *  Implementation of the Entrants' Main Screen as seen in the Figma.
+ *
+ *  Prototype was gained from this conversation with Claude Sonnet 5.0:
+ *  https://claude.ai/chat/fa52c57a-03b0-486b-b988-87d2f36ff18a
+ *  Prompt: "How do I Correctly pad this Main screen? How do I make the Cards?"
+ *
+ */
+//https://claude.ai/share/a95788a4-8990-40f1-95c7-b5a744a1e94d: Prompt:I need to make a button to be able to go to campsitechatscreen
+
+// From Gabe; I edited Campsite Details in order to change the dates of the campsites,
+// so it requires this API for date parsing
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun CampsiteOwnerMainScreen(
@@ -281,7 +307,7 @@ fun CampsiteOwnerMainScreen(
                                     fallback = Color(0xFFB0B0B0),
                                     modifier = Modifier.fillMaxSize()
                                 ) {
-                                    CompositionLocalProvider(
+                                    CompositionLocalProvider( // prompted by Gemini 11.24.26 (this is for campsite row, now to contain the images)
                                         LocalContentColor provides if (thumbnail != null) Color.White else Color.Black
                                     ) {
                                         Row(
@@ -304,7 +330,7 @@ fun CampsiteOwnerMainScreen(
 
                                             Spacer(Modifier.width(8.dp))
 
-                                            var menuExpanded by remember { mutableStateOf(false) }
+                                            var menuExpanded by remember { mutableStateOf(false) } // prompted by Gemini 11.24.26 - this is for the menu feature that allows seeing all the options for a campsite
 
                                             Box(modifier = Modifier.wrapContentSize(Alignment.TopEnd)) {
                                                 Button(
@@ -313,7 +339,7 @@ fun CampsiteOwnerMainScreen(
                                                     colors = ButtonDefaults.buttonColors(containerColor = colors.primaryButton, contentColor = colors.primaryText),
                                                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
                                                 ) {
-                                                    Row(
+                                                    Row( // prompted by Gemini 11.24.26 - basically just surround it with a... dropdown menu
                                                         verticalAlignment = Alignment.CenterVertically,
                                                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                                                     ) {
@@ -322,7 +348,7 @@ fun CampsiteOwnerMainScreen(
                                                     }
                                                 }
 
-                                                DropdownMenu(
+                                                DropdownMenu( // prompted by Gemini 11.24.26 - dropdown menu in question
                                                     expanded = menuExpanded,
                                                     onDismissRequest = { menuExpanded = false }
                                                 ) {
@@ -372,6 +398,10 @@ fun CampsiteOwnerMainScreen(
                         .padding(16.dp)
                 ) { Icon(Icons.Filled.Add, contentDescription = "Add campsite") }
             }
+
+            /**
+             * Displays Account details for campsite owner and allows user to log out
+             * **/
 
             // Bottom Navigation Bar
             Row(
@@ -642,7 +672,7 @@ fun CampsiteOwnerMainScreen(
         )
     }
 
-    showReservations?.let { current ->
+    showReservations?.let { current -> // prompted by Gemini 11.24.26 - this is to show previous and current reservations for a campsite
         val matchedCampsite = appState.campsites.campsites.firstOrNull { it.getName() == current.name }
         val previousEntrants = appState.entrants.entrants.filter { entrant ->
             val lists = entrant.getCampsiteLists()
@@ -839,6 +869,12 @@ fun AddEditCampsite(
     }
 }
 
+/*
+Implementation of owner screen as outlined in the figma. Search screen was used as reference.
+AddCampsite, pickdate, and parts of campsiteOwnerMainScreen UI were developed using claude 3.5 in
+this chat: https://claude.ai/share/140477f9-42aa-4b16-8189-dad57b7d8afb
+Prompt: "How do I change this so that the delete and edit buttons are on top of each other at the end of each card"
+ */
 @Composable
 fun LotteryDialog(
     campsite: PreviewCampsite,
@@ -1146,6 +1182,12 @@ fun LotteryDialog(
     }
 }
 
+/**
+ * Prompts :
+ * 1. so when Qr code in campsiteOwners is clicked, I want it to display the campsites the campsite owner has with
+ * a small button beside each of them with the word generate qr code
+ * 2. make a random qr code appear that will appear when generate qr code is clicked,
+ * and will link the campsite details to the entrant when scanned**/
 @Composable
 fun QRCodeImage(
     data: String,
@@ -1198,6 +1240,46 @@ fun QRCodeImage(
     }
 }
 
+/*
+WAITLIST implemented in order to facilitate the lottery function.
+Users/entrants will be allowed to join this waitlist for a period of
+one week until it expires (IMPLEMENTED), at which point 5 (or less,
+depending on waitlist size) random users on the list will be selected,
+on a first-come first-serve basis, to reserve their spots.
+
+They will be notified by the system and are free to turn down these
+requests at will.
+
+The owner can spectate the waiting list as it fills up (or not), right
+until the deadline for waiting list closure. (IMPLEMENTED) Optionally
+they may also be able to see the status of each selected member of the
+waiting list - whether they have signed on or not.
+
+THIS CODE WAS IMPLEMENTED BY GOOGLE GEMINI 11-06-2026, WITH THE PROMPT
+"This button allows a campsite owner to place their campsite into a
+lottery system for a certain period of time. Such a lottery will allow
+for customers/entrants to join a "waiting list" for one week. The owner
+can spectate this waiting list until its expiry."
+
+The following code has been commented and slightly altered from the
+version it provided for the sake of bringing it into line stylistically
+with the rest of our code, and removing any extraneous/redundant features
+it added.
+ */
+/*
+                AGENT USED: GEMINI
+                DATE OF PROMPT: 11-06-2026
+                PROMPT USED:
+                "Upon click, basic pop-up window with "ok" button
+                where the owner can reset the value of numLotteryWinners"
+
+                Some modifications have been performed to the original LLM output.
+                 */
+
+/*
+This function was also implemented using the above prompt. It is useful
+for picking a date, as with the "custom" lottery date feature.
+ */
 private fun pickDate(context: Context, minDateMillis: Long?, onSelected: (Long) -> Unit) {
     val cal = Calendar.getInstance()
     val dialog = DatePickerDialog(
