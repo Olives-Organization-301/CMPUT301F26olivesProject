@@ -78,6 +78,8 @@ fun MainSearchScreen(
     var filters by remember { mutableStateOf(SearchFilters()) }
     // For filter pop-up screen
     var enterSettings by remember { mutableStateOf(false) }
+    // For QR code pop-up screen (dialog lives in EntrantProfileScreen.kt)
+    var enterQrCode by remember { mutableStateOf(false) }
 
     // Campsites that filter and search
     // Uses Levenshtein distance to sort, and filters it based on SearchFilter Dataclass
@@ -102,6 +104,18 @@ fun MainSearchScreen(
                 onSave = { filters = it; enterSettings = false },
                 onClear = { filters = SearchFilters(); enterSettings = false },
                 onDismiss = { enterSettings = false }
+            )
+        }
+        // QR Code Pop-up screen: scan a campsite's QR code, then open its details
+        if (enterQrCode) {
+            QrCodeScanDialog(
+                appState = appState,
+                onCampsiteFound = { campsiteID ->
+                    enterQrCode = false
+                    onUpdateCampsiteId(campsiteID)
+                    navController.navigate("campsiteDetails")
+                },
+                onDismiss = { enterQrCode = false }
             )
         }
         // Padded area for search screen and campsites: search field + list
@@ -139,6 +153,16 @@ fun MainSearchScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Text("⚙", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+                IconButton(onClick = { enterQrCode = true }) {
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .border(2.dp, Color.Black, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("QR", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
