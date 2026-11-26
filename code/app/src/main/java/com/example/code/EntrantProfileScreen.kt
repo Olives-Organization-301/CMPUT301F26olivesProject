@@ -2,9 +2,7 @@ package com.example.code
 
 import android.os.Build
 import androidx.annotation.RequiresApi
-import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.OutlinedButton
@@ -14,11 +12,15 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -28,6 +30,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -35,6 +39,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.key
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -49,6 +54,8 @@ import androidx.navigation.NavController
 import com.example.code.classes.AppState
 import com.example.code.classes.Campsite
 import com.example.code.classes.Entrant
+import com.google.firebase.Firebase
+import com.google.firebase.firestore.firestore
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -210,17 +217,33 @@ fun ProfileScreen(
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Button(
                 onClick = { showPolicyDialog = true },
-                modifier = Modifier.weight(1f)
-            ) { Text("View User Policy") }
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(horizontal = 4.dp)
+            ) { Text("Policy", fontSize = 12.sp, maxLines = 1) }
 
             Button(
                 onClick = { showEditDialog = true },
-                modifier = Modifier.weight(1f)
-            ) { Text("Edit User Profile") }
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(horizontal = 4.dp)
+            ) { Text("Edit Profile", fontSize = 12.sp, maxLines = 1) }
+
+            Button(
+                onClick = {
+                    appState.userID = null
+                    appState.role = null
+                    DeviceIdentity.clearEntrantId(context)
+                    navController.navigate("loginScreen") {
+                        popUpTo(0) { inclusive = true }
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(horizontal = 4.dp)
+            ) { Text("Log Out", fontSize = 12.sp, maxLines = 1, color = Color.White) }
         }
     }
 
@@ -237,14 +260,24 @@ fun ProfileScreen(
                 current.email = email
                 current.phoneNumber = phone
                 current.description = description
+                if (profileImage != current.profileImage) {
+                    if (profileImage.isBlank()) {
+                        deleteEntrantImagesFromFirestore(current.getUserID())
+                    } else {
+                        saveImageRecordToFirestore(context, current.getUserID(), username, email, profileImage)
+                    }
+                }
                 current.profileImage = profileImage
                 current.wantsNotifications = wantsNotifications
                 appState.entrants.updateEntrant(current)
+                // If notifications were just turned on, show any lottery results waiting
+                if (wantsNotifications) notifyLotteryResults(context, appState)
                 refreshTick++
                 showEditDialog = false
             },
             onDeleteProfile = {
                 val id = current.getUserID()
+                deleteEntrantImagesFromFirestore(id)
                 // Take the entrant off every campsite's waiting list before deleting the profile
                 appState.campsites.removeEntrantFromAllCampsites(id)
                 appState.entrants.deleteEntrant(current)
@@ -371,24 +404,24 @@ fun EditProfileDialog(
 
     // Photo Picker: lets the user pick an image from their gallery/files (no permissions needed)
     val context = LocalContext.current
-    val photoPicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.PickVisualMedia()
-    ) { uri ->
-        if (uri != null) {
-            // Keep read access to the image after the app restarts
-            try {
-                context.contentResolver.takePersistableUriPermission(
-                    uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
-                )
-            } catch (e: SecurityException) {
-                android.util.Log.w("EditProfile", "No persistable permission for $uri", e)
-            }
-            profileImage = uri.toString()
+
+    // Whether the phone lets the app notify. The app only asks from here, never on its own.
+    var canNotify by remember { mutableStateOf(hasNotificationPermission(context)) }
+    var askedForPermission by remember { mutableStateOf(false) }
+    val notificationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        canNotify = granted
+        askedForPermission = true
+    }
+    // Opting in asks the phone for permission if it doesn't have it yet
+    fun setWantsNotifications(wants: Boolean) {
+        wantsNotifications = wants
+        if (wants && !canNotify && !askedForPermission) {
+            requestNotificationPermission(context, notificationPermission)
         }
     }
-    val openPhotoPicker = {
-        photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-    }
+    val (processingPhoto, takePhoto, openPhotoPicker) = rememberPhotoPicker { profileImage = it }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -446,56 +479,134 @@ fun EditProfileDialog(
 
                 Spacer(Modifier.height(8.dp))
 
-                // Profile Picture: "Add" if there's none, otherwise "Update" and "Remove"
-                Text("Profile Picture", fontWeight = FontWeight.Bold)
+                // Profile Picture Row
+                Text("Profile Picture", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     ProfilePicture(
                         profileImage = profileImage,
                         modifier = Modifier
-                            .size(56.dp)
+                            .size(48.dp)
                             .clip(CircleShape)
                     )
-                    if (profileImage.isBlank()) {
+
+                    FlowRow(
+                        modifier = Modifier.weight(1f),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Button(
+                            onClick = takePhoto,
+                            enabled = !processingPhoto,
+                            shape = RoundedCornerShape(12.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Text("Take a Picture", fontSize = 11.sp, maxLines = 1)
+                        }
+
                         Button(
                             onClick = openPhotoPicker,
-                            modifier = Modifier.weight(1f)
-                        ) { Text("Add") }
-                    } else {
-                        Button(
-                            onClick = openPhotoPicker,
-                            modifier = Modifier.weight(1f)
-                        ) { Text("Update") }
-                        OutlinedButton(
-                            onClick = { profileImage = "" },
-                            modifier = Modifier.weight(1f)
-                        ) { Text("Remove") }
+                            enabled = !processingPhoto,
+                            shape = RoundedCornerShape(12.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Text("Choose from Gallery", fontSize = 11.sp, maxLines = 1)
+                        }
+
+                        if (profileImage.isNotBlank()) {
+                            OutlinedButton(
+                                onClick = {
+                                    profileImage = ""
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Text("Remove", fontSize = 11.sp, maxLines = 1)
+                            }
+                        }
                     }
                 }
-                // TEMPORARY (testing): swap between the two hardcoded images without the picker
-                TextButton(
-                    onClick = {
-                        profileImage =
-                            if (profileImage == TEST_PFP_PROFILE) TEST_PFP_GIFT else TEST_PFP_PROFILE
+
+                Spacer(Modifier.height(6.dp))
+
+                // Selectable Preset Avatar Thumbnails
+                Text("Preset Avatars (Select to Preview):", fontSize = 12.sp, color = Color.Gray)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(vertical = 4.dp)
+                ) {
+                    // Avatar 1: Default Profile
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(CircleShape)
+                            .border(
+                                width = if (profileImage == TEST_PFP_PROFILE) 3.dp else 1.dp,
+                                color = if (profileImage == TEST_PFP_PROFILE) MaterialTheme.colorScheme.primary else Color.Gray,
+                                shape = CircleShape
+                            )
+                            .clickable {
+                                profileImage = TEST_PFP_PROFILE
+                            }
+                    ) {
+                        Image(
+                            painter = painterResource(R.drawable.default_profile_image),
+                            contentDescription = "Test Profile Avatar",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
                     }
-                ) { Text("Swap test image") }
+
+                    // Avatar 2: Default Gift
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(CircleShape)
+                            .border(
+                                width = if (profileImage == TEST_PFP_GIFT) 3.dp else 1.dp,
+                                color = if (profileImage == TEST_PFP_GIFT) MaterialTheme.colorScheme.primary else Color.Gray,
+                                shape = CircleShape
+                            )
+                            .clickable {
+                                profileImage = TEST_PFP_GIFT
+                            }
+                    ) {
+                        Image(
+                            painter = painterResource(R.drawable.default_gift_image),
+                            contentDescription = "Test Gift Avatar",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                }
 
                 // Notifications opt in / out (tapping the text toggles it too)
                 Text("Notifications", fontWeight = FontWeight.Bold)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { wantsNotifications = !wantsNotifications },
+                        .clickable { setWantsNotifications(!wantsNotifications) },
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Checkbox(
                         checked = wantsNotifications,
-                        onCheckedChange = { wantsNotifications = it }
+                        onCheckedChange = { setWantsNotifications(it) }
                     )
                     Text("Opt in to notifications")
+                }
+                // Opted in, but the phone is blocking notifications for this app
+                if (wantsNotifications && !canNotify) {
+                    Text(
+                        "Notifications are turned off for this app on your phone.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                    TextButton(onClick = {
+                        requestNotificationPermission(context, notificationPermission, askedForPermission)
+                    }) { Text("Allow Notifications") }
                 }
 
                 Spacer(Modifier.height(8.dp))
@@ -511,16 +622,19 @@ fun EditProfileDialog(
         },
         confirmButton = {
             TextButton(
-                onClick = { onSave(
-                    name,
-                    username,
-                    dateOfBirth,
-                    email,
-                    phoneNumber,
-                    description,
-                    profileImage,
-                    wantsNotifications
-                ) }
+                enabled = !processingPhoto,
+                onClick = {
+                    onSave(
+                        name,
+                        username,
+                        dateOfBirth,
+                        email,
+                        phoneNumber,
+                        description,
+                        profileImage,
+                        wantsNotifications
+                    )
+                }
             ) { Text("Save") }
         },
         dismissButton = {
@@ -555,6 +669,112 @@ fun testProfileImageRes(profileImage: String): Int? = when (profileImage) {
     else -> null
 }
 
+fun deleteEntrantImagesFromFirestore(entrantID: String) {
+    if (entrantID.isBlank()) return
+    try {
+        val db = com.google.firebase.Firebase.firestore
+        db.collection("images")
+            .whereEqualTo("entrantID", entrantID)
+            .get()
+            .addOnSuccessListener { snapshot ->
+                for (doc in snapshot.documents) {
+                    db.collection("images").document(doc.id).delete()
+                }
+            }
+    } catch (e: Exception) {
+        android.util.Log.e("ImageDelete", "Failed deleting images for entrant $entrantID from Firestore", e)
+    }
+}
+
+fun uploadImageToFirestore(
+    context: Context,
+    uri: Uri,
+    entrantID: String,
+    onSuccess: (base64: String) -> Unit
+) {
+    try {
+        val inputStream = context.contentResolver.openInputStream(uri)
+        val bytes = inputStream?.readBytes()
+        inputStream?.close()
+        if (bytes != null) {
+            val base64String = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+            val db = com.google.firebase.Firebase.firestore
+            val docId = java.util.UUID.randomUUID().toString()
+            val imageMap = mapOf(
+                "entrantID" to entrantID,
+                "imageData" to base64String,
+                "uri" to uri.toString(),
+                "timestamp" to System.currentTimeMillis()
+            )
+            db.collection("images").document(docId).set(imageMap)
+                .addOnSuccessListener {
+                    onSuccess(base64String)
+                }
+                .addOnFailureListener {
+                    onSuccess(base64String)
+                }
+        }
+    } catch (e: Exception) {
+        android.util.Log.e("ImageUpload", "Error uploading image to Firestore images collection", e)
+    }
+}
+
+fun decodeBase64ToImageBitmap(base64Str: String): ImageBitmap? = try {
+    val cleanBase64 = base64Str.substringAfter("base64,")
+    val bytes = android.util.Base64.decode(cleanBase64, android.util.Base64.DEFAULT)
+    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+} catch (e: Exception) {
+    null
+}
+
+fun saveImageRecordToFirestore(
+    context: Context,
+    entrantID: String,
+    username: String,
+    email: String,
+    profileImage: String
+) {
+    if (profileImage.isBlank() || entrantID.isBlank()) return
+    try {
+        val deviceId = DeviceIdentity.getOrCreate(context)
+        val db = com.google.firebase.Firebase.firestore
+        db.collection("images")
+            .whereEqualTo("entrantID", entrantID)
+            .get()
+            .addOnSuccessListener { snapshot ->
+                for (doc in snapshot.documents) {
+                    db.collection("images").document(doc.id).delete()
+                }
+                val docId = java.util.UUID.randomUUID().toString()
+                val imageDoc = mapOf(
+                    "entrantID" to entrantID,
+                    "deviceIdentity" to deviceId,
+                    "username" to username,
+                    "email" to email,
+                    "profileImage" to profileImage,
+                    "imageData" to profileImage,
+                    "timestamp" to System.currentTimeMillis()
+                )
+                db.collection("images").document(docId).set(imageDoc)
+            }
+            .addOnFailureListener {
+                val docId = java.util.UUID.randomUUID().toString()
+                val imageDoc = mapOf(
+                    "entrantID" to entrantID,
+                    "deviceIdentity" to deviceId,
+                    "username" to username,
+                    "email" to email,
+                    "profileImage" to profileImage,
+                    "imageData" to profileImage,
+                    "timestamp" to System.currentTimeMillis()
+                )
+                db.collection("images").document(docId).set(imageDoc)
+            }
+    } catch (e: Exception) {
+        android.util.Log.e("ImageRecord", "Failed saving image to images collection", e)
+    }
+}
+
 /** Draws an entrant's profile picture. Draws a blank placeholder when there is no picture
  *  or the picked image can't be read.
  */
@@ -564,9 +784,17 @@ fun ProfilePicture(profileImage: String, modifier: Modifier = Modifier) {
     val testRes = testProfileImageRes(profileImage)
 
     // Load picked images off the main thread
-    val bitmap by produceState<ImageBitmap?>(initialValue = null, profileImage) {
-        value = if (profileImage.isBlank() || testRes != null) null
-        else withContext(Dispatchers.IO) { loadImage(context, Uri.parse(profileImage)) }
+    val bitmap = key(context, profileImage) {
+        produceState<ImageBitmap?>(initialValue = null) {
+            value = if (profileImage.isBlank() || testRes != null) null
+            else withContext(Dispatchers.IO) {
+                if (profileImage.startsWith("content://") || profileImage.startsWith("file://")) {
+                    loadImage(context, Uri.parse(profileImage))
+                } else {
+                    decodeBase64ToImageBitmap(profileImage)
+                }
+            }
+        }.value
     }
 
     val loaded = bitmap
@@ -592,7 +820,7 @@ fun ProfilePicture(profileImage: String, modifier: Modifier = Modifier) {
 }
 
 // Reads an image from a content URI, shrunk so its smaller side is roughly maxSize pixels
-private fun loadImage(context: Context, uri: Uri, maxSize: Int = 512): ImageBitmap? = try {
+internal fun loadImage(context: Context, uri: Uri, maxSize: Int = 512): ImageBitmap? = try {
     val resolver = context.contentResolver
     // First pass: only read the image's size
     // Use Bitmap Object in order to decode it with a circle

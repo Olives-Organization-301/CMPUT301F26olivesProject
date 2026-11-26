@@ -187,16 +187,15 @@ fun CampsiteDetailsScreen(
         }
     }
 
-    val detailsImage = campsiteDetailsRes(campsite)
-    // White text over the photo, black text on the plain background
-    val textColor = if (detailsImage != null) Color.White else Color.Black
+    val detailsImage = campsite.detailsPhoto()
+    val textColor = Color.White
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf("Details", "Reviews")
 
     // Entire Interface
-    // Photo background (desaturated + black gradient), or the plain background if there's no image
     CampsiteImageBackground(
-        imageRes = detailsImage,
+        image = detailsImage,
+        defaultImage = R.drawable.campsite_details,
         fallback = ScreenBackground,
         modifier = Modifier.fillMaxSize()
     ) {
