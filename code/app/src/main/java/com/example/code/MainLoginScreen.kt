@@ -10,6 +10,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,6 +30,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.NavController
+import androidx.navigation.compose.currentBackStackEntryAsState
 import com.example.code.classes.AppState
 import com.example.code.classes.Entrant
 import com.google.firebase.Firebase
@@ -83,9 +85,10 @@ fun LoginScreen(
     appState: AppState,
     darkTheme: Boolean = isSystemInDarkTheme()
 ) {
-    var showRoleDialog by remember { mutableStateOf(false) }
+    var showRoleDialog by rememberSaveable { mutableStateOf(false) }
     // true when "Sign up" was pressed, so the role's login screen opens in sign-up mode
-    var signingUp by remember { mutableStateOf(false) }
+    var signingUp by rememberSaveable { mutableStateOf(false) }
+    val backStackEntry by navController.currentBackStackEntryAsState()
 
     LoginScreenContent(
         onSignUp = { signingUp = true; showRoleDialog = true },
@@ -96,10 +99,12 @@ fun LoginScreen(
     var selected by remember { mutableStateOf(false) }
     val newUser by remember { mutableStateOf(Firebase.auth.currentUser == null) }
 
-    if (showRoleDialog) {
+    if (showRoleDialog && backStackEntry?.destination?.route == "loginScreen") {
         AlertDialog(
             onDismissRequest = { showRoleDialog = false },
-            confirmButton = {},
+            confirmButton = {
+                TextButton(onClick = { showRoleDialog = false }) { Text("Back") }
+            },
             title = { Text("Continue as") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -110,7 +115,7 @@ fun LoginScreen(
                     ).forEach { (label, route) ->
                         Button(
                             modifier = Modifier.fillMaxWidth(),
-                            onClick = { showRoleDialog = false; navController.navigate("$route?signUp=$signingUp") }
+                            onClick = { navController.navigate("$route?signUp=$signingUp") }
                         ) { Text(label) }
                     }
                 } // Role select block end

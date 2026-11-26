@@ -72,7 +72,8 @@ fun ReservationsListScreen(
 
     val entrant by produceState<Entrant?>(
         initialValue = null,
-        key1 = appState.userID
+        key1 = appState.userID,
+        key2 = appState.entrants.reservationArchiveVersion
     ) {
         val id = appState.userID
         if (id == null) {

@@ -5,6 +5,8 @@ import androidx.annotation.RequiresApi
 import androidx.compose.runtime.mutableStateListOf
 import com.example.code.classes.Campsite
 import com.example.code.classes.Coordinates
+import com.example.code.classes.Review
+import com.example.code.classes.ReviewReply
 import com.google.firebase.Firebase
 import com.google.android.gms.tasks.Task
 import com.google.android.gms.tasks.Tasks
@@ -81,7 +83,7 @@ class DatabaseCampsites {
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
-    private fun parseCampsiteDocument(doc: DocumentSnapshot): Campsite? {
+    private fun parseCampsiteDocument(doc: DocumentSnapshot, migrateLegacyFields: Boolean = true): Campsite? {
         return try {
             if (!doc.exists()) return null
 
@@ -141,7 +143,7 @@ class DatabaseCampsites {
 
             // Older campsites never saved their lottery dates. Give them the same default as a new
             // campsite (a 7-day lottery starting now) and save it once, so the dates stop changing.
-            if (start == null && end == null) {
+            if (migrateLegacyFields && start == null && end == null) {
                 start = LocalDateTime.now().withNano(0)
                 end = start.plusDays(7)
                 campsitesRef.document(doc.id)
@@ -175,7 +177,7 @@ class DatabaseCampsites {
                 // Fold them into the waiting list and drop the old field once, so it stops existing.
                 val legacyActive = (doc.get("activeLotteryList") as? List<*>)?.filterIsInstance<String>()
                 campsite.setWaitingList((waiting + legacyActive.orEmpty()).distinct())
-                if (legacyActive != null) {
+                if (legacyActive != null && migrateLegacyFields) {
                     val update = mutableMapOf<String, Any>("activeLotteryList" to FieldValue.delete())
                     if (legacyActive.isNotEmpty()) {
                         update["waitingList"] = FieldValue.arrayUnion(*legacyActive.toTypedArray())
@@ -327,10 +329,19 @@ class DatabaseCampsites {
         entrantID: String,
         onComplete: (Boolean) -> Unit = {}
     ) {
-        campsite.addEntrant(entrantID)
-        campsitesRef.document(campsite.campsiteID)
-            .update("waitingList", FieldValue.arrayUnion(entrantID))
-            .addOnSuccessListener { onComplete(true) }
+        val ref = campsitesRef.document(campsite.campsiteID)
+        db.runTransaction { transaction ->
+            val current = parseCampsiteDocument(transaction.get(ref), migrateLegacyFields = false)
+                ?: return@runTransaction false
+            if (current.isLotteryDrawn() || current.isReadyToDraw(LocalDateTime.now())) {
+                return@runTransaction false
+            }
+            transaction.update(ref, "waitingList", FieldValue.arrayUnion(entrantID))
+            true
+        }.addOnSuccessListener { joined ->
+            if (joined) campsite.addEntrant(entrantID)
+            onComplete(joined)
+        }
             .addOnFailureListener { e ->
                 android.util.Log.e("DB", "addToWaitingList failed for ${campsite.campsiteID}", e)
                 onComplete(false)
@@ -423,21 +434,86 @@ class DatabaseCampsites {
         }
     }
 
-    @RequiresApi(Build.VERSION_CODES.O)
-    /** Saves the result of campsite.generateFinalList() (finalList + locationWinners) */
-    fun saveLotteryResults(campsite: Campsite, onComplete: (Boolean) -> Unit = {}) {
-        campsitesRef.document(campsite.campsiteID)
-            .update(
-                mapOf(
-                    "finalList" to campsite.getFinalList(),
-                    "locationWinners" to campsite.getLocationWinners()
-                )
-            )
-            .addOnSuccessListener { onComplete(true) }
-            .addOnFailureListener { e ->
-                android.util.Log.e("DB", "saveLotteryResults failed for ${campsite.campsiteID}", e)
-                onComplete(false)
+    internal fun updateLotteryDates(campsiteID: String, ownerID: String, start: LocalDateTime, end: LocalDateTime): Task<Boolean> {
+        val ref = campsitesRef.document(campsiteID)
+        return db.runTransaction { transaction ->
+            val campsite = parseCampsiteDocument(transaction.get(ref), migrateLegacyFields = false)
+                ?: return@runTransaction false
+            if (campsite.getOwnerID() != ownerID || campsite.isLotteryDrawn() || !start.isBefore(end)) {
+                return@runTransaction false
             }
+            transaction.update(ref, "lotteryStartDate", start.toString(), "lotteryEndDate", end.toString())
+            true
+        }
+    }
+
+    /** Commits the draw and its chat messages together, once per campsite. */
+    internal fun drawClosedLottery(campsiteID: String, ownerID: String): Task<Boolean> {
+        val campsiteRef = campsitesRef.document(campsiteID)
+        return db.runTransaction { transaction ->
+            val campsite = parseCampsiteDocument(transaction.get(campsiteRef), migrateLegacyFields = false)
+                ?: return@runTransaction false
+            if (campsite.getOwnerID() != ownerID ||
+                !campsite.isReadyToDraw(LocalDateTime.now())
+            ) return@runTransaction false
+
+            campsite.generateFinalList()
+            transaction.update(campsiteRef, mapOf(
+                "finalList" to campsite.getFinalList(),
+                "locationWinners" to campsite.getLocationWinners()
+            ))
+            lotteryResultMessages(campsite, System.currentTimeMillis()).forEach { message ->
+                val ref = db.collection("messages").document()
+                transaction.set(ref, message.copy(messageID = ref.id))
+            }
+            true
+        }
+    }
+
+    private fun reviews(campsiteID: String) = campsitesRef.document(campsiteID).collection("reviews")
+
+    internal fun observeReviews(campsiteID: String, onResult: (List<Review>?) -> Unit) =
+        reviews(campsiteID).orderBy("createdAt").addSnapshotListener { snapshot, error ->
+            onResult(if (error != null) null else snapshot?.documents?.map { doc ->
+                Review(doc.id, doc.getString("entrantID").orEmpty(), campsiteID,
+                    doc.getLong("rating")?.toInt() ?: 0, doc.getString("review").orEmpty(),
+                    doc.getString("authorName").orEmpty())
+            })
+        }
+
+    internal fun postReview(review: Review): Task<Boolean> {
+        val ref = reviews(review.campsiteID).document(review.entrantID)
+        return db.runTransaction { transaction ->
+            if (transaction.get(ref).exists()) return@runTransaction false
+            transaction.set(ref, mapOf(
+                "entrantID" to review.entrantID, "authorName" to review.authorName,
+                "rating" to review.rating, "review" to review.review,
+                "createdAt" to FieldValue.serverTimestamp()
+            ))
+            true
+        }
+    }
+
+    internal fun observeReviewReplies(review: Review, onResult: (List<ReviewReply>?) -> Unit) =
+        reviews(review.campsiteID).document(review.reviewID).collection("replies").orderBy("createdAt")
+            .addSnapshotListener { snapshot, error ->
+                onResult(if (error != null) null else snapshot?.documents?.map { doc ->
+                    ReviewReply(doc.id, review.reviewID, doc.getString("entrantID").orEmpty(),
+                        review.campsiteID, doc.getString("contents").orEmpty(), doc.getString("authorName").orEmpty())
+                })
+            }
+
+    internal fun postReviewReply(reply: ReviewReply): Task<Boolean> {
+        val review = reviews(reply.campsiteID).document(reply.parentReviewID)
+        val ref = review.collection("replies").document()
+        return db.runTransaction { transaction ->
+            if (!transaction.get(review).exists()) return@runTransaction false
+            transaction.set(ref, mapOf(
+                "entrantID" to reply.entrantID, "authorName" to reply.authorName,
+                "contents" to reply.contents, "createdAt" to FieldValue.serverTimestamp()
+            ))
+            true
+        }
     }
 
     fun searchCampsite(campsiteID: String, onResult: (Campsite?) -> Unit) {

@@ -277,7 +277,7 @@ fun CampsiteDetailsScreen(
                 ) {
                     when (selectedTab) {
                         0 -> CampsiteDetailsTab(campsite, owner)
-                        else -> CampsiteReviewsTab(campsite, textColor)
+                        else -> CampsiteReviewsTab(campsite, entrant.takeIf { appState.role == "entrant" }, appState.campsites, textColor)
                     }
                 }
 
@@ -337,7 +337,11 @@ fun CampsiteDetailsScreen(
                                     joinedActiveLottery = lotteryActive
                                     // 2. entrant doc: campsiteLists.<list> += campsiteID
                                     val addToEntrant: (Boolean) -> Unit = { campsiteOk ->
-                                        appState.entrants.addEntrantCampsite(
+                                        if (!campsiteOk) {
+                                            isSaving = false
+                                            joinSucceeded = false
+                                            showJoinDialog = true
+                                        } else appState.entrants.addEntrantCampsite(
                                             currentEntrant,
                                             if (lotteryActive) ACTIVE_CAMPSITES else WAITING_LIST,
                                             campsite.campsiteID
@@ -474,41 +478,6 @@ private fun CampsiteDetailsTab(campsite: Campsite?, owner: CampsiteOwner?) {
         text = campsite?.getDescription() ?: "",
         fontSize = 16.sp
     )
-}
-
-/** Reviews tab: one card per review, or a message if there are none yet */
-@Composable
-private fun CampsiteReviewsTab(campsite: Campsite?, textColor: Color) {
-    // This is where the REVIEWS are
-    val reviews = campsite?.getReviews()?.entries?.toList().orEmpty()
-    if (reviews.isEmpty()) {
-        Text("No reviews yet.", fontSize = 16.sp, color = textColor.copy(alpha = 0.75f))
-        return
-    }
-    // Iterate through review and reply
-    reviews.forEach { (review, replies) ->
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 6.dp)
-                .background(textColor.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
-                .padding(12.dp)
-        ) {
-            // TODO: reviews are stored as IDs now; fetch the Review object by ID before showing these
-            // // Ratings are stored out of 10 and shown out of 5
-            // Text(
-            //     "★ ${review.rating / 2f}/5${if (review.isEdited) "  (edited)" else ""}",
-            //     fontWeight = FontWeight.Bold,
-            //     fontSize = 16.sp
-            // )
-            // Text(review.review, fontSize = 16.sp)
-            // Text(
-            //     "${review.calculateTotalUpvote()} votes · ${replies.size} replies",
-            //     fontSize = 13.sp,
-            //     color = textColor.copy(alpha = 0.7f)
-            // )
-        }
-    }
 }
 
 /** Colour behind the dates a campsite is available (light blue) */
