@@ -131,14 +131,9 @@ fun EntrantMessagesScreen(
             onClose = { navController.popBackStack() }
         )
     } else {
-<<<<<<< Updated upstream
-        // Phone back button returns to the list instead of leaving the screen
         // Open a Chat between Entrant and Campsite Owner
-        BackHandler { openCampsiteID = null }
-=======
         // Phone back button: back to the list, or to the previous screen if opened straight into this chat
         BackHandler { closeChat() }
->>>>>>> Stashed changes
         ChatThread(
             appState = appState,
             campsiteID = openID,
