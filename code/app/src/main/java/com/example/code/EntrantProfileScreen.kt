@@ -3,6 +3,7 @@ package com.example.code
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.OutlinedButton
@@ -76,7 +77,6 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import android.graphics.Bitmap
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.width
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.runtime.LaunchedEffect
 import com.google.zxing.BarcodeFormat
