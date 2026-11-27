@@ -167,6 +167,14 @@ class CampsiteLifecycleTest {
             userID = "owner"
             role = "owner"
         }
+        every { state.chat.messages } returns listOf(
+            ChatMessage(campsiteID = "site", ownerID = "owner", entrantID = "past",
+                type = RESERVATION_CONFIRMED, locationIndex = 0,
+                stayDates = listOf("2026-11-01")),
+            ChatMessage(campsiteID = "other-site", ownerID = "owner", entrantID = "other",
+                type = RESERVATION_CONFIRMED, locationIndex = 0,
+                stayDates = listOf("2026-11-01"))
+        )
         every { state.owners.searchCampsiteOwner("owner", any()) } answers {
             secondArg<(CampsiteOwner?) -> Unit>()(null)
         }
@@ -212,6 +220,8 @@ class CampsiteLifecycleTest {
     @Test
     fun postedReviewAndReplyAppearAfterReopeningReviews() {
         val database = mockk<DatabaseCampsites>()
+        every { database.campsites } returns listOf(campsite)
+        every { database.refreshCampsiteRating("site") } returns Tasks.forResult<Void>(null)
         val reviewListener = mockk<ListenerRegistration>(relaxed = true)
         val replyListener = mockk<ListenerRegistration>(relaxed = true)
         val storedReviews = mutableListOf<Review>()

@@ -243,8 +243,8 @@ class EntrantSearchTest {
         // The details screen shows that campsite's information
         composeTestRule.onNodeWithText("Banff National Park").assertIsDisplayed()
         composeTestRule.onNodeWithText("Parks Canada").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Lottery Begin Date: 2026-07-01").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Lottery End Date: 2026-07-06").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Registration opens: 2026-07-01").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Registration closes: 2026-07-06").assertIsDisplayed()
         composeTestRule.onNodeWithText("Rating: 4.8/5").assertIsDisplayed()
         composeTestRule.onNodeWithText("Max Occupancy: 4").assertIsDisplayed()
         composeTestRule.onNodeWithText("Location: Canada").assertIsDisplayed()

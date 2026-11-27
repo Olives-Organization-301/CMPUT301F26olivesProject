@@ -37,7 +37,7 @@ class EntrantLoginScreenTest {
         composeTestRule.onNodeWithText("fyreserve", substring = true).assertExists() // checks that all the texts exist.
         composeTestRule.onNodeWithText("Sign up").assertExists()
         composeTestRule.onNodeWithText("Log in").assertExists()
-        composeTestRule.onNodeWithText("Campsite Owner Login").assertExists()
+        // Role selection follows the shared sign-up or login entry point.
     }
 
     @Test
