@@ -19,24 +19,15 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-<<<<<<< Updated upstream
-        setContent {
-            CodeTheme {
-                val appState = remember { AppState() }
-                LotteryNotificationEffect(appState)
-                ReservationHistoryEffect(appState)
-                CampsiteNavController(appState)
-=======
         if (!isTestMode) {
             setContent {
                 CodeTheme {
-                    val campsiteDatabase = remember { mutableStateListOf<Campsite>() }
-                    CampsiteNavController(campsiteDatabase)
+                    val appState = remember { AppState() }
+                    LotteryNotificationEffect(appState)
+                    ReservationHistoryEffect(appState)
+                    CampsiteNavController(appState)
                 }
->>>>>>> Stashed changes
             }
         }
     }
 }
-
-
