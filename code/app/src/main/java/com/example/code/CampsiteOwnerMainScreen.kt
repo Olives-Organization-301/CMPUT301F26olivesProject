@@ -1091,209 +1091,56 @@ private fun LotteryDialog(
                             OutlinedButton(onClick = { pickDate(context, null) { start = it } }) {
                                 Text("Start date", fontSize = 12.sp)
                             }
-
-                            Button(
-                                onClick = {
-                                    pickDate(context, null) { s ->
-                                        endMillis = s
-                                        val cal = Calendar.getInstance().apply {
-                                            timeInMillis = s
-                                            add(Calendar.DAY_OF_YEAR, 7)
-                                        }
-                                    }
-                                },
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text("End date", maxLines = 1, fontSize = 12.sp)
-                            }
-
-                            Button(
-                                onClick = {
-                                    inputWinnersText = numLotteryWinners.toString()
-                                    showSetWinnersDialog = true
-                                },
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text("Set # of selected", maxLines = 1, fontSize = 12.sp)
+                            OutlinedButton(onClick = { pickDate(context, start) { end = it } }) {
+                                Text("End date", fontSize = 12.sp)
                             }
                         }
                     }
                 }
-
-                if (showSetWinnersDialog) {
-                    AlertDialog(
-                        onDismissRequest = { showSetWinnersDialog = false },
-                        title = { Text("Set number of lottery winners") },
-                        text = {
-                            Column {
-                                Text("Enter number of entrants to be drawn for this lottery:")
-                                Spacer(modifier = Modifier.height(8.dp))
-                                OutlinedTextField(
-                                    value = inputWinnersText,
-                                    onValueChange = { inputWinnersText = it },
-                                    label = { Text("Number of winners") },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    singleLine = true,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
-                        },
-                        confirmButton = {
-                            Button(
-                                onClick = {
-                                    val parsed = inputWinnersText.toIntOrNull()
-                                    if (parsed != null && parsed >= 0) {
-                                        numLotteryWinners = parsed
-                                    }
-                                    showSetWinnersDialog = false
-                                }
-                            ) {
-                                Text("Confirm")
-                            }
-                        },
-                        dismissButton = {
-                            TextButton(onClick = { showSetWinnersDialog = false }) {
-                                Text("Cancel")
-                            }
-                        }
-                    )
+                item {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Waiting list (${entrants.size} entrants)", fontWeight = FontWeight.Bold)
                 }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Waiting list (${waitingList.size} entrants)",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-
-                Text(
-                    text = if (isExpired) "Lottery expired, viewing final waiting list"
-                           else "Waiting list currently in progress",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.Gray
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                if (waitingList.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                            .background(Color.LightGray.copy(alpha = 0.2f), RoundedCornerShape(12.dp)),
-                        contentAlignment = Alignment.Center
+                items(entrants, key = { it }) { entrantID ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "No entrants yet",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.Gray
-                        )
-                    }
-                } else {
-                    LazyColumn(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(waitingList) { entrant ->
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(12.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(text = entrant.name, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                                        Text(text = entrant.email, style = MaterialTheme.typography.bodySmall, color = Color.DarkGray)
-                                        Text(
-                                            text = "Joined: ${format.format(Date(entrant.joinedMillis))}",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = Color.Gray
-                                        )
-                                    }
-                                    IconButton(
-                                        onClick = {
-                                            waitingList = waitingList.filter { it.id != entrant.id }
-                                        }
-                                    ) {
-                                        Icon(Icons.Filled.Close, contentDescription = "Remove entrant", modifier = Modifier.size(18.dp))
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Text("Add entrant to waiting list (TESTING PURPOSES ONLY)", style = MaterialTheme.typography.labelLarge)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            OutlinedTextField(
-                                value = newEntrantName,
-                                onValueChange = { newEntrantName = it },
-                                label = { Text("Name", fontSize = 11.sp) },
-                                modifier = Modifier.weight(1f),
-                                singleLine = true
+                        Text(entrantNames[entrantID]?.ifBlank { null } ?: entrantID, fontSize = 14.sp)
+                        if (drawn) {
+                            val locations = liveCampsite?.getLocationsWon(entrantID).orEmpty()
+                            Text(
+                                if (locations.isEmpty()) "Not selected"
+                                else locations.joinToString { "Location ${it + 1}" },
+                                fontSize = 13.sp,
+                                color = if (locations.isNotEmpty()) Color(0xFF2E7D32) else Color.Gray
                             )
-                            OutlinedTextField(
-                                value = newEntrantEmail,
-                                onValueChange = { newEntrantEmail = it },
-                                label = { Text("Email", fontSize = 11.sp) },
-                                modifier = Modifier.weight(1f),
-                                singleLine = true
-                            )
-                            Button(
-                                onClick = {
-                                    if (newEntrantName.isNotBlank()) {
-                                        val newEntrant = WaitlistEntrant(
-                                            id = java.util.UUID.randomUUID().toString(),
-                                            name = newEntrantName,
-                                            email = newEntrantEmail.ifBlank { "entrant@example.com" },
-                                            joinedMillis = System.currentTimeMillis()
-                                        )
-                                        waitingList = waitingList + newEntrant
-                                        newEntrantName = ""
-                                        newEntrantEmail = ""
-                                    }
-                                }
-                            ) {
-                                Text("Add", fontSize = 12.sp)
-                            }
                         }
                     }
                 }
             }
-        }
-    }
+        },
+        confirmButton = {
+            if (!drawn) {
+                TextButton(enabled = start != null && end != null, onClick = {
+                    onSave(start, end)
+                }) { Text("Save dates") }
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } }
+    )
 }
-/**
- * Prompts :
- * 1. so when Qr code in campsiteOwners is clicked, I want it to display the campsites the campsite owner has with
- * a small button beside each of them with the word generate qr code
- * 2. make a random qr code appear that will appear when generate qr code is clicked,
- * and will link the campsite details to the entrant when scanned**/
+
+internal fun createCampsiteQrBitmap(campsiteID: String): Bitmap {
+    val matrix = QRCodeWriter().encode(campsiteID, BarcodeFormat.QR_CODE, 384, 384)
+    val pixels = IntArray(matrix.width * matrix.height) { index ->
+        if (matrix[index % matrix.width, index / matrix.width]) android.graphics.Color.BLACK
+        else android.graphics.Color.WHITE
+    }
+    return Bitmap.createBitmap(pixels, matrix.width, matrix.height, Bitmap.Config.ARGB_8888)
+}
+
 @Composable
 fun QRCodeImage(data: String, modifier: Modifier = Modifier) {
     val image = remember(data) { createCampsiteQrBitmap(data).asImageBitmap() }
