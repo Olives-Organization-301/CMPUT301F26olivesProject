@@ -70,6 +70,13 @@ fun EntrantLoginScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
+        TextButton(
+            onClick = { navController.popBackStack() },
+            modifier = Modifier.align(Alignment.Start)
+        ) {
+            Text("Back", color = ButtonBlue)
+        }
+
         Text(
             text = if (isSignUp) "Entrant Sign Up" else "Entrant Login",
             fontSize = 28.sp,

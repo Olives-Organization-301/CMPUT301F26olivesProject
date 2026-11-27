@@ -12,6 +12,7 @@ class Review(
     val campsiteID: String,
     var rating: Int = 0,
     var review: String = "",
+    val authorName: String = "",
 ) {
     /**
      * isEdited: Track if review was edited

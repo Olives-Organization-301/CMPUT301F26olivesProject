@@ -1,5 +1,6 @@
 package com.example.code
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -8,18 +9,23 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,6 +47,9 @@ import java.util.Locale
  *  Prototype was gained from a Conversation with Android Studio's agent
  *  Prompt: "Create an interactive chat screen with real-time text messaging and input field"
  *
+ *  Codex prompt summary: Open Messages to list entrants with reservations at the owner's
+ *  campsites, then verify the flow on the emulator.
+ *
  */
 
 private val ChatBackground = Color(0xFFD4D0CF)
@@ -50,32 +59,103 @@ private val SubtitleColor = Color(0xFF666666)
 @Composable
 fun CampsiteChatScreen(
     navController: NavController,
-    appState: AppState? = null,
-    campsiteName: String = "Campsite Name",
-    ownerName: String = "Owner Name",
-    entrantName: String = "Entrant Name",
-    messages: List<ChatMessage> = emptyList()
+    appState: AppState
 ) {
-    var messageText by remember { mutableStateOf("") }
-    val dbMessages = appState?.chat?.messages ?: emptyList()
-    val displayMessages = if (dbMessages.isNotEmpty()) {
-        dbMessages
-    } else if (messages.isNotEmpty()) {
-        messages
-    } else {
-        listOf(
-            ChatMessage(sender = "Entrant Name", timestamp = "Date, Time", text = "[Message Txt]", fromOwner = false),
-            ChatMessage(sender = "Owner Name", timestamp = "Date, Time", text = "[Message Txt]", fromOwner = true),
-            ChatMessage(sender = "Entrant Name", timestamp = "Date, Time", text = "[Message Txt]", fromOwner = false)
+    val ownerID = appState.userID?.takeIf { appState.role == "owner" }
+    var campsiteID by rememberSaveable(ownerID) { mutableStateOf<String?>(null) }
+    var entrantID by rememberSaveable(ownerID) { mutableStateOf<String?>(null) }
+
+    // Reserved Campsites is the confirmed list. The same entrant can have a thread at each site.
+    val entrantsByCampsite = appState.entrants.entrants.flatMap { entrant ->
+        entrant.getCampsiteLists()[RESERVED_CAMPSITES].orEmpty().distinct().map { it to entrant }
+    }.groupBy({ it.first }, { it.second })
+    val reservations = appState.campsites.campsites
+        .filter { ownerID != null && it.getOwnerID() == ownerID }
+        .sortedBy { it.getName() }
+        .flatMap { campsite ->
+            entrantsByCampsite[campsite.campsiteID].orEmpty()
+                .sortedBy { it.name.ifBlank { it.username } }
+                .map { entrant -> campsite to entrant }
+        }
+    val selection = reservations.firstOrNull { (campsite, entrant) ->
+        campsite.campsiteID == campsiteID && entrant.getUserID() == entrantID
+    }
+    val closeThread = {
+        campsiteID = null
+        entrantID = null
+    }
+    BackHandler(enabled = selection != null, onBack = closeThread)
+    if (selection != null && ownerID != null) {
+        val (campsite, entrant) = selection
+        val owner = appState.owners.campsiteOwners.firstOrNull { it.getUserID() == ownerID }
+        OwnerChatThread(
+            campsiteName = campsite.getName(),
+            ownerName = owner?.name?.ifBlank { owner.username }?.ifBlank { null } ?: "Campsite Owner",
+            entrantName = entrant.name.ifBlank { entrant.username },
+            messages = appState.chat.conversation(campsite.campsiteID, entrant.getUserID()),
+            onBack = closeThread,
+            onSend = { message ->
+                appState.chat.addMessage(message.copy(
+                    campsiteID = campsite.campsiteID,
+                    entrantID = entrant.getUserID(),
+                    ownerID = ownerID
+                ))
+            }
         )
+        return
     }
 
+    Column(Modifier.fillMaxSize().background(ChatBackground).navigationBarsPadding().padding(14.dp)) {
+        Spacer(Modifier.height(34.dp))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Button(onClick = { navController.popBackStack() }) { Text("Back") }
+            Text("Messages", fontSize = 20.sp, fontWeight = FontWeight.Medium, color = Color.Black)
+        }
+        if (reservations.isEmpty()) {
+            Text("No entrants with confirmed reservations.", modifier = Modifier.padding(top = 12.dp), color = Color.Black)
+        }
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(reservations) { (campsite, entrant) ->
+                Surface(
+                    onClick = {
+                        campsiteID = campsite.campsiteID
+                        entrantID = entrant.getUserID()
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Column(Modifier.padding(14.dp)) {
+                        Text(entrant.name.ifBlank { entrant.username }, fontWeight = FontWeight.Medium)
+                        Text(campsite.getName(), fontSize = 14.sp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OwnerChatThread(
+    campsiteName: String,
+    ownerName: String,
+    entrantName: String,
+    messages: List<ChatMessage>,
+    onBack: () -> Unit,
+    onSend: (ChatMessage) -> Unit
+) {
+    var messageText by remember { mutableStateOf("") }
+    val listState = rememberLazyListState()
+    LaunchedEffect(messages.size) {
+        if (messages.isNotEmpty()) listState.scrollToItem(messages.lastIndex)
+    }
     val timeFormatter = remember { SimpleDateFormat("MMM d, h:mm a", Locale.getDefault()) }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(ChatBackground)
+            .navigationBarsPadding()
+            .imePadding()
     ) {
         // To avoid clipping into top status bar
         Spacer(Modifier.height(48.dp))
@@ -85,7 +165,7 @@ fun CampsiteChatScreen(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
         ) {
             Button(
-                onClick = { navController.popBackStack() },
+                onClick = onBack,
                 modifier = Modifier.padding(end = 14.dp)
             ) {
                 Text("Back")
@@ -107,13 +187,14 @@ fun CampsiteChatScreen(
         }
 
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
                 .padding(horizontal = 14.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            items(displayMessages) { message ->
+            items(messages) { message ->
                 MessageRow(message)
             }
         }
@@ -139,21 +220,16 @@ fun CampsiteChatScreen(
                     singleLine = true
                 )
                 Button(
+                    enabled = messageText.isNotBlank(),
                     onClick = {
-                        if (messageText.isNotBlank()) {
-                            val newMsg = ChatMessage(
-                                messageID = java.util.UUID.randomUUID().toString(),
-                                campsiteName = campsiteName,
-                                sender = ownerName,
-                                timestamp = timeFormatter.format(Date()),
-                                text = messageText.trim(),
-                                fromOwner = true,
-                                entrantID = entrantName,
-                                ownerID = ownerName
-                            )
-                            appState?.chat?.addMessage(newMsg)
-                            messageText = ""
-                        }
+                        onSend(ChatMessage(
+                            campsiteName = campsiteName,
+                            sender = ownerName,
+                            timestamp = timeFormatter.format(Date()),
+                            text = messageText.trim(),
+                            fromOwner = true
+                        ))
+                        messageText = ""
                     }
                 ) {
                     Text("Send")

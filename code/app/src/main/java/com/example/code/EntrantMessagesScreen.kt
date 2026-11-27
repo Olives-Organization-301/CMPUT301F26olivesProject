@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -74,7 +75,11 @@ import java.util.Locale
  */
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
-fun EntrantMessagesScreen(navController: NavController, appState: AppState) {
+fun EntrantMessagesScreen(
+    navController: NavController,
+    appState: AppState,
+    initialCampsiteID: String? = null // Set when opened from a campsite's chat button
+) {
     // Initialize UserID
     val userID = appState.userID
 
@@ -111,7 +116,12 @@ fun EntrantMessagesScreen(navController: NavController, appState: AppState) {
                 .sortedBy { it.campsiteName }
 
     // Conversation that is open (null = showing the list)
-    var openCampsiteID by remember { mutableStateOf<String?>(null) }
+    var openCampsiteID by remember { mutableStateOf(initialCampsiteID) }
+
+    // Opened straight into a chat (e.g. from the Reservations list): Back returns to that screen
+    val closeChat: () -> Unit = {
+        if (initialCampsiteID != null) navController.popBackStack() else openCampsiteID = null
+    }
 
     val openID = openCampsiteID
     if (openID == null || userID == null) {
@@ -122,16 +132,16 @@ fun EntrantMessagesScreen(navController: NavController, appState: AppState) {
             onClose = { navController.popBackStack() }
         )
     } else {
-        // Phone back button returns to the list instead of leaving the screen
         // Open a Chat between Entrant and Campsite Owner
-        BackHandler { openCampsiteID = null }
+        // Phone back button: back to the list, or to the previous screen if opened straight into this chat
+        BackHandler { closeChat() }
         ChatThread(
             appState = appState,
             campsiteID = openID,
             entrantID = userID,
             entrant = entrant,
             messages = appState.chat.conversation(openID, userID),
-            onBack = { openCampsiteID = null }
+            onBack = closeChat
         )
     }
 }
@@ -235,9 +245,13 @@ private fun ChatThread(
     var messageText by remember { mutableStateOf("") }
     // Location whose Select Dates calendar is open (null = closed)
     var reservingLocation by remember { mutableStateOf<Int?>(null) }
-    // Days picked per location
-    // TODO: save these to Firestore (nothing is stored yet)
-    val pickedDates = remember(campsiteID) { mutableStateMapOf<Int, List<LocalDate>>() }
+    var savingReservation by remember { mutableStateOf(false) }
+    var reservationError by remember { mutableStateOf(false) }
+    val pickedDates = messages.filter { it.type == RESERVATION_CONFIRMED }
+        .map { it.locationIndex }.distinct().associateWith { location ->
+            latestReservation(messages, location)
+                ?.takeIf { it.type == RESERVATION_CONFIRMED }?.reservationDates().orEmpty()
+        }
 
     // Keep the newest message in view
     val listState = rememberLazyListState()
@@ -246,7 +260,7 @@ private fun ChatThread(
     }
     val timeFormatter = remember { SimpleDateFormat("MMM d, h:mm a", Locale.getDefault()) }
 
-    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 15.dp)) {
+    Column(modifier = Modifier.fillMaxSize().imePadding().padding(horizontal = 15.dp)) {
         Spacer(Modifier.height(48.dp))
 
         // Header: back + campsite name
@@ -297,10 +311,15 @@ private fun ChatThread(
                         } else {
                             // Button to pick dates
                             val confirmed = status == RESERVATION_CONFIRMED || picked.isNotEmpty()
-                            Button(
-                                onClick = { reservingLocation = message.locationIndex },
-                                enabled = campsite != null
-                            ) { Text(if (confirmed) "Change Dates" else "Select Dates") }
+                            val ended = picked.isNotEmpty() && picked.all { it.isBefore(LocalDate.now()) }
+                            if (ended) {
+                                Text("Stay completed", fontSize = 13.sp)
+                            } else {
+                                Button(
+                                    onClick = { reservingLocation = message.locationIndex },
+                                    enabled = campsite != null && entrant != null
+                                ) { Text(if (confirmed) "Change Dates" else "Select Dates") }
+                            }
                             if (picked.isNotEmpty()) {
                                 Text("You picked ${picked.size} day(s).", fontSize = 13.sp)
                             }
@@ -352,15 +371,26 @@ private fun ChatThread(
             campsite = site,
             title = "Select Dates: Location ${location + 1}",
             initiallySelected = pickedDates[location].orEmpty().toSet(),
-            onDismiss = { reservingLocation = null },
+            onDismiss = {
+                if (!savingReservation) {
+                    reservingLocation = null
+                    reservationError = false
+                }
+            },
+            saving = savingReservation,
+            saveFailed = reservationError,
             onConfirm = { dates ->
-                pickedDates[location] = dates
-                reservingLocation = null
-                // Message + moves the campsite into the entrant's Reserved Campsites list
-                confirmReservation(appState, site, entrant, entrantID, location)
+                if (entrant != null) {
+                    savingReservation = true
+                    reservationError = false
+                    confirmReservation(appState, site, entrant, location, dates) { saved ->
+                        savingReservation = false
+                        reservationError = !saved
+                        if (saved) reservingLocation = null
+                    }
+                }
             },
             onDecline = {
-                pickedDates.remove(location)
                 reservingLocation = null
                 // Message + notification, locks this location, updates the entrant's lists
                 declineReservation(appState, site, entrant, entrantID, location)
@@ -441,7 +471,9 @@ fun ReserveDatesDialog(
     initiallySelected: Set<LocalDate>,
     onDismiss: () -> Unit,
     onConfirm: (List<LocalDate>) -> Unit,
-    onDecline: () -> Unit
+    onDecline: () -> Unit,
+    saving: Boolean = false,
+    saveFailed: Boolean = false
 ) {
     val ranges = campsite.getVacationStartTimes()
     var selected by remember(campsite) { mutableStateOf(initiallySelected) }
@@ -484,18 +516,21 @@ fun ReserveDatesDialog(
                 Text("${selected.size} day(s) selected", fontSize = 12.sp)
                 Spacer(Modifier.height(12.dp))
 
+                if (saveFailed) Text("Could not save your reservation. Try again.")
+
                 // Decline / Confirm buttons under the calendar
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     OutlinedButton(
+                        enabled = !saving,
                         onClick = onDecline,
                         modifier = Modifier.weight(1f),
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
                     ) { Text("Decline reservation", fontSize = 13.sp, textAlign = TextAlign.Center) }
                     Button(
-                        enabled = selected.isNotEmpty(),
+                        enabled = !saving && selected.isNotEmpty(),
                         onClick = { onConfirm(selected.sorted()) },
                         modifier = Modifier.weight(1f),
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)

@@ -1,7 +1,11 @@
 package com.example.code
 
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateListOf
 import com.example.code.classes.Entrant
+import com.example.code.classes.ChatMessage
 import com.google.firebase.Firebase
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldPath
@@ -9,8 +13,6 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.firestore
 
 /** Database of Entrants, representing the Entrants' screens
- * one of the prompts used : now when User Database is clicked, I want both collections "Entrants" and "
- *  * CampsiteOwners" displayed as how the logic for displaying collection "campsites" were in Admin
  */
 class DatabaseEntrants {
     private val db = Firebase.firestore
@@ -18,16 +20,10 @@ class DatabaseEntrants {
     private val _entrants = mutableStateListOf<Entrant>()
 
     val entrants: List<Entrant> get() = _entrants
+    internal var reservationArchiveVersion by mutableIntStateOf(0)
+        private set
 
-    /** Builds a full Entrant Object from a Firestore document, including the profile fields
-     *  (name, dateOfBirth, phoneNumber, description, profileImage) and the campsite lists.
-     *  Used Opus 5.5 in order to create an Entrant Object (For App usage)
-     *  Prompt: "Why isn't Profile information persisting?"
-     *  Conversation: https://claude.ai/share/ae294592-b4fe-497b-86a9-a45c32b331e2
-     *  Date: Nov 20, 2026
-     */
     private fun docToEntrant(doc: DocumentSnapshot): Entrant {
-        // Get Doc Strings in order to fill out profile information
         val entrant = Entrant(
             username = doc.getString("username") ?: doc.getString("name") ?: doc.id,
             email = doc.getString("email") ?: doc.getString("Email") ?: "",
@@ -37,9 +33,8 @@ class DatabaseEntrants {
             name = doc.getString("name") ?: "",
             dateOfBirth = doc.getString("dateOfBirth") ?: "",
             wantsNotifications = doc.getBoolean("wantsNotifications") ?: true,
-            profileImage = doc.getString("profileImage") ?: ""   // Older entrants have no profileImage field
+            profileImage = "" // Loaded strictly via scoped images query to ensure device/entrant isolation
         )
-        // Get List of Campsites Entrant is getting it
         val lists = doc.get("campsiteLists") as? Map<*, *>
         lists?.forEach { (key, value) ->
             if (key is String) {
@@ -58,7 +53,7 @@ class DatabaseEntrants {
             }
             if (snapshots == null) return@addSnapshotListener
             val list = snapshots.documents.map { doc ->
-                docToEntrant(doc) // Turn document into entrant
+                docToEntrant(doc)
             }
             _entrants.clear()
             _entrants.addAll(list)
@@ -70,7 +65,7 @@ class DatabaseEntrants {
         entrantsRef.get()
             .addOnSuccessListener { snapshot ->
                 val list = snapshot.documents.map { doc ->
-                    docToEntrant(doc) // Turn document into entrant object
+                    docToEntrant(doc)
                 }
                 _entrants.clear()
                 _entrants.addAll(list)
@@ -94,7 +89,7 @@ class DatabaseEntrants {
         if (index != -1) {
             _entrants[index] = entrant
         }
-        entrantsRef.document(entrant.getUserID()).set(entrant)
+        entrantsRef.document(entrant.getUserID()).update("username", newUsername)
     }
 
     fun deleteEntrant(entrant: Entrant) {
@@ -102,12 +97,29 @@ class DatabaseEntrants {
         entrantsRef.document(entrant.getUserID()).delete()
     }
 
+    // Strictly search entrant and load profile image scoped ONLY to this entrantID from images collection
     fun searchEntrants(entrantID: String, onResult: (Entrant?) -> Unit) {
         entrantsRef.document(entrantID).get()
             .addOnSuccessListener { doc ->
                 if (doc.exists()) {
-                    val entrant = docToEntrant(doc) // turn document into entrant
-                    onResult(entrant)
+                    val entrant = docToEntrant(doc)
+                    db.collection("images")
+                        .whereEqualTo("entrantID", entrantID)
+                        .get()
+                        .addOnSuccessListener { imgSnap ->
+                            val latestImgDoc = imgSnap.documents.maxByOrNull { it.getLong("timestamp") ?: 0L }
+                            val pfpData = latestImgDoc?.getString("imageData") ?: latestImgDoc?.getString("profileImage")
+                            if (!pfpData.isNullOrBlank() && latestImgDoc?.getString("entrantID") == entrantID) {
+                                entrant.profileImage = pfpData
+                            } else {
+                                entrant.profileImage = ""
+                            }
+                            onResult(entrant)
+                        }
+                        .addOnFailureListener {
+                            entrant.profileImage = ""
+                            onResult(entrant)
+                        }
                 } else {
                     onResult(null)
                 }
@@ -128,7 +140,9 @@ class DatabaseEntrants {
 
                 if (matchingDoc != null) {
                     val entrant = docToEntrant(matchingDoc).also { if (it.email.isBlank()) it.email = cleanEmail }
-                    onResult(entrant)
+                    searchEntrants(entrant.getUserID()) { fullyLoaded ->
+                        onResult(fullyLoaded ?: entrant)
+                    }
                 } else {
                     onResult(null)
                 }
@@ -138,22 +152,11 @@ class DatabaseEntrants {
             }
     }
 
-    /** Saves the editable profile fields of an entrant.
-     *  Uses update() on just these fields (instead of set() on the whole object) so the
-     *  entrant's campsiteLists and anything else in the document are never overwritten.
-     *  Usage: EntrantProfileScreen and Test
-     *  Used Opus 5.5 in order to update entrant's profile
-     *  Prompt: "Why isn't Profile information persisting?"
-     *  Conversation: https://claude.ai/share/ae294592-b4fe-497b-86a9-a45c32b331e2
-     *  Date: Nov 20, 2026
-     */
     fun updateEntrant(entrant: Entrant) {
-        // Find entrant from the Database
         val index = _entrants.indexOfFirst { it.getUserID() == entrant.getUserID() }
         if (index != -1) {
             _entrants[index] = entrant
         }
-        // Update information
         entrantsRef.document(entrant.getUserID())
             .update(
                 mapOf(
@@ -163,8 +166,7 @@ class DatabaseEntrants {
                     "dateOfBirth" to entrant.dateOfBirth,
                     "phoneNumber" to entrant.phoneNumber,
                     "description" to entrant.description,
-                    "wantsNotifications" to entrant.wantsNotifications,
-                    "profileImage" to entrant.profileImage
+                    "wantsNotifications" to entrant.wantsNotifications
                 )
             )
             .addOnFailureListener { e ->
@@ -172,22 +174,13 @@ class DatabaseEntrants {
             }
     }
 
-    /** Adds a campsite ID to one of the entrant's lists (e.g. "Waiting_List") in Firestore.
-     *  Only touches campsiteLists.<listKey>, using arrayUnion so it's atomic and duplicate-free.
-     *  Used Opus 5.5 in order to add entrants to the campsite's database
-     *  Prompt: "Why isn't campsites persisting?"
-     *  Conversation: https://claude.ai/share/ae294592-b4fe-497b-86a9-a45c32b331e2
-     *  Date: Nov 20, 2026
-     */
     fun addEntrantCampsite(
         entrant: Entrant,
         listKey: String,
         campsiteID: String,
         onComplete: (Boolean) -> Unit = {}
     ) {
-        // Add the campsite into the entrant object
         entrant.addCampsite(listKey, campsiteID)
-        // Update the Firebase Document so Entrant's campsite is joined
         entrantsRef.document(entrant.getUserID())
             .update(FieldPath.of("campsiteLists", listKey), FieldValue.arrayUnion(campsiteID))
             .addOnSuccessListener { onComplete(true) }
@@ -197,10 +190,6 @@ class DatabaseEntrants {
             }
     }
 
-    /** Move Entrant's Campsite list from Waiting List to Active List
-     * Prompt: "How do I move Entrants to active campsite when the lottery starts?"
-     * Conversation: https://claude.ai/share/e282e67a-f3db-4225-b23d-1cadc614a63f (Cite better later)
-     * */
     fun moveEntrantCampsite(
         entrant: Entrant,
         fromKey: String,
@@ -208,14 +197,10 @@ class DatabaseEntrants {
         campsiteID: String,
         onComplete: (Boolean) -> Unit = {}
     ) {
-        // Remove from waiting list
         entrant.removeCampsite(fromKey, campsiteID)
-
-        // Add to active waiting list
         entrant.addNewList(toKey)
         entrant.addCampsite(toKey, campsiteID)
 
-        // Document the Change in Firebase
         entrantsRef.document(entrant.getUserID())
             .update(
                 FieldPath.of("campsiteLists", fromKey), FieldValue.arrayRemove(campsiteID),
@@ -226,6 +211,64 @@ class DatabaseEntrants {
                 android.util.Log.e("DB", "moveEntrantCampsite failed for ${entrant.getUserID()}", e)
                 onComplete(false)
             }
+    }
+
+    internal fun confirmStay(entrant: Entrant, message: ChatMessage, onComplete: (Boolean) -> Unit) {
+        val campsiteID = message.campsiteID
+        val ref = entrantsRef.document(entrant.getUserID())
+        val messageRef = db.collection("messages").document()
+        val revision = FieldPath.of("reservationRevision", campsiteID)
+        val dates = FieldPath.of("reservationDates", campsiteID, message.locationIndex.toString())
+        db.runTransaction { transaction ->
+            val snapshot = transaction.get(ref)
+            val previous = snapshot.get(dates) as? List<*>
+            val previousRevision = (snapshot.get(revision) as? Number)?.toLong() ?: 0L
+            val reserved = snapshot.get(FieldPath.of("campsiteLists", RESERVED_CAMPSITES)) as? List<*>
+            if (message.stayDates != previous || reserved?.contains(campsiteID) != true) {
+                val sentAt = maxOf(message.sentAt, previousRevision + 1)
+                transaction.update(ref,
+                    dates, message.stayDates,
+                    revision, sentAt,
+                    FieldPath.of("campsiteLists", ACTIVE_CAMPSITES), FieldValue.arrayRemove(campsiteID),
+                    FieldPath.of("campsiteLists", WAITING_LIST), FieldValue.arrayRemove(campsiteID),
+                    FieldPath.of("campsiteLists", PAST_CAMPSITES), FieldValue.arrayRemove(campsiteID),
+                    FieldPath.of("campsiteLists", RESERVED_CAMPSITES), FieldValue.arrayUnion(campsiteID)
+                )
+                transaction.set(messageRef, message.copy(messageID = messageRef.id, sentAt = sentAt))
+            }
+        }.addOnSuccessListener {
+            entrant.removeCampsite(ACTIVE_CAMPSITES, campsiteID)
+            entrant.removeCampsite(WAITING_LIST, campsiteID)
+            entrant.removeCampsite(PAST_CAMPSITES, campsiteID)
+            entrant.addCampsite(RESERVED_CAMPSITES, campsiteID)
+            onComplete(true)
+        }.addOnFailureListener { error ->
+            android.util.Log.e("DB", "Could not confirm reservation for $campsiteID", error)
+            onComplete(false)
+        }
+    }
+
+    internal fun archiveReservation(entrant: Entrant, campsiteID: String, revision: Long) {
+        val ref = entrantsRef.document(entrant.getUserID())
+        db.runTransaction { transaction ->
+            val snapshot = transaction.get(ref)
+            val reserved = snapshot.get(FieldPath.of("campsiteLists", RESERVED_CAMPSITES)) as? List<*>
+            val currentRevision = (snapshot.get(FieldPath.of("reservationRevision", campsiteID)) as? Number)?.toLong()
+            if (reserved?.contains(campsiteID) != true || currentRevision != revision) return@runTransaction false
+            transaction.update(ref,
+                FieldPath.of("campsiteLists", RESERVED_CAMPSITES), FieldValue.arrayRemove(campsiteID),
+                FieldPath.of("campsiteLists", PAST_CAMPSITES), FieldValue.arrayUnion(campsiteID)
+            )
+            true
+        }.addOnSuccessListener { moved ->
+            if (moved) {
+                entrant.removeCampsite(RESERVED_CAMPSITES, campsiteID)
+                entrant.addCampsite(PAST_CAMPSITES, campsiteID)
+                reservationArchiveVersion++
+            }
+        }.addOnFailureListener { error ->
+            android.util.Log.e("DB", "Could not archive reservation for $campsiteID", error)
+        }
     }
 
     fun removeEntrantCampsite(entrant: Entrant, listKey: String, campsiteID: String) {

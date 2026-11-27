@@ -2,8 +2,12 @@ package com.example.code
 
 import android.app.DatePickerDialog
 import android.content.Context
+import android.graphics.Bitmap
 import android.os.Build
+import android.widget.Toast
 import androidx.annotation.RequiresApi
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -25,7 +29,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -38,12 +41,13 @@ import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.FontWeight
@@ -57,7 +61,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.window.Dialog
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -72,8 +75,12 @@ import com.example.code.classes.Campsite
 import com.example.code.classes.CampsiteOwner
 import com.example.code.classes.Coordinates
 import com.example.code.classes.PreviewCampsite
-import com.example.code.classes.WaitlistEntrant
+import java.time.Instant
 import java.time.LocalDateTime
+import java.time.ZoneId
+import kotlinx.coroutines.delay
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.qrcode.QRCodeWriter
 /** # Search Screen
  *  Implementation of the Entrants' Main Screen as seen in the Figma.
  *
@@ -108,6 +115,26 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
 
     val mainHandler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
 
+    LaunchedEffect(appState.userID, appState.campsites.campsites.toList()) {
+        val ownerID = appState.userID ?: return@LaunchedEffect
+        val attempted = mutableSetOf<String>()
+        while (true) {
+            val now = LocalDateTime.now()
+            appState.campsites.campsites
+                .filter { it.getOwnerID() == ownerID && it.isReadyToDraw(now) }
+                .forEach { campsite ->
+                    if (attempted.add(campsite.campsiteID)) {
+                        appState.campsites.drawClosedLottery(campsite.campsiteID, ownerID)
+                            .addOnFailureListener { error ->
+                                attempted.remove(campsite.campsiteID)
+                                android.util.Log.e("DB", "Closing lottery failed for ${campsite.campsiteID}", error)
+                            }
+                    }
+                }
+            delay(1_000)
+        }
+    }
+
     // Load real campsites and owner name using viewCampsites function
     LaunchedEffect(appState.userID) {
         val ownerID = appState.userID
@@ -123,16 +150,16 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
                                     for (c in campsites) {
                                         val cName = try { c.getName().ifBlank { "Campsite" } } catch (e: Exception) { "Campsite" }
                                         val cLoc = try { c.getMainCoordinates()?.getCity()?.ifBlank { "Location" } ?: "Location" } catch (e: Exception) { "Location" }
+                                        val cImage = c.thumbnailPhoto().orEmpty()
                                         previewCampsites.add(
                                             PreviewCampsite(
                                                 name = cName,
                                                 location = cLoc,
-                                                startMillis = null,
-                                                endMillis = null,
+                                                startMillis = c.getStartDate()?.atZone(ZoneId.systemDefault())?.toInstant()?.toEpochMilli(),
+                                                endMillis = c.getEndDate()?.atZone(ZoneId.systemDefault())?.toInstant()?.toEpochMilli(),
                                                 startMillisRegis = null,
                                                 endMillisRegis = null,
-                                                waitingList = emptyList(),
-                                                rules = c.getRules()
+                                                waitingList = emptyList()
                                             )
                                         )
                                     }
@@ -145,16 +172,16 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
                                     for (c in campsites) {
                                         val cName = try { c.getName().ifBlank { "Campsite" } } catch (e: Exception) { "Campsite" }
                                         val cLoc = try { c.getMainCoordinates()?.getCity()?.ifBlank { "Location" } ?: "Location" } catch (e: Exception) { "Location" }
+                                        val cImage = c.thumbnailPhoto().orEmpty()
                                         previewCampsites.add(
                                             PreviewCampsite(
                                                 name = cName,
                                                 location = cLoc,
-                                                startMillis = null,
-                                                endMillis = null,
+                                                startMillis = c.getStartDate()?.atZone(ZoneId.systemDefault())?.toInstant()?.toEpochMilli(),
+                                                endMillis = c.getEndDate()?.atZone(ZoneId.systemDefault())?.toInstant()?.toEpochMilli(),
                                                 startMillisRegis = null,
                                                 endMillisRegis = null,
-                                                waitingList = emptyList(),
-                                                rules = c.getRules()
+                                                waitingList = emptyList()
                                             )
                                         )
                                     }
@@ -227,10 +254,11 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
                                     .padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Box(
+                                ProfilePicture(
+                                    profileImage = preview.campsiteImage,
                                     modifier = Modifier
                                         .size(96.dp)
-                                        .background(Color.DarkGray, RoundedCornerShape(16.dp))
+                                        .clip(RoundedCornerShape(16.dp))
                                 )
                                 Spacer(Modifier.width(12.dp))
                                 Column(modifier = Modifier.weight(1f)) {
@@ -275,8 +303,8 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
         ) {
             Button(onClick = { }, modifier = Modifier.weight(1f)) { Text("List", maxLines = 1) }
             Button(onClick = { showQRCodeDialog = true }, modifier = Modifier.weight(1f)) { Text("QR Code", maxLines = 1) }
-            Button(onClick = { showAccountDialog = true }, modifier = Modifier.weight(1f)) { Text("Account", maxLines = 1) }
-            Button(onClick = { navController.navigate("campsiteChat") }, modifier = Modifier.weight(1f)) { Text("Message Entrants", maxLines = 1) }
+            Button(onClick = { navController.navigate("campsiteOwnerProfileScreen") }, modifier = Modifier.weight(1f)) { Text("Account", maxLines = 1) }
+            Button(onClick = { navController.navigate("campsiteChat") }, modifier = Modifier.weight(1f)) { Text("Messages", maxLines = 1) }
         }
     }
 
@@ -366,7 +394,7 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
                     Spacer(Modifier.height(16.dp))
 
                     QRCodeImage(
-                        data = campsite.name,
+                        data = campsite.campsiteID,
                         modifier = Modifier
                             .size(180.dp)
                             .background(Color.White, RoundedCornerShape(8.dp))
@@ -379,7 +407,7 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
             confirmButton = {
                 Button(
                     onClick = {
-                        val matchedCampsite = appState.campsites.campsites.firstOrNull { it.getName() == campsite.name }
+                        val matchedCampsite = appState.campsites.campsites.firstOrNull { it.campsiteID == campsite.campsiteID }
                         if (matchedCampsite != null) {
                             appState.viewingCampsiteID = matchedCampsite.campsiteID
                             selectedQRCampsite = null
@@ -449,7 +477,6 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
             initial = null,
             onDismiss = { showAdd = false },
             onSave = { newCampsite ->
-                previewCampsites.add(newCampsite)
                 appState.campsites.generateUniqueCampsiteID { uniqueId ->
                     val coords = Coordinates(
                         country = "Canada",
@@ -465,6 +492,8 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
                         price = 50.0f,
                         rating = 5.0f,
                         coordinates = mutableListOf(coords),
+                        detailsImage = newCampsite.campsiteImage.ifBlank { null },
+                        thumbnailImage = newCampsite.campsiteImage.ifBlank { null },
                         lotteryStartDate = LocalDateTime.now(),
                         lotteryEndDate = LocalDateTime.now().plusDays(7)
                     )
@@ -473,6 +502,23 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
                     realCampsite.setTags(newCampsite.tags)
                     realCampsite.setThumbnailImage(newCampsite.imageUrl)
                     appState.campsites.addCampsite(realCampsite)
+                        .addOnSuccessListener {
+                            previewCampsites.add(
+                                PreviewCampsite(
+                                    name = newCampsite.name,
+                                    location = newCampsite.location,
+                                    startMillis = newCampsite.startMillis,
+                                    endMillis = newCampsite.endMillis,
+                                    startMillisRegis = newCampsite.startMillisRegis,
+                                    endMillisRegis = newCampsite.endMillisRegis,
+                                    campsiteImage = newCampsite.campsiteImage,
+                                    campsiteID = uniqueId
+                                )
+                            )
+                        }
+                        .addOnFailureListener {
+                            Toast.makeText(context, "Could not save campsite", Toast.LENGTH_LONG).show()
+                        }
                 }
                 showAdd = false
             }
@@ -487,10 +533,6 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
             onSave = { updated ->
                 val i = previewCampsites.indexOfFirst { it === current }
                 if (i >= 0) previewCampsites[i] = updated
-                appState.campsites.campsites.firstOrNull { it.getName() == current.name }?.let { site ->
-                    site.setRules(updated.rules)
-                    appState.campsites.addCampsite(site)
-                }
                 showEdit = null
             }
         )
@@ -499,15 +541,13 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
     showLottery?.let { current ->
         LotteryDialog(
             campsite = current,
+            liveCampsite = appState.campsites.campsites.firstOrNull { it.campsiteID == current.campsiteID },
+            entrantNames = appState.entrants.entrants.associate { it.getUserID() to it.name.ifBlank { it.username } },
             onDismiss = { showLottery = null },
             onSave = { updated ->
                 val i = previewCampsites.indexOfFirst { it === current }
                 if (i >= 0) previewCampsites[i] = updated
                 showLottery = null
-            },
-            onMessageEntrant = {
-                showLottery = null
-                navController.navigate("campsiteChat")
             }
         )
     }
@@ -550,8 +590,12 @@ fun AddEditCampsite(
     var endMillis by remember { mutableStateOf(initial?.endMillis) }
     var startMillisRegis by remember { mutableStateOf(initial?.startMillisRegis) }
     var endMillisRegis by remember { mutableStateOf(initial?.endMillisRegis) }
+    var campsiteImage by remember { mutableStateOf(initial?.campsiteImage ?: "") }
+
     val context = LocalContext.current
     val format = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
+
+    val (processingPhoto, takePhoto, openPhotoPicker) = rememberPhotoPicker { campsiteImage = it }
 
     val startText = startMillis?.let { format.format(Date(it)) } ?: "Not set"
     val endText = endMillis?.let { format.format(Date(it)) } ?: "Not set"
@@ -589,18 +633,11 @@ fun AddEditCampsite(
                                     endMillis = endMillis,
                                     startMillisRegis = startMillisRegis,
                                     endMillisRegis = endMillisRegis,
-                                    waitingList = initial?.waitingList ?: emptyList(),
-                                    rules = rulesList,
-                                    description = description.trim(),
-                                    maxOccupancy = occupancy.toIntOrNull() ?: 4,
-                                    tags = tagsText.split(",").map { it.trim() }.filter { it.isNotEmpty() },
-                                    imageUrl = imageUrl.trim().ifEmpty { null },
-                                    latitude = latitude.toDoubleOrNull(),
-                                    longitude = longitude.toDoubleOrNull()
+                                    waitingList = initial?.waitingList ?: emptyList()
                                 )
                             )
                         },
-                        enabled = name.isNotBlank()
+                        enabled = name.isNotBlank() && !processingPhoto
                     ) {
                         Text("Save")
                     }
@@ -627,63 +664,6 @@ fun AddEditCampsite(
                         label = { Text("Address or place name") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
-                    )
-
-                    OutlinedTextField(
-                        value = description,
-                        onValueChange = { description = it },
-                        label = { Text("Description and amenities") },
-                        modifier = Modifier.fillMaxWidth(),
-                        minLines = 3,
-                        maxLines = 6
-                    )
-                    OutlinedTextField(
-                        value = occupancy,
-                        onValueChange = { occupancy = it.filter(Char::isDigit) },
-                        label = { Text("Maximum occupancy") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = latitude,
-                        onValueChange = { latitude = it },
-                        label = { Text("Map latitude (optional)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = longitude,
-                        onValueChange = { longitude = it },
-                        label = { Text("Map longitude (optional)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = imageUrl,
-                        onValueChange = { imageUrl = it },
-                        label = { Text("Image URL (optional)") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = tagsText,
-                        onValueChange = { tagsText = it },
-                        label = { Text("Tags (comma separated)") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Text("Campsite rules & policies")
-                    OutlinedTextField(
-                        value = rulesText,
-                        onValueChange = { rulesText = it },
-                        label = { Text("Rules & policies (one per line)") },
-                        modifier = Modifier.fillMaxWidth(),
-                        minLines = 3,
-                        maxLines = 5
                     )
 
                     Text("Booking dates")
@@ -729,146 +709,38 @@ AddCampsite, pickdate, and parts of campsiteOwnerMainScreen UI were developed us
 this chat: https://claude.ai/share/140477f9-42aa-4b16-8189-dad57b7d8afb
 Prompt: "How do I change this so that the delete and edit buttons are on top of each other at the end of each card"
  */
+/** Codex prompt: Show the real waiting list and per-location draw results in the owner dialog. */
+@RequiresApi(Build.VERSION_CODES.O)
 @Composable
-fun LotteryDialog(
+private fun LotteryDialog(
     campsite: PreviewCampsite,
+    liveCampsite: Campsite?,
+    entrantNames: Map<String, String>,
     onDismiss: () -> Unit,
     onSave: (PreviewCampsite) -> Unit,
-    onMessageEntrant: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val format = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
+    var start by remember(campsite.campsiteID) { mutableStateOf(campsite.startMillis) }
+    var end by remember(campsite.campsiteID) { mutableStateOf(campsite.endMillis) }
+    val drawn = liveCampsite?.isLotteryDrawn() == true
+    val entrants = liveCampsite?.getWaitingList().orEmpty()
 
-    var startMillis by remember { mutableStateOf(campsite.startMillis) }
-    var endMillis by remember { mutableStateOf(campsite.endMillis) }
-    var waitingList by remember { mutableStateOf(campsite.waitingList) }
-
-    var newEntrantName by remember { mutableStateOf("") }
-    var newEntrantEmail by remember { mutableStateOf("") }
-
-    val now = System.currentTimeMillis()
-    val isLotteryConfigured = (startMillis != null) && (endMillis != null)
-    val endMillisVal = endMillis ?: now
-    val isLotteryActive = isLotteryConfigured && now <= endMillisVal
-    val isExpired = isLotteryConfigured && now > endMillisVal
-    var numLotteryWinners by remember { mutableStateOf(5) }
-    var showSetWinnersDialog by remember { mutableStateOf(false) }
-    var inputWinnersText by remember { mutableStateOf(numLotteryWinners.toString()) }
-
-    fun startLottery() {
-        val calendar = Calendar.getInstance().apply {
-            timeInMillis = now
-            set(Calendar.HOUR_OF_DAY, 0)
-            set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-        }
-        val sMillis = calendar.timeInMillis
-        calendar.add(Calendar.DAY_OF_YEAR, 7)
-        val eMillis = calendar.timeInMillis
-
-        startMillis = sMillis
-        endMillis = eMillis
-    }
-
-    Dialog(
+    AlertDialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        Surface(modifier = Modifier.fillMaxSize()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp)
+        title = { Text("Lottery: ${campsite.name}") },
+        text = {
+            LazyColumn(
+                modifier = Modifier.heightIn(max = 420.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Filled.Close, contentDescription = "Close")
-                    }
-                    Text(
-                        text = "Lottery: ${campsite.name}",
-                        style = MaterialTheme.typography.titleLarge,
-                        modifier = Modifier.weight(1f)
-                    )
-                    TextButton(
-                        onClick = {
-                            onSave(
-                                PreviewCampsite(
-                                    name = campsite.name,
-                                    location = campsite.location,
-                                    startMillis = startMillis,
-                                    endMillis = endMillis,
-                                    startMillisRegis = startMillis,
-                                    endMillisRegis = endMillis,
-                                    waitingList = waitingList
-                                )
-                            )
-                        }
-                    ) {
-                        Text("Save")
-                    }
-                }
-
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            text = "Information for this lottery",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        val startText = startMillis?.let { format.format(Date(it)) } ?: "Not set"
-                        val endText = endMillis?.let { format.format(Date(it)) } ?: "Not set"
-
-                        Text("Lottery started on: $startText", fontSize = 14.sp)
-                        Text("Lottery will expire on: $endText", fontSize = 14.sp)
-                        Text("Lottery will have $numLotteryWinners winners", fontSize = 14.sp)
-
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        val statusText = when {
-                            !isLotteryConfigured -> "Status: Lottery not placed yet"
-                            isLotteryActive -> {
-                                val daysLeft = endMillis?.let { ((it - now) / (1000 * 60 * 60 * 24)).coerceAtLeast(0) } ?: 0
-                                "Status: Lottery in progress ($daysLeft days until draw)"
-                            }
-                            else -> "Status: Lottery has expired"
-                        }
-
-                        Text(
-                            text = statusText,
-                            fontWeight = FontWeight.SemiBold,
-                            color = if (isLotteryActive) Color(0xFF2E7D32) else if (isExpired) Color.Red else Color.Unspecified
-                        )
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Button(
-                                onClick = { pickDate(context, null) { s ->
-                                    startMillis = s
-                                    val cal = Calendar.getInstance().apply {
-                                        timeInMillis = s
-                                        add(Calendar.DAY_OF_YEAR, 7)
-                                    }
-
-                                } },
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text("Start date", maxLines = 1, fontSize = 12.sp)
+                item {
+                    Text("Starts: " + (start?.let { format.format(Date(it)) } ?: "Not set"))
+                    Text("Closes: " + (end?.let { format.format(Date(it)) } ?: "Not set"))
+                    if (!drawn) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(onClick = { pickDate(context, null) { start = it } }) {
+                                Text("Start date")
                             }
 
                             Button(
@@ -1001,14 +873,6 @@ fun LotteryDialog(
                                             color = Color.Gray
                                         )
                                     }
-                                    Button(
-                                        onClick = {
-                                            onMessageEntrant?.invoke() ?: onDismiss()
-                                        },
-                                        modifier = Modifier.padding(end = 4.dp)
-                                    ) {
-                                        Text("Message", fontSize = 11.sp)
-                                    }
                                     IconButton(
                                         onClick = {
                                             waitingList = waitingList.filter { it.id != entrant.id }
@@ -1082,96 +946,10 @@ fun LotteryDialog(
  * 2. make a random qr code appear that will appear when generate qr code is clicked,
  * and will link the campsite details to the entrant when scanned**/
 @Composable
-fun QRCodeImage(
-    data: String,
-    modifier: Modifier = Modifier
-) {
-    androidx.compose.foundation.Canvas(modifier = modifier) {
-        val sizeInPx = size.minDimension
-        val gridCount = 21
-        val cellSize = sizeInPx / gridCount
-
-        drawRect(Color.White)
-
-        val hash = data.hashCode()
-        val random = java.util.Random(hash.toLong())
-
-        val grid = Array(gridCount) { BooleanArray(gridCount) }
-
-        fun drawFinderPattern(row: Int, col: Int) {
-            for (r in 0..6) {
-                for (c in 0..6) {
-                    if (row + r < gridCount && col + c < gridCount) {
-                        grid[row + r][col + c] = (r == 0 || r == 6 || c == 0 || c == 6 || (r in 2..4 && c in 2..4))
-                    }
-                }
-            }
-        }
-
-        drawFinderPattern(0, 0)
-        drawFinderPattern(0, gridCount - 7)
-        drawFinderPattern(gridCount - 7, 0)
-
-        for (r in 0 until gridCount) {
-            for (c in 0 until gridCount) {
-                if ((r < 7 && c < 7) || (r < 7 && c >= gridCount - 7) || (r >= gridCount - 7 && c < 7)) continue
-                grid[r][c] = random.nextBoolean()
-            }
-        }
-
-        for (r in 0 until gridCount) {
-            for (c in 0 until gridCount) {
-                if (grid[r][c]) {
-                    drawRect(
-                        color = Color.Black,
-                        topLeft = androidx.compose.ui.geometry.Offset(c * cellSize, r * cellSize),
-                        size = androidx.compose.ui.geometry.Size(cellSize, cellSize)
-                    )
-                }
-            }
-        }
-    }
+fun QRCodeImage(data: String, modifier: Modifier = Modifier) {
+    val image = remember(data) { createCampsiteQrBitmap(data).asImageBitmap() }
+    Image(bitmap = image, contentDescription = "Campsite QR code", modifier = modifier)
 }
-/*
-WAITLIST implemented in order to facilitate the lottery function.
-Users/entrants will be allowed to join this waitlist for a period of
-one week until it expires (IMPLEMENTED), at which point 5 (or less,
-depending on waitlist size) random users on the list will be selected,
-on a first-come first-serve basis, to reserve their spots.
-
-They will be notified by the system and are free to turn down these
-requests at will.
-
-The owner can spectate the waiting list as it fills up (or not), right
-until the deadline for waiting list closure. (IMPLEMENTED) Optionally
-they may also be able to see the status of each selected member of the
-waiting list - whether they have signed on or not.
-
-THIS CODE WAS IMPLEMENTED BY GOOGLE GEMINI 11-06-2026, WITH THE PROMPT
-"This button allows a campsite owner to place their campsite into a
-lottery system for a certain period of time. Such a lottery will allow
-for customers/entrants to join a "waiting list" for one week. The owner
-can spectate this waiting list until its expiry."
-
-The following code has been commented and slightly altered from the
-version it provided for the sake of bringing it into line stylistically
-with the rest of our code, and removing any extraneous/redundant features
-it added.
- */
-/*
-                AGENT USED: GEMINI
-                DATE OF PROMPT: 11-06-2026
-                PROMPT USED:
-                "Upon click, basic pop-up window with "ok" button
-                where the owner can reset the value of numLotteryWinners"
-
-                Some modifications have been performed to the original LLM output.
-                 */
-
-/*
-This function was also implemented using the above prompt. It is useful
-for picking a date, as with the "custom" lottery date feature.
- */
 private fun pickDate(context: Context, minDateMillis: Long?, onSelected: (Long) -> Unit) {
     val cal = Calendar.getInstance()
     val dialog = DatePickerDialog(

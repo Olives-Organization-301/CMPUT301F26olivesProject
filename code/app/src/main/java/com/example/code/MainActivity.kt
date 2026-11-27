@@ -24,6 +24,7 @@ class MainActivity : ComponentActivity() {
             CodeTheme {
                 val appState = remember { AppState() }
                 LotteryNotificationEffect(appState)
+                ReservationHistoryEffect(appState)
                 CampsiteNavController(appState)
 =======
         if (!isTestMode) {
