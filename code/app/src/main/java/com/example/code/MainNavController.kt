@@ -67,9 +67,9 @@ fun CampsiteNavController(
         }
 
         // CAMPSITE OWNER SCREENS
-<<<<<<< Updated upstream
         composable("campsiteOwnerMainScreen") { CampsiteOwnerMainScreen(navController, appState) }
-        composable("campsiteChat") { CampsiteChatScreen(navController) }
+        composable("campsiteOwnerProfileScreen") { CampsiteOwnerProfileScreen(navController, appState) }
+        composable("campsiteChat") { CampsiteChatScreen(navController, appState) }
         // ADMIN SCREENS
         composable("AdminMainSearchScreen") { AdminMainSearchScreen(navController, appState) }
     }
