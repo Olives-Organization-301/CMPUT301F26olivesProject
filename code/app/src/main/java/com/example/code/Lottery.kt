@@ -1,6 +1,10 @@
 package com.example.code
 
 import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.Instant
+import java.time.ZoneOffset
 import kotlinx.coroutines.delay
 import java.time.format.DateTimeParseException
 import android.Manifest
@@ -16,6 +20,7 @@ import android.provider.Settings
 import androidx.annotation.RequiresApi
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.app.NotificationCompat
@@ -57,6 +62,71 @@ internal fun lotteryResultMessages(campsite: Campsite, now: Long): List<ChatMess
 @RequiresApi(Build.VERSION_CODES.O)
 internal fun Campsite.isReadyToDraw(now: java.time.LocalDateTime): Boolean =
     getEndDate()?.let { !now.isBefore(it) } == true && !isLotteryDrawn()
+
+/**
+ * Listing dates have no offset. Use Alberta's UTC−06:00 from November 2026 even on
+ * devices whose time zone database still switches Edmonton back to UTC−07:00.
+ */
+@RequiresApi(Build.VERSION_CODES.O)
+internal fun lotteryNow(now: Instant = Instant.now()): LocalDateTime {
+    val zone = if (now.isBefore(Instant.parse("2026-11-01T06:00:00Z"))) {
+        ZoneId.of("America/Edmonton")
+    } else {
+        ZoneOffset.ofHours(-6)
+    }
+    return LocalDateTime.ofInstant(now, zone)
+}
+
+@RequiresApi(Build.VERSION_CODES.O)
+@Composable
+internal fun registrationClock() = produceState(lotteryNow()) {
+    while (true) {
+        delay(1_000)
+        value = lotteryNow()
+    }
+}
+
+internal enum class WaitlistJoinResult { JOINED, FULL, NOT_OPEN, CLOSED, FAILED }
+
+/**
+ * US 02.04.03. Registration includes its opening instant and excludes its closing instant.
+ * Both listing types use this check for the entry UI and the join transaction.
+ * See [SharedLotteryRepository] for the original Codex prompts.
+ */
+internal fun registrationGate(
+    start: LocalDateTime?,
+    end: LocalDateTime?,
+    drawn: Boolean,
+    now: LocalDateTime,
+): WaitlistJoinResult = when {
+    drawn || end?.let { !now.isBefore(it) } == true -> WaitlistJoinResult.CLOSED
+    start?.let { now.isBefore(it) } == true -> WaitlistJoinResult.NOT_OPEN
+    else -> WaitlistJoinResult.JOINED
+}
+
+@RequiresApi(Build.VERSION_CODES.O)
+internal fun Campsite.waitlistJoinResult(entrantID: String, now: LocalDateTime): WaitlistJoinResult =
+    waitlistAdmission(registrationGate(getStartDate(), getEndDate(), isLotteryDrawn(), now),
+        getWaitingList(), waitlistCapacity, entrantID)
+
+internal fun waitlistAdmission(
+    gate: WaitlistJoinResult,
+    entrants: List<String>,
+    capacity: Int?,
+    entrantID: String,
+): WaitlistJoinResult = when {
+    gate != WaitlistJoinResult.JOINED -> gate
+    entrantID in entrants -> WaitlistJoinResult.JOINED
+    capacity != null && entrants.size >= capacity -> WaitlistJoinResult.FULL
+    else -> WaitlistJoinResult.JOINED
+}
+
+@RequiresApi(Build.VERSION_CODES.O)
+internal fun Campsite.canEditLottery(start: LocalDateTime, end: LocalDateTime, capacity: Int?, now: LocalDateTime): Boolean =
+    !isLotteryDrawn() && getEndDate()?.let { now.isBefore(it) } != false &&
+        start.isBefore(end) && now.isBefore(end) &&
+        (getWaitingList().isEmpty() || (getStartDate()?.let { start == it } ?: !now.isBefore(start))) &&
+        (capacity == null || capacity > 0 && capacity >= getWaitingList().size)
 
 // ---------------------------------------------------------------------------------------------
 // Confirming / declining a won location (the two buttons in ReserveDatesDialog)

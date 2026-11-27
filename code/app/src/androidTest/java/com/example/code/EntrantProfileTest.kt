@@ -15,6 +15,8 @@ import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.code.classes.AppState
+import com.example.code.classes.Campsite
+import com.example.code.classes.ChatMessage
 import com.example.code.classes.Entrant
 import io.mockk.every
 import io.mockk.justRun
@@ -62,7 +64,11 @@ class EntrantProfileTest {
      * - entrants.updateEntrant does nothing (relaxed); check it with verify { }
      * - userID is set to loggedIn's ID, as if they had just logged in
      */
-    private fun fakeAppState(allEntrants: List<Entrant>, loggedIn: Entrant): AppState {
+    private fun fakeAppState(
+        allEntrants: List<Entrant>,
+        loggedIn: Entrant,
+        messages: List<ChatMessage> = emptyList(),
+    ): AppState {
         val db = allEntrants.toMutableList()
 
         val entrants = mockk<DatabaseEntrants>(relaxed = true)
@@ -76,15 +82,29 @@ class EntrantProfileTest {
             db.removeAll { it.getUserID() == target.getUserID() }
         }
 
+        val campsites = mockk<DatabaseCampsites>(relaxed = true)
+        every { campsites.campsites } returns listOf(
+            campsite("banff-site", "Banff National Park"),
+            campsite("jasper-site", "Jasper Lake"),
+            campsite("yoho-site", "Yoho Valley")
+        )
+        val chat = mockk<DatabaseChat>(relaxed = true)
+        every { chat.messages } returns messages
         val appState = AppState(
             admins = mockk(relaxed = true),
             owners = mockk(relaxed = true),
-            campsites = mockk(relaxed = true),
+            campsites = campsites,
             entrants = entrants,
-            alerts = mockk(relaxed = true)
+            alerts = mockk(relaxed = true),
+            chat = chat
         )
         appState.userID = loggedIn.getUserID()
         return appState
+    }
+
+    private fun campsite(id: String, name: String): Campsite = mockk {
+        every { campsiteID } returns id
+        every { getName() } returns name
     }
 
     // Main entrant: used for viewing, policy and editing
@@ -98,8 +118,8 @@ class EntrantProfileTest {
         dateOfBirth = "2001-04-23",
         profileImage = ""   // No profile picture (blank)
     ).apply {
-        addCampsite("Past_Campsites", "Banff National Park")
-        addCampsite("Past_Campsites", "Jasper Lake")
+        addCampsite(PAST_CAMPSITES, "banff-site")
+        addCampsite(PAST_CAMPSITES, "jasper-site")
     }
 
     // Second entrant: the one that gets deleted
@@ -113,7 +133,7 @@ class EntrantProfileTest {
         dateOfBirth = "1999-12-31",
         profileImage = ""   // No profile picture (blank)
     ).apply {
-        addCampsite("Past_Campsites", "Yoho Valley")
+        addCampsite(PAST_CAMPSITES, "yoho-site")
     }
 
     private fun openProfile(appState: AppState) {
@@ -164,6 +184,30 @@ class EntrantProfileTest {
         composeTestRule.onNodeWithText("Jane Smith").assertDoesNotExist()
         composeTestRule.onNodeWithText("@jsmith").assertDoesNotExist()
         composeTestRule.onNodeWithText("Yoho Valley").assertDoesNotExist()
+    }
+
+    /** Codex prompt: "ok show the campsite name and booked stay dates and make test cases for those" */
+    @Test
+    fun recentCampsitesShowNamesAndBookedDatesForTheSignedInEntrant() {
+        val john = johnDoe()
+        val booked = ChatMessage(
+            campsiteID = "banff-site",
+            entrantID = john.getUserID(),
+            type = RESERVATION_CONFIRMED,
+            locationIndex = 0,
+            stayDates = listOf("2025-06-03", "2025-06-01", "2025-06-03"),
+            sentAt = 1
+        )
+        val cancelled = booked.copy(locationIndex = 1, stayDates = listOf("2025-06-04"))
+        val cancellation = cancelled.copy(type = RESERVATION_DECLINED, sentAt = 2)
+        val otherEntrant = booked.copy(entrantID = "e_2", stayDates = listOf("2025-06-05"), sentAt = 3)
+        openProfile(fakeAppState(listOf(john), john, listOf(booked, cancelled, cancellation, otherEntrant)))
+
+        composeTestRule.onNodeWithText("Banff National Park").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Booked stay dates: 2025-06-01, 2025-06-03").assertIsDisplayed()
+        composeTestRule.onNodeWithText("banff-site").assertDoesNotExist()
+        composeTestRule.onNodeWithText("Jasper Lake").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Booked stay dates unavailable").assertIsDisplayed()
     }
 
     @Test

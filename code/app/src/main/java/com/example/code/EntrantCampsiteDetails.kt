@@ -125,13 +125,18 @@ fun CampsiteDetailsScreen(
     }
 
     val campsite = chosenCampsite
+    val liveListing = appState.campsites.campsites.firstOrNull { it.campsiteID == campsite?.campsiteID } ?: campsite
+    val groupID = liveListing?.sharedLotteryID
+    val group = groupID?.let { appState.campsites.sharedLotteries.find(it) }
+    val now by registrationClock()
 
     // Whether this entrant is already on the campsite's waiting list or active lottery
-    var isJoined by remember(campsite, entrant) {
+    var isJoined by remember(campsite, entrant, group?.entrants) {
         val id = appState.userID
         val lists = entrant?.getCampsiteLists()
         mutableStateOf(
-            campsite != null && id != null && (
+            if (groupID != null) id != null && id in group?.entrants.orEmpty()
+            else campsite != null && id != null && (
                 campsite.entrantInList(id) ||
                     lists?.get(WAITING_LIST)?.contains(campsite.campsiteID) == true ||
                     lists?.get(ACTIVE_CAMPSITES)?.contains(campsite.campsiteID) == true
@@ -139,15 +144,19 @@ fun CampsiteDetailsScreen(
         )
     }
     // True while today is within the campsite's lottery dates
-    val lotteryActive = campsite?.isLotteryActive() == true
+    val lotteryActive = group?.gate(now) == WaitlistJoinResult.JOINED ||
+        groupID == null && campsite?.isLotteryActive(now.toLocalDate()) == true
+    val joinAvailability = appState.userID?.let {
+        if (groupID != null) group?.admission(it, now) else liveListing?.waitlistJoinResult(it, now)
+    }
 
     // Once the lottery has started, move this campsite from the entrant's Waiting List to Active Campsites
     // (movedToActiveLottery is state, so the button redraws as "Leave Active Lottery" after the move)
     var movedToActiveLottery by remember(campsite, entrant) { mutableStateOf(false) }
-    LaunchedEffect(campsite, entrant) {
+    LaunchedEffect(campsite, entrant, groupID) {
         val c = campsite
         val e = entrant
-        if (c != null && e != null && moveToActiveLotteryIfStarted(appState, e, c)) {
+        if (groupID == null && c != null && e != null && moveToActiveLotteryIfStarted(appState, e, c)) {
             movedToActiveLottery = true
         }
     }
@@ -165,8 +174,10 @@ fun CampsiteDetailsScreen(
      * leftActiveLottery:       If lottery is active, check that firestone has cached leaving it
      */
     var isSaving by remember { mutableStateOf(false) }
+    var showRulesDialog by remember(campsite, entrant) { mutableStateOf(false) }
     var showJoinDialog by remember { mutableStateOf(false) }
     var joinSucceeded by remember { mutableStateOf(false) }
+    var joinError by remember { mutableStateOf<String?>(null) }
     var showLeaveDialog by remember { mutableStateOf(false) }
     var leaveSucceeded by remember { mutableStateOf(false) }
     var showDatesDialog by remember { mutableStateOf(false) }
@@ -278,6 +289,7 @@ fun CampsiteDetailsScreen(
                     when (selectedTab) {
                         0 -> CampsiteDetailsTab(
                             campsite,
+                            group,
                             owner,
                             // Live rating from the synced campsite list, so a new review shows up here
                             appState.campsites.campsites
@@ -289,6 +301,19 @@ fun CampsiteDetailsScreen(
                 }
 
                 // Join / Leave Waiting List + possible dates
+                if (group != null) {
+                    Text("Shared lottery · ${group.campsiteIDs.size} campsites", modifier = Modifier.padding(horizontal = 16.dp))
+                }
+                if (joinAvailability == WaitlistJoinResult.NOT_OPEN) {
+                    val opens = group?.opens ?: liveListing?.getStartDate()
+                    Text("Registration opens ${opens?.toLocalDate()} (Alberta time)", modifier = Modifier.padding(horizontal = 16.dp))
+                }
+                (if (groupID != null) group?.capacity else liveListing?.waitlistCapacity)?.let { capacity ->
+                    Text(
+                        "Waitlist: ${group?.entrants?.size ?: liveListing?.getWaitingList()?.size ?: 0}/$capacity",
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                }
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -305,62 +330,32 @@ fun CampsiteDetailsScreen(
                                 ?.contains(campsite.campsiteID) == true
                         // Button that handles you joining the active list or not
                         Button(
-                            enabled = !isSaving,
+                            enabled = !isSaving && joinAvailability in listOf(WaitlistJoinResult.JOINED, WaitlistJoinResult.FULL),
                             onClick = {
                                 isSaving = true
                                 leftActiveLottery = inActiveLottery
                                 val onLeft: (Boolean) -> Unit = { ok ->
                                     isSaving = false
                                     leaveSucceeded = ok
-                                    if (ok) isJoined = false
-                                    showLeaveDialog = true
-                                }
-                                appState.campsites.removeFromWaitingList(campsite, userID, onLeft)
-                                if (currentEntrant != null) {
-                                    appState.entrants.removeEntrantCampsite(
-                                        currentEntrant,
-                                        if (inActiveLottery) ACTIVE_CAMPSITES else WAITING_LIST,
-                                        campsite.campsiteID
-                                    )
-                                }
-                            },
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(containerColor = ButtonPurple)
-                        ) {
-                            Box(modifier = Modifier.size(18.dp).background(Color.White, CircleShape))
-                            Spacer(modifier = Modifier.size(8.dp))
-                            Text(
-                                if (inActiveLottery) "Leave Active Lottery" else "Leave Waiting List",
-                                fontSize = 14.sp,
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                    } else {
-                        Button(
-                            enabled = campsite != null && currentEntrant != null && userID != null && !isSaving,
-                            onClick = {
-                                if (campsite != null && userID != null && currentEntrant != null) {
-                                    isSaving = true
-                                    joinedActiveLottery = lotteryActive
-                                    // 2. entrant doc: campsiteLists.<list> += campsiteID
-                                    val addToEntrant: (Boolean) -> Unit = { campsiteOk ->
-                                        if (!campsiteOk) {
-                                            isSaving = false
-                                            joinSucceeded = false
-                                            showJoinDialog = true
-                                        } else appState.entrants.addEntrantCampsite(
-                                            currentEntrant,
-                                            if (lotteryActive) ACTIVE_CAMPSITES else WAITING_LIST,
-                                            campsite.campsiteID
-                                        ) { entrantOk ->
-                                            isSaving = false
-                                            joinSucceeded = campsiteOk && entrantOk
-                                            if (joinSucceeded) isJoined = true
-                                            showJoinDialog = true
+                                    if (ok) {
+                                        isJoined = false
+                                        if (group != null) {
+                                            currentEntrant?.removeCampsite(ACTIVE_CAMPSITES, group.anchorID)
+                                        } else currentEntrant?.let {
+                                            appState.entrants.removeEntrantCampsite(
+                                                it,
+                                                if (inActiveLottery) ACTIVE_CAMPSITES else WAITING_LIST,
+                                                campsite.campsiteID
+                                            )
                                         }
                                     }
-                                    // 1. campsite doc: waitingList += entrantID (same list before or during the lottery)
-                                    appState.campsites.addToWaitingList(campsite, userID, addToEntrant)
+                                    showLeaveDialog = true
+                                }
+                                if (group == null) {
+                                    appState.campsites.removeFromWaitingList(campsite, userID, onLeft)
+                                } else {
+                                    appState.campsites.sharedLotteries.updateEntry(group.id, userID, join = false)
+                                        .addOnCompleteListener { onLeft(it.isSuccessful && it.result == WaitlistJoinResult.JOINED) }
                                 }
                             },
                             modifier = Modifier.weight(1f),
@@ -370,7 +365,32 @@ fun CampsiteDetailsScreen(
                             Spacer(modifier = Modifier.size(8.dp))
                             Text(
                                 when {
+                                    joinAvailability == WaitlistJoinResult.CLOSED -> "Registration closed"
+                                    joinAvailability == WaitlistJoinResult.NOT_OPEN -> "Registration not open"
+                                    inActiveLottery -> "Leave Active Lottery"
+                                    else -> "Leave Waiting List"
+                                },
+                                fontSize = 14.sp,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    } else {
+                        Button(
+                            enabled = currentEntrant != null && joinAvailability == WaitlistJoinResult.JOINED && !isSaving,
+                            onClick = { showRulesDialog = true },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = ButtonPurple)
+                        ) {
+                            Box(modifier = Modifier.size(18.dp).background(Color.White, CircleShape))
+                            Spacer(modifier = Modifier.size(8.dp))
+                            Text(
+                                when {
                                     isSaving -> "Joining…"
+                                    joinAvailability == WaitlistJoinResult.FULL -> "Waitlist is full"
+                                    joinAvailability == WaitlistJoinResult.CLOSED -> "Registration closed"
+                                    joinAvailability == WaitlistJoinResult.NOT_OPEN -> "Registration not open"
+                                    groupID != null && group == null -> "Loading lottery…"
+                                    group != null -> "Join Shared Lottery"
                                     lotteryActive -> "Join Active Lottery"
                                     else -> "Join Waiting List"
                                 },
@@ -400,12 +420,70 @@ fun CampsiteDetailsScreen(
         }
     }
 
-    // Confirmation popup after pressing "Join Waiting List"
+    val userID = appState.userID
+    val registeringEntrant = entrant
+    if (showRulesDialog && campsite != null && registeringEntrant != null && userID != null && !isJoined) {
+        CampsiteRulesDialog(
+            campsiteName = campsite.getName(),
+            rules = campsite.getRules(),
+            onDecline = { showRulesDialog = false },
+            onAgree = {
+                if (showRulesDialog && !isSaving) {
+                    showRulesDialog = false
+                    isSaving = true
+                    joinError = null
+                    joinedActiveLottery = lotteryActive
+                    // 2. entrant doc: campsiteLists.<list> += campsiteID
+                    val addToEntrant: (WaitlistJoinResult) -> Unit = { result ->
+                        if (result != WaitlistJoinResult.JOINED) {
+                            isSaving = false
+                            joinSucceeded = false
+                            joinError = when (result) {
+                                WaitlistJoinResult.FULL -> "Waitlist is full"
+                                WaitlistJoinResult.CLOSED -> "Registration closed"
+                                WaitlistJoinResult.NOT_OPEN -> "Registration is not open yet"
+                                else -> null
+                            }
+                            showJoinDialog = true
+                        } else appState.entrants.addEntrantCampsite(
+                            registeringEntrant,
+                            if (lotteryActive) ACTIVE_CAMPSITES else WAITING_LIST,
+                            campsite.campsiteID
+                        ) { entrantOk ->
+                            isSaving = false
+                            joinSucceeded = entrantOk
+                            if (joinSucceeded) isJoined = true
+                            showJoinDialog = true
+                        }
+                    }
+                    // 1. campsite doc: waitingList += entrantID (same list before or during the lottery)
+                    if (groupID == null) {
+                        appState.campsites.addToWaitingList(campsite, userID, addToEntrant)
+                    } else if (group != null) {
+                        appState.campsites.sharedLotteries.updateEntry(group.id, userID, join = true)
+                            .addOnCompleteListener { result ->
+                                val outcome = if (result.isSuccessful) result.result else WaitlistJoinResult.FAILED
+                                if (outcome == WaitlistJoinResult.JOINED) {
+                                    registeringEntrant.addCampsite(ACTIVE_CAMPSITES, group.anchorID)
+                                    isSaving = false
+                                    joinSucceeded = true
+                                    isJoined = true
+                                    showJoinDialog = true
+                                } else addToEntrant(outcome)
+                            }
+                    } else addToEntrant(WaitlistJoinResult.FAILED)
+                }
+            }
+        )
+    }
+
+    // Confirmation popup after the registration attempt
     if (showJoinDialog) {
         JoinWaitingListDialog(
             success = joinSucceeded,
             campsiteName = campsite?.getName(),
             activeLottery = joinedActiveLottery,
+            failureMessage = joinError,
             onDismiss = { showJoinDialog = false }
         )
     }
@@ -433,19 +511,63 @@ fun CampsiteDetailsScreen(
 /** First location as "Country, Province, City", plus how many other locations there are */
 private fun locationText(campsite: Campsite): String = campsite.getLocationSummary()
 
+/**
+ * Displays the campsite's published rules before registration. Agreement becomes available
+ * when the final rule is in view. Dismissing the dialog follows the same path as Decline.
+ *
+ * Codex prompt: "let it be that after an entrant chooses a campsite, a pop up appears of the
+ * rules and policies, and they have to scroll to the bottom, and then click agree and if they
+ * choose to decline, let the campsite be there but its just a glorified back function and
+ * they are not registered in the campsite's registration"
+ */
+@Composable
+internal fun CampsiteRulesDialog(
+    campsiteName: String,
+    rules: List<String>,
+    onDecline: () -> Unit,
+    onAgree: () -> Unit,
+) {
+    val scrollState = rememberScrollState()
+    val atBottom = scrollState.viewportSize > 0 && scrollState.value == scrollState.maxValue
+    val publishedRules = rules.filter { it.isNotBlank() }
+
+    AlertDialog(
+        onDismissRequest = onDecline,
+        title = { Text("Rules and policies for $campsiteName") },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(scrollState),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                if (publishedRules.isEmpty()) {
+                    Text("This campsite has no published rules or policies.")
+                } else {
+                    publishedRules.forEach { rule -> Text(rule) }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = atBottom, onClick = onAgree) { Text("Agree") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDecline) { Text("Decline") }
+        }
+    )
+}
+
 /** Details tab: owner, lottery dates, rating, occupancy, location and description */
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
-private fun CampsiteDetailsTab(campsite: Campsite?, owner: CampsiteOwner?, rating: Float?) {
+private fun CampsiteDetailsTab(campsite: Campsite?, group: SharedLottery?, owner: CampsiteOwner?, rating: Float?) {
     // This is where the DETAILS are
     Text(owner?.username ?: "", fontWeight = FontWeight.Bold, fontSize = 18.sp)
     Text(
-        "Lottery Begin Date: ${campsite?.getStartDate()?.toLocalDate() ?: ""}",
+        "Registration opens: ${(group?.opens ?: campsite?.getStartDate())?.toLocalDate() ?: ""}",
         fontWeight = FontWeight.Medium,
         fontSize = 18.sp
     )
     Text(
-        "Lottery End Date: ${campsite?.getEndDate()?.toLocalDate() ?: ""}",
+        "Registration closes: ${(group?.closes ?: campsite?.getEndDate())?.toLocalDate() ?: ""}",
         fontWeight = FontWeight.Medium,
         fontSize = 18.sp
     )
@@ -672,7 +794,8 @@ fun JoinWaitingListDialog(
     success: Boolean,
     campsiteName: String?,
     onDismiss: () -> Unit,
-    activeLottery: Boolean = false   // true when joining the active lottery instead of the waiting list
+    activeLottery: Boolean = false,   // true when joining the active lottery instead of the waiting list
+    failureMessage: String? = null,
 ) {
     val listName = if (activeLottery) "active lottery" else "waiting list"
     AlertDialog(
@@ -692,7 +815,7 @@ fun JoinWaitingListDialog(
                     "You've joined the $listName for ${campsiteName ?: "this campsite"}. " +
                         "You'll be notified if you're selected in the lottery."
                 else
-                    "Something went wrong while joining the $listName. Please try again."
+                    failureMessage ?: "Something went wrong while joining the $listName. Please try again."
             )
         },
         confirmButton = {

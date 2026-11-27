@@ -70,6 +70,8 @@ fun MainSearchScreen(
     onUpdateCampsiteId: (String) -> Unit
 ) {
     val campsiteDatabase: List<Campsite> = appState.campsites.campsites
+    val sharedByID = campsiteDatabase.mapNotNull { it.sharedLotteryID }.distinct()
+        .associateWith { appState.campsites.sharedLotteries.find(it) }
 
     // Search for a Database
     var searchString by remember { mutableStateOf("") }
@@ -83,10 +85,10 @@ fun MainSearchScreen(
 
     // Campsites that filter and search
     // Uses Levenshtein distance to sort, and filters it based on SearchFilter Dataclass
-    val visibleCampsites = remember(campsiteDatabase.toList(), searchString, filters) {
+    val visibleCampsites = remember(campsiteDatabase.toList(), searchString, filters, sharedByID) {
         campsiteDatabase
             .asSequence()
-            .filter { filters.matches(it) }
+            .filter { filters.matches(it, sharedByID[it.sharedLotteryID]?.opens ?: it.getStartDate()) }
             .map { it to levenshteinDist(searchString, it.getName()) }
             .sortedBy { (_, dist) -> dist }
             .take(100)
@@ -207,8 +209,9 @@ fun MainSearchScreen(
                                 ) {
                                     Text(campsite.getName(), fontWeight = FontWeight.Bold, fontSize = 18.sp)
                                     Text(campsite.getLocationSummary())
-                                    Text("Start: ${formatLotteryDate(campsite.getStartDate())}")
-                                    Text("End: ${formatLotteryDate(campsite.getEndDate())}")
+                                    val shared = sharedByID[campsite.sharedLotteryID]
+                                    Text("Start: ${formatLotteryDate(shared?.opens ?: campsite.getStartDate())}")
+                                    Text("End: ${formatLotteryDate(shared?.closes ?: campsite.getEndDate())}")
                                 }
                             }
                         }

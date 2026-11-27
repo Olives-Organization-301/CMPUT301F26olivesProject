@@ -246,6 +246,7 @@ private fun ChatThread(
     var messageText by remember { mutableStateOf("") }
     // Location whose Select Dates calendar is open (null = closed)
     var reservingLocation by remember { mutableStateOf<Int?>(null) }
+    var reservingLottery by remember { mutableStateOf<String?>(null) }
     var savingReservation by remember { mutableStateOf(false) }
     var reservationError by remember { mutableStateOf(false) }
     val pickedDates = messages.filter { it.type == RESERVATION_CONFIRMED }
@@ -309,7 +310,18 @@ private fun ChatThread(
                     timeText = timeFormatter.format(Date(message.sentAt))
                 ) {
                     // Winning message: button to pick dates for that location
-                    if (message.type == LOTTERY_WON && message.locationIndex >= 0) {
+                    if (message.type == LOTTERY_WON && message.lotteryID.isNotBlank()) {
+                        val lottery = appState.campsites.sharedLotteries.find(message.lotteryID)
+                        val decision = lottery?.bookings?.get(entrantID)
+                        when {
+                            decision?.status == RESERVATION_CONFIRMED -> Text("Reservation confirmed")
+                            decision?.status == RESERVATION_DECLINED -> Text("Reservation declined")
+                            else -> Button(
+                                onClick = { reservingLottery = message.lotteryID },
+                                enabled = lottery != null
+                            ) { Text("Choose campsite and dates") }
+                        }
+                    } else if (message.type == LOTTERY_WON && message.locationIndex >= 0) {
                         val picked = pickedDates[message.locationIndex].orEmpty()
                         val status = reservationStatus(messages, message.locationIndex)
                         if (status == RESERVATION_DECLINED) {
@@ -367,6 +379,12 @@ private fun ChatThread(
                     messageText = ""
                 }
             ) { Text("Send") }
+        }
+    }
+
+    reservingLottery?.let { id ->
+        appState.campsites.sharedLotteries.find(id)?.let { lottery ->
+            SharedLotteryReservationDialog(appState, lottery, entrantID) { reservingLottery = null }
         }
     }
 
@@ -480,7 +498,9 @@ fun ReserveDatesDialog(
     onConfirm: (List<LocalDate>) -> Unit,
     onDecline: () -> Unit,
     saving: Boolean = false,
-    saveFailed: Boolean = false
+    saveFailed: Boolean = false,
+    unavailableDays: Set<LocalDate> = emptySet(),
+    earliestDate: LocalDate? = null,
 ) {
     val ranges = campsite.getVacationStartTimes()
     var selected by remember(campsite) { mutableStateOf(initiallySelected) }
@@ -515,6 +535,8 @@ fun ReserveDatesDialog(
                 SelectableDatesCalendar(
                     ranges = ranges,
                     selected = selected,
+                    unavailableDays = unavailableDays,
+                    earliestDate = earliestDate,
                     onToggle = { date ->
                         selected = if (date in selected) selected - date else selected + date
                     }
@@ -537,7 +559,7 @@ fun ReserveDatesDialog(
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
                     ) { Text("Decline reservation", fontSize = 13.sp, textAlign = TextAlign.Center) }
                     Button(
-                        enabled = !saving && selected.isNotEmpty(),
+                        enabled = !saving && selected.isNotEmpty() && selected.none { it in unavailableDays },
                         onClick = { onConfirm(selected.sorted()) },
                         modifier = Modifier.weight(1f),
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
@@ -561,7 +583,9 @@ fun SelectableDatesCalendar(
     selected: Set<LocalDate>,
     onToggle: (LocalDate) -> Unit,
     modifier: Modifier = Modifier,
-    initialMonth: YearMonth = ranges.minOfOrNull { it.first }?.let { YearMonth.from(it) } ?: YearMonth.now()
+    initialMonth: YearMonth = ranges.minOfOrNull { it.first }?.let { YearMonth.from(it) } ?: YearMonth.now(),
+    unavailableDays: Set<LocalDate> = emptySet(),
+    earliestDate: LocalDate? = null,
 ) {
     var month by remember { mutableStateOf(initialMonth) }
 
@@ -609,6 +633,7 @@ fun SelectableDatesCalendar(
                             date = date,
                             ranges = ranges,
                             isSelected = date in selected,
+                            unavailable = date in unavailableDays || earliestDate?.let { date.isBefore(it) } == true,
                             onToggle = onToggle,
                             modifier = Modifier.weight(1f)
                         )
@@ -631,9 +656,10 @@ private fun SelectableCalendarDay(
     ranges: List<Pair<LocalDateTime, LocalDateTime>>,
     isSelected: Boolean,
     onToggle: (LocalDate) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    unavailable: Boolean = false,
 ) {
-    val available = isDateAvailable(date, ranges)
+    val available = !unavailable && isDateAvailable(date, ranges)
     val roundStart = !isDateAvailable(date.minusDays(1), ranges) ||
         date.dayOfWeek == DayOfWeek.SUNDAY || date.dayOfMonth == 1
     val roundEnd = !isDateAvailable(date.plusDays(1), ranges) ||
