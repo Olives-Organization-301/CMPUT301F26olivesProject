@@ -30,6 +30,7 @@ class ReviewerFirestoreSeed {
     private fun ownerEmail(number: Int) = "olives.owner$number@example.com"
 
     @Test
+    @ReviewerFirestoreWrite
     fun seedAndVerifyReviewerDataOnServer() {
         assumeTrue(InstrumentationRegistry.getArguments().getString("writeReviewerFirestore") == "true")
         val marker = "CampsiteOwners/${owner(1)}"

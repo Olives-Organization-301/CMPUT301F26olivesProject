@@ -179,11 +179,11 @@ class QrCodeScanTest {
     private val entrant = Entrant(username = "jdoe", email = "jdoe@example.com", userID = "e_1", name = "John Doe")
 
     /** AppState with MockK databases (no Firestore), like the other entrant tests. */
-    private fun fakeAppState(): AppState {
+    private fun fakeAppState(catalog: List<Campsite> = allSites): AppState {
         val campsites = mockk<DatabaseCampsites>(relaxed = true)
-        every { campsites.campsites } returns allSites
+        every { campsites.campsites } returns catalog
         every { campsites.searchCampsite(any(), any()) } answers {
-            secondArg<(Campsite?) -> Unit>()(allSites.find { it.campsiteID == firstArg<String>() })
+            secondArg<(Campsite?) -> Unit>()(catalog.find { it.campsiteID == firstArg<String>() })
         }
 
         val entrants = mockk<DatabaseEntrants>(relaxed = true)
@@ -263,8 +263,8 @@ class QrCodeScanTest {
     // The image the dialog "picks" when the square is tapped (stands in for the photo picker)
     private var pickedImage: Bitmap? = null
 
-    private fun openApp(start: String) {
-        appState = fakeAppState()
+    private fun openApp(start: String, state: AppState = fakeAppState()) {
+        appState = state
         composeTestRule.setContent {
             nav = rememberNavController()
             CompositionLocalProvider(LocalQrTestImage provides { pickedImage }) {
@@ -344,6 +344,20 @@ class QrCodeScanTest {
         openApp("mainSearchScreen")
         openScanDialog()
         scan(qrBitmap(jasper.campsiteID))
+        composeTestRule.onNodeWithText("Found: Jasper Lake").assertIsDisplayed()
+        viewCampsite()
+        assertDetailsShowing(jasper)
+    }
+
+    @Test
+    fun scanBeforeCatalogLoadsResolvesWhenCampsiteArrives() {
+        val catalog = mutableStateListOf<Campsite>()
+        openApp("mainSearchScreen", fakeAppState(catalog))
+        openScanDialog()
+        scan(qrBitmap(jasper.campsiteID))
+        composeTestRule.onNodeWithText("View Campsite").assertIsNotEnabled()
+
+        composeTestRule.runOnIdle { catalog.add(jasper) }
         composeTestRule.onNodeWithText("Found: Jasper Lake").assertIsDisplayed()
         viewCampsite()
         assertDetailsShowing(jasper)
