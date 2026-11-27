@@ -18,6 +18,19 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // The connected-test report counts failed assumptions as failures on this runner.
+        // Keep the live Firestore tests out of discovery unless their flags are enabled.
+        val readOwnerReservations =
+            providers.gradleProperty("android.testInstrumentationRunnerArguments.readOwnerReservations")
+        if (readOwnerReservations.orNull != "true") {
+            testInstrumentationRunnerArguments["notClass"] =
+                "com.example.code.CampsiteOwnerMessagesTest#liveOwnerInboxesReflectConfirmedReservations"
+        }
+        val writeReviewerFirestore =
+            providers.gradleProperty("android.testInstrumentationRunnerArguments.writeReviewerFirestore")
+        if (writeReviewerFirestore.orNull != "true") {
+            testInstrumentationRunnerArguments["notAnnotation"] = "com.example.code.ReviewerFirestoreWrite"
+        }
     }
 
     buildTypes {

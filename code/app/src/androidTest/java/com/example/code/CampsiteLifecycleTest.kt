@@ -10,6 +10,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.navigation.compose.rememberNavController
 import com.example.code.classes.AppState
 import com.example.code.classes.Campsite
+import com.example.code.classes.CampsiteOwner
 import com.example.code.classes.ChatMessage
 import com.example.code.classes.Entrant
 import com.example.code.classes.Review
@@ -95,6 +96,44 @@ class CampsiteLifecycleTest {
             verify(exactly = 1) { database.drawClosedLottery(any(), any()) }
             verify { database.drawClosedLottery("closed", "owner") }
         }
+    }
+
+    @Test
+    fun ownerDashboardShowsReservationHistoryForTheSelectedCampsite() {
+        val campsites = mockk<DatabaseCampsites>(relaxed = true)
+        every { campsites.campsites } returns listOf(campsite)
+        every { campsites.getCampsitesForOwner("owner", any()) } answers {
+            secondArg<(List<Campsite>) -> Unit>()(listOf(campsite))
+        }
+        every { campsites.drawClosedLottery("site", "owner") } returns Tasks.forResult(true)
+        val pastGuest = Entrant(userID = "past", name = "Past Guest").apply {
+            addCampsite(PAST_CAMPSITES, "site")
+        }
+        val otherGuest = Entrant(userID = "other", name = "Other Guest").apply {
+            addCampsite(PAST_CAMPSITES, "other-site")
+        }
+        val state = AppState(
+            admins = mockk(relaxed = true),
+            owners = mockk(relaxed = true),
+            campsites = campsites,
+            entrants = mockk<DatabaseEntrants>(relaxed = true).also {
+                every { it.entrants } returns listOf(pastGuest, otherGuest)
+            },
+            alerts = mockk(relaxed = true),
+            chat = mockk(relaxed = true)
+        ).apply {
+            userID = "owner"
+            role = "owner"
+        }
+        every { state.owners.searchCampsiteOwner("owner", any()) } answers {
+            secondArg<(CampsiteOwner?) -> Unit>()(null)
+        }
+
+        compose.setContent { CampsiteOwnerMainScreen(rememberNavController(), state) }
+        compose.onNodeWithText("Menu").performClick()
+        compose.onNodeWithText("Reservations").performClick()
+        compose.onNodeWithText("Past Guest").assertIsDisplayed()
+        compose.onNodeWithText("Other Guest").assertDoesNotExist()
     }
 
     @Test
