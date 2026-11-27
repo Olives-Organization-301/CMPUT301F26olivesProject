@@ -26,6 +26,7 @@ import com.example.code.classes.Campsite
 import com.example.code.classes.ChatMessage
 import com.example.code.classes.Entrant
 import androidx.core.content.edit
+import kotlin.time.Duration.Companion.milliseconds
 
 // Kinds of chat messages
 // A Normal Chat Message
@@ -53,6 +54,7 @@ internal fun lotteryResultMessages(campsite: Campsite, now: Long): List<ChatMess
         }
     }
 
+@RequiresApi(Build.VERSION_CODES.O)
 internal fun Campsite.isReadyToDraw(now: java.time.LocalDateTime): Boolean =
     getEndDate()?.let { !now.isBefore(it) } == true && !isLotteryDrawn()
 
@@ -77,11 +79,13 @@ internal fun latestReservation(messages: List<ChatMessage>, locationIndex: Int):
             (it.type == RESERVATION_CONFIRMED || it.type == RESERVATION_DECLINED)
     }.maxByOrNull { it.sentAt }
 
+@RequiresApi(Build.VERSION_CODES.O)
 internal fun ChatMessage.reservationDates(): List<LocalDate> =
     stayDates.mapNotNull { date ->
         try { LocalDate.parse(date) } catch (_: DateTimeParseException) { null }
     }
 
+@RequiresApi(Build.VERSION_CODES.O)
 internal fun reservationHasEnded(messages: List<ChatMessage>, today: LocalDate): Boolean {
     val confirmed = messages.filter { it.locationIndex >= 0 }
         .map { it.locationIndex }.distinct().mapNotNull { latestReservation(messages, it) }
@@ -93,6 +97,7 @@ internal fun reservationHasEnded(messages: List<ChatMessage>, today: LocalDate):
 }
 
 /** Reconciles expired stays while the entrant is signed in, including after a relaunch. */
+@RequiresApi(Build.VERSION_CODES.O)
 @Composable
 internal fun ReservationHistoryEffect(appState: AppState) {
     val entrantID = appState.userID
@@ -111,11 +116,12 @@ internal fun ReservationHistoryEffect(appState: AppState) {
                     appState.entrants.archiveReservation(entrant, id, revision)
                 }
             }
-            delay(30_000)
+            delay(30_000.milliseconds)
         }
     }
 }
 
+@RequiresApi(Build.VERSION_CODES.O)
 fun confirmReservation(
     appState: AppState,
     campsite: Campsite,
