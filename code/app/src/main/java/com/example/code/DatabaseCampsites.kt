@@ -79,7 +79,9 @@ class DatabaseCampsites {
             ?: doc?.getString("address")
             ?: ""
 
-        return Coordinates(country, region, city, address)
+        val latitude = (coordMap?.get("latitude") as? Number)?.toDouble()
+        val longitude = (coordMap?.get("longitude") as? Number)?.toDouble()
+        return Coordinates(country, region, city, address, latitude, longitude)
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
@@ -258,6 +260,34 @@ class DatabaseCampsites {
         return batch.commit()
             .addOnFailureListener { _campsites.remove(campsite) }
     }
+
+    /** # Database Campsites
+     *  Implementation of US 02.01.02: Saving campsite details provided by the campsite owner.
+     *
+     *  Prompt: "US 02.01.02 As a campsite owner, I want to provide campsite details including
+     *  name, location, description (amenities), maximum occupancy, map location, optional image, and tags."
+     *  Implemented with Android Studio AI Agent.
+     */
+    fun updateCampsiteDetails(
+        campsiteID: String,
+        name: String,
+        location: String,
+        description: String,
+        maxOccupancy: Int,
+        latitude: Double?,
+        longitude: Double?,
+        tags: List<String>
+    ): Task<Void> = campsitesRef.document(campsiteID).update(
+        mapOf(
+            "name" to name,
+            "description" to description,
+            "maxOccupancy" to listOf(maxOccupancy),
+            "tags" to tags,
+            "coordinates" to listOf(
+                Coordinates("Canada", "", location, location, latitude, longitude).toMap()
+            )
+        )
+    )
 
     /** A null image leaves both fields untouched. An empty image removes the saved photo. */
     fun updateCampsiteListing(campsiteID: String, name: String, image: String?): Task<Void> {
