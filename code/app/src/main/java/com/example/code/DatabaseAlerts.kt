@@ -24,6 +24,19 @@ class DatabaseAlerts() {
         alertsRef.document(alert.alertID).delete()
     }
 
+    /** # Owner Sent Notifications
+     * Implementation of US 02.10.02: campsite owner views notifications they sent.
+     * Prototype was gained from a Conversation with Android Studio's agent.
+     * Prompt: "Show a campsite owner all alerts sent from their account."
+     */
+    fun fetchSentBy(ownerName: String, onResult: (List<Alert>) -> Unit) {
+        alertsRef.whereEqualTo("sender", ownerName).get()
+            .addOnSuccessListener { snapshot ->
+                onResult(snapshot.documents.mapNotNull { it.toObject(Alert::class.java) })
+            }
+            .addOnFailureListener { onResult(emptyList()) }
+    }
+
     fun searchAlert(alertId: String, onResult: (Alert?) -> Unit) {
         alertsRef.document(alertId).get()
             .addOnSuccessListener { doc ->
