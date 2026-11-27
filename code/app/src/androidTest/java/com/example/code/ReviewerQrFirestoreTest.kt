@@ -66,6 +66,7 @@ class ReviewerQrFirestoreTest {
                 composeTestRule.onAllNodes(hasText(joinLabel) and isEnabled()).fetchSemanticsNodes().isNotEmpty()
             }
             composeTestRule.onNodeWithText(joinLabel).performClick()
+            composeTestRule.onNodeWithText("Agree").performClick()
             composeTestRule.waitUntil(20_000) {
                 composeTestRule.onAllNodesWithText("OK").fetchSemanticsNodes().isNotEmpty()
             }

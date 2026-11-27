@@ -203,17 +203,30 @@ fun ReservationsListScreen(
                         navController.navigate("entrantMessages/$campsite")
                     },
                     onRemove = {
-                        // Remove the campsite from the entrant's own list
-                        entrant?.let {
-                            appState.entrants.removeEntrantCampsite(it, selectedList, campsite)
+                        val list = selectedList
+                        val removeFromProfile = {
+                            entrant?.let { appState.entrants.removeEntrantCampsite(it, list, campsite) }
+                            displayedCampsites.remove(campsite)
                         }
-                        // If it's the waiting list or active lottery, also remove the entrant from the campsite
                         val userID = appState.userID
-                        if ((selectedList == WAITING_LIST || selectedList == ACTIVE_CAMPSITES) && userID != null) {
-                            campsiteCache[campsite]?.removeEntrant(userID)
-                            appState.campsites.removeFromWaitingList(campsite, userID)
+                        val groupID = campsiteCache[campsite]?.sharedLotteryID
+                        if (list == RESERVED_CAMPSITES && groupID != null && userID != null) {
+                            appState.campsites.sharedLotteries.cancel(groupID, userID, campsite).addOnCompleteListener {
+                                if (it.isSuccessful && it.result == true) {
+                                    entrant?.removeCampsite(list, campsite)
+                                    displayedCampsites.remove(campsite)
+                                }
+                            }
+                        } else if ((list == WAITING_LIST || list == ACTIVE_CAMPSITES) && userID != null) {
+                            appState.campsites.removeFromWaitingList(campsite, userID) { removed ->
+                                if (removed) {
+                                    campsiteCache[campsite]?.removeEntrant(userID)
+                                    removeFromProfile()
+                                }
+                            }
+                        } else {
+                            removeFromProfile()
                         }
-                        displayedCampsites.remove(campsite)
                     }
                 )
             }
@@ -349,7 +362,9 @@ fun formatLotteryDate(date: LocalDateTime?): String =
  */
 @RequiresApi(Build.VERSION_CODES.O)
 fun moveToActiveLotteryIfStarted(appState: AppState, entrant: Entrant, campsite: Campsite): Boolean {
-    if (!campsite.isLotteryActive()) return false
+    val now = lotteryNow()
+    if (campsite.sharedLotteryID != null || !campsite.isLotteryActive(now.toLocalDate()) ||
+        registrationGate(campsite.getStartDate(), campsite.getEndDate(), campsite.isLotteryDrawn(), now) != WaitlistJoinResult.JOINED) return false
     if (entrant.getCampsiteLists()[WAITING_LIST]?.contains(campsite.campsiteID) != true) return false
     appState.entrants.moveEntrantCampsite(entrant, WAITING_LIST, ACTIVE_CAMPSITES, campsite.campsiteID)
     return true

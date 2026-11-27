@@ -39,6 +39,8 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.Text
@@ -50,6 +52,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.key
+import androidx.compose.ui.platform.testTag
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -87,10 +92,10 @@ import com.example.code.classes.ChatMessage
 import com.example.code.classes.Coordinates
 import com.example.code.classes.PreviewCampsite
 import com.example.code.classes.WaitlistEntrant
-import kotlinx.coroutines.delay
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
 import java.time.Instant
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.util.UUID
@@ -137,15 +142,19 @@ fun CampsiteOwnerMainScreen(
 ) {
     val context = LocalContext.current
     var searchString by remember { mutableStateOf("") }
-    var showAdd by remember { mutableStateOf(false) }
+    var newCampsiteRules by remember(appState.userID) { mutableStateOf<List<String>?>(null) }
+    var loadingDefaultRules by remember(appState.userID) { mutableStateOf(false) }
+    var creatingCampsite by remember(appState.userID) { mutableStateOf(false) }
     var showQRCodeDialog by remember { mutableStateOf(false) }
     var selectedQRCampsite by remember { mutableStateOf<PreviewCampsite?>(null) }
     var ownerName by remember { mutableStateOf("Campsite Owner") }
     var currentOwnerObj by remember { mutableStateOf<CampsiteOwner?>(null) }
     var showEdit by remember { mutableStateOf<PreviewCampsite?>(null) }
     var showLottery by remember { mutableStateOf<PreviewCampsite?>(null) }
+    var savingLottery by remember { mutableStateOf(false) }
     var showAlert by remember { mutableStateOf<PreviewCampsite?>(null) }
     var showReservations by remember { mutableStateOf<PreviewCampsite?>(null) }
+    var showReservationList by remember(appState.userID) { mutableStateOf(false) }
     val format = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
 
     val colors = if (darkTheme) OwnerDarkColors else OwnerLightColors
@@ -155,26 +164,6 @@ fun CampsiteOwnerMainScreen(
     }
 
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
-
-    LaunchedEffect(appState.userID, appState.campsites.campsites.toList()) {
-        val ownerID = appState.userID ?: return@LaunchedEffect
-        val attempted = mutableSetOf<String>()
-        while (true) {
-            val now = LocalDateTime.now()
-            appState.campsites.campsites
-                .filter { it.getOwnerID() == ownerID && it.isReadyToDraw(now) }
-                .forEach { campsite ->
-                    if (attempted.add(campsite.campsiteID)) {
-                        appState.campsites.drawClosedLottery(campsite.campsiteID, ownerID)
-                            .addOnFailureListener { error ->
-                                attempted.remove(campsite.campsiteID)
-                                android.util.Log.e("DB", "Closing lottery failed for ${campsite.campsiteID}", error)
-                            }
-                    }
-                }
-            delay(1_000)
-        }
-    }
 
     // Load real campsites and owner name using viewCampsites function
     LaunchedEffect(appState.userID) {
@@ -207,7 +196,12 @@ fun CampsiteOwnerMainScreen(
                                                 maxOccupancy = c.getPeakOccupancy(),
                                                 tags = c.getTags(),
                                                 latitude = c.getMainCoordinates()?.getLatitude(),
-                                                longitude = c.getMainCoordinates()?.getLongitude()
+                                                longitude = c.getMainCoordinates()?.getLongitude(),
+                                                rules = c.getRules(),
+                                                waitlistCapacity = c.waitlistCapacity,
+                                                sharedLotteryID = c.sharedLotteryID,
+                                                stayStartMillis = c.getVacationStartTimes().singleOrNull()?.first?.pickerMillis(),
+                                                stayEndMillis = c.getVacationStartTimes().singleOrNull()?.second?.pickerMillis()
                                             )
                                         )
                                     }
@@ -236,7 +230,12 @@ fun CampsiteOwnerMainScreen(
                                                 maxOccupancy = c.getPeakOccupancy(),
                                                 tags = c.getTags(),
                                                 latitude = c.getMainCoordinates()?.getLatitude(),
-                                                longitude = c.getMainCoordinates()?.getLongitude()
+                                                longitude = c.getMainCoordinates()?.getLongitude(),
+                                                rules = c.getRules(),
+                                                waitlistCapacity = c.waitlistCapacity,
+                                                sharedLotteryID = c.sharedLotteryID,
+                                                stayStartMillis = c.getVacationStartTimes().singleOrNull()?.first?.pickerMillis(),
+                                                stayEndMillis = c.getVacationStartTimes().singleOrNull()?.second?.pickerMillis()
                                             )
                                         )
                                     }
@@ -310,6 +309,7 @@ fun CampsiteOwnerMainScreen(
                             val matchedCampsite = appState.campsites.campsites.firstOrNull {
                                 it.campsiteID == preview.campsiteID
                             }
+                            val shared = matchedCampsite?.sharedLotteryID?.let { appState.campsites.sharedLotteries.find(it) }
                             val thumbnail = matchedCampsite.thumbnailPhoto() ?: preview.campsiteImage.takeIf { it.isNotBlank() }
 
                             Card(
@@ -342,8 +342,8 @@ fun CampsiteOwnerMainScreen(
                                                 if (preview.location.isNotBlank()) {
                                                     Text(preview.location, fontSize = 12.sp, color = Color.White.copy(alpha = 0.9f))
                                                 }
-                                                Text("Entry: " + (preview.startMillis?.let { format.format(Date(it)) } ?: "Not set"), fontSize = 11.sp, color = Color.White.copy(alpha = 0.8f))
-                                                Text("End: " + (preview.endMillis?.let { format.format(Date(it)) } ?: "Not set"), fontSize = 11.sp, color = Color.White.copy(alpha = 0.8f))
+                                                Text("Entry: " + ((shared?.opens?.pickerMillis() ?: preview.startMillis)?.let { format.format(Date(it)) } ?: "Not set"), fontSize = 11.sp, color = Color.White.copy(alpha = 0.8f))
+                                                Text("End: " + ((shared?.closes?.pickerMillis() ?: preview.endMillis)?.let { format.format(Date(it)) } ?: "Not set"), fontSize = 11.sp, color = Color.White.copy(alpha = 0.8f))
                                             }
 
                                             Spacer(Modifier.width(8.dp))
@@ -359,6 +359,9 @@ fun CampsiteOwnerMainScreen(
                                                 Text("Menu", maxLines = 1, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                             }
 
+                                            // Codex prompts: "for when menu is clicked on a campsite for campsite owner, i can't scroll down fix that"
+                                            // "check the stash changes, there was a menu re-work so apply the logic of the change on that"
+                                            // "remove the older menu code"
                                             if (showMenu) {
                                                 AlertDialog(
                                                     onDismissRequest = { showMenu = false },
@@ -398,7 +401,23 @@ fun CampsiteOwnerMainScreen(
                     }
                 }
                 FloatingActionButton(
-                    onClick = { showAdd = true },
+                    onClick = {
+                        val ownerID = appState.userID
+                        if (ownerID != null && !loadingDefaultRules && newCampsiteRules == null) {
+                            loadingDefaultRules = true
+                            appState.owners.getDefaultCampsiteRules(ownerID)
+                                .addOnCompleteListener { result ->
+                                    loadingDefaultRules = false
+                                    if (appState.userID == ownerID) {
+                                        if (result.isSuccessful) {
+                                            newCampsiteRules = result.result
+                                        } else {
+                                            Toast.makeText(context, "Could not load default rules and policies", Toast.LENGTH_LONG).show()
+                                        }
+                                    }
+                                }
+                        }
+                    },
                     containerColor = colors.primaryButton,
                     contentColor = colors.primaryText,
                     modifier = Modifier
@@ -417,7 +436,7 @@ fun CampsiteOwnerMainScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Button(
-                    onClick = { },
+                    onClick = { showReservationList = true },
                     shape = RoundedCornerShape(20.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = colors.secondaryButton.copy(alpha = 0.4f), contentColor = colors.title),
                     modifier = Modifier.weight(1f)
@@ -431,6 +450,7 @@ fun CampsiteOwnerMainScreen(
                 ) { Text("QR Code", maxLines = 1, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
 
                 Button(
+                    // Codex prompt: "is it possible to have that version of account back"
                     onClick = { navController.navigate("campsiteOwnerProfileScreen") },
                     shape = RoundedCornerShape(20.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = colors.secondaryButton.copy(alpha = 0.4f), contentColor = colors.title),
@@ -571,16 +591,23 @@ fun CampsiteOwnerMainScreen(
         )
     }
 
-    if (showAdd) {
+    newCampsiteRules?.let { defaultRules ->
         AddEditCampsite(
             title = "Add Campsite",
             initial = null,
-            onDismiss = { showAdd = false },
-            onSave = { newCampsite ->
+            defaultRules = defaultRules,
+            saving = creatingCampsite,
+            onDismiss = { if (!creatingCampsite) newCampsiteRules = null },
+            onSave = save@{ newCampsite ->
+                val ownerID = appState.userID ?: return@save
+                if (creatingCampsite) return@save
+                creatingCampsite = true
                 appState.campsites.generateUniqueCampsiteID { uniqueId ->
+                    val opens = lotteryNow().withNano(0)
+                    val closes = opens.plusDays(7)
                     val realCampsite = Campsite(
                         name = newCampsite.name,
-                        ownerID = appState.userID ?: "unknown_owner",
+                        ownerID = ownerID,
                         campsiteID = uniqueId,
                         maxOccupancy = mutableListOf(4),
                         price = 50.0f,
@@ -595,37 +622,28 @@ fun CampsiteOwnerMainScreen(
                         )),
                         detailsImage = newCampsite.campsiteImage.ifBlank { null },
                         thumbnailImage = newCampsite.campsiteImage.ifBlank { null },
-                        lotteryStartDate = LocalDateTime.now(),
-                        lotteryEndDate = LocalDateTime.now().plusDays(7)
+                        lotteryStartDate = opens,
+                        lotteryEndDate = closes
                     )
                     realCampsite.setDescription(newCampsite.description)
                     realCampsite.setTags(newCampsite.tags)
+                    realCampsite.setRules(newCampsite.rules)
+                    newCampsite.stayRange()?.let { realCampsite.setVacationStartTimes(listOf(it)) }
                     realCampsite.setMaxOccupancy(listOf(newCampsite.maxOccupancy))
-                    appState.campsites.addCampsite(realCampsite)
+                    appState.campsites.addCampsite(realCampsite, saveRulesAsOwnerDefault = true)
                         .addOnSuccessListener {
-                            previewCampsites.add(
-                                PreviewCampsite(
-                                    name = newCampsite.name,
-                                    location = newCampsite.location,
-                                    startMillis = newCampsite.startMillis,
-                                    endMillis = newCampsite.endMillis,
-                                    startMillisRegis = newCampsite.startMillisRegis,
-                                    endMillisRegis = newCampsite.endMillisRegis,
-                                    campsiteImage = newCampsite.campsiteImage,
-                                    campsiteID = uniqueId,
-                                    description = newCampsite.description,
-                                    maxOccupancy = newCampsite.maxOccupancy,
-                                    tags = newCampsite.tags,
-                                    latitude = newCampsite.latitude,
-                                    longitude = newCampsite.longitude
-                                )
-                            )
+                            if (appState.userID == ownerID) {
+                                previewCampsites.add(newCampsite.copy(
+                                    campsiteID = uniqueId, startMillis = opens.pickerMillis(), endMillis = closes.pickerMillis()
+                                ))
+                                newCampsiteRules = null
+                            }
                         }
                         .addOnFailureListener {
                             Toast.makeText(context, "Could not save campsite", Toast.LENGTH_LONG).show()
                         }
+                        .addOnCompleteListener { creatingCampsite = false }
                 }
-                showAdd = false
             }
         )
     }
@@ -644,8 +662,14 @@ fun CampsiteOwnerMainScreen(
                     updated.maxOccupancy,
                     updated.latitude,
                     updated.longitude,
-                    updated.tags
+                    updated.tags,
+                    updated.rules,
+                    updated.stayRange().takeIf {
+                        updated.stayStartMillis != current.stayStartMillis || updated.stayEndMillis != current.stayEndMillis
+                    }
                 ).addOnSuccessListener {
+                    val index = previewCampsites.indexOfFirst { it.campsiteID == current.campsiteID }
+                    if (index >= 0) previewCampsites[index] = updated.copy(campsiteImage = current.campsiteImage)
                     val changedImage = updated.campsiteImage.takeIf { it != current.campsiteImage }
                     appState.campsites.updateCampsiteListing(current.campsiteID, updated.name, changedImage)
                         .addOnSuccessListener {
@@ -664,36 +688,61 @@ fun CampsiteOwnerMainScreen(
     }
 
     showLottery?.let { current ->
+        val live = appState.campsites.campsites.firstOrNull { it.campsiteID == current.campsiteID }
+        val groupID = if (live == null) current.sharedLotteryID else live.sharedLotteryID
+        val group = groupID?.let { appState.campsites.sharedLotteries.find(it) }
+        val eligibleIDs = appState.campsites.campsites.filter {
+            it.getOwnerID() == appState.userID && it.sharedLotteryID == null &&
+                !it.isLotteryDrawn() && it.getWaitingList().isEmpty()
+        }.map { it.campsiteID }.toSet()
+        val options = previewCampsites.filter { it.campsiteID in eligibleIDs || it.campsiteID in group?.campsiteIDs.orEmpty() }
         LotteryDialog(
             campsite = current,
-            liveCampsite = appState.campsites.campsites.firstOrNull { it.campsiteID == current.campsiteID },
+            liveCampsite = live,
+            group = group,
+            groupLoading = groupID != null && group == null,
+            campsiteOptions = options,
             entrantNames = appState.entrants.entrants.associate { it.getUserID() to it.name.ifBlank { it.username } },
-            onDismiss = { showLottery = null },
-            onSave = { startMillis, endMillis ->
+            saving = savingLottery,
+            onDismiss = { if (!savingLottery) showLottery = null },
+            onSave = save@{ startMillis, endMillis, capacity, selected, winnerCount ->
+                if (savingLottery) return@save
                 val ownerID = appState.userID
-                val start = startMillis?.let { Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate() }
-                val end = endMillis?.let { Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate() }
-                if (ownerID != null && start != null && end != null && !end.isBefore(start)) {
-                    if (startMillis == current.startMillis && endMillis == current.endMillis) {
+                val start = Instant.ofEpochMilli(startMillis).atZone(ZoneId.systemDefault()).toLocalDate()
+                val end = Instant.ofEpochMilli(endMillis).atZone(ZoneId.systemDefault()).toLocalDate()
+                if (ownerID == null) return@save
+                if (end.isBefore(start) || end.isBefore(lotteryNow().toLocalDate())) {
+                    Toast.makeText(context, "Choose valid lottery dates", Toast.LENGTH_LONG).show()
+                    return@save
+                }
+                savingLottery = true
+                val savedStart = if (startMillis == (live?.getStartDate()?.pickerMillis() ?: current.startMillis)) {
+                    live?.getStartDate() ?: Instant.ofEpochMilli(startMillis).atZone(ZoneId.systemDefault()).toLocalDateTime()
+                } else start.atStartOfDay()
+                val savedEnd = if (endMillis == (live?.getEndDate()?.pickerMillis() ?: current.endMillis)) {
+                    live?.getEndDate() ?: Instant.ofEpochMilli(endMillis).atZone(ZoneId.systemDefault()).toLocalDateTime()
+                } else end.atTime(23, 59, 59)
+                val saveTask = if (group != null || selected.size > 1) {
+                    appState.campsites.sharedLotteries.save(
+                        groupID, ownerID, selected,
+                        if (group?.opens?.pickerMillis() == startMillis) group.opens else start.atStartOfDay(),
+                        if (group?.closes?.pickerMillis() == endMillis) group.closes else end.atTime(23, 59, 59),
+                        capacity, winnerCount
+                    )
+                } else {
+                    appState.campsites.updateLotteryListing(current.campsiteID, ownerID, savedStart, savedEnd, capacity)
+                }
+                saveTask.addOnCompleteListener { result ->
+                    savingLottery = false
+                    if (result.isSuccessful && result.result == true) {
+                        val index = previewCampsites.indexOfFirst { it.campsiteID == current.campsiteID }
+                        if (index >= 0) previewCampsites[index] = previewCampsites[index].copy(
+                            startMillis = startMillis, endMillis = endMillis, waitlistCapacity = capacity
+                        )
                         showLottery = null
                     } else {
-                        appState.campsites.updateLotteryDates(current.campsiteID, ownerID, start.atStartOfDay(), end.atTime(23, 59, 59))
-                            .addOnCompleteListener { result ->
-                                if (result.isSuccessful && result.result == true) {
-                                    val index = previewCampsites.indexOfFirst { it.campsiteID == current.campsiteID }
-                                    if (index >= 0) previewCampsites[index] = PreviewCampsite(
-                                        current.name, current.location, startMillis, endMillis,
-                                        current.startMillisRegis, current.endMillisRegis, current.waitingList,
-                                        current.campsiteImage, current.campsiteID
-                                    )
-                                    showLottery = null
-                                } else {
-                                    Toast.makeText(context, "Could not save lottery dates", Toast.LENGTH_LONG).show()
-                                }
-                            }
+                        Toast.makeText(context, "Could not save. Check the registration dates, campsite selection, and waitlist size.", Toast.LENGTH_LONG).show()
                     }
-                } else {
-                    Toast.makeText(context, "Choose a valid start and end date", Toast.LENGTH_LONG).show()
                 }
             }
         )
@@ -705,6 +754,19 @@ fun CampsiteOwnerMainScreen(
             onDismiss = { showAlert = null },
             ownerName = ownerName,
             appState = appState
+        )
+    }
+
+    val ownerID = appState.userID
+    if (showReservationList && ownerID != null) {
+        OwnerReservationListDialog(
+            messages = appState.chat.messages,
+            ownerID = ownerID,
+            campsiteNames = previewCampsites.associate { it.campsiteID to it.name },
+            entrantNames = appState.entrants.entrants.associate {
+                it.getUserID() to it.name.ifBlank { it.username }
+            },
+            onDismiss = { showReservationList = false }
         )
     }
 
@@ -729,7 +791,18 @@ fun CampsiteOwnerMainScreen(
                             Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                                 Text(entrant?.name?.ifBlank { entrant.username } ?: decision.entrantID)
                                 Text("Location ${decision.locationIndex + 1}: ${decision.stayDates.joinToString()}")
-                                TextButton(onClick = {
+                                if (decision.rulesAcknowledged) Text("Campsite rules acknowledged")
+                                TextButton(onClick = reject@{
+                                    if (decision.lotteryID.isNotBlank()) {
+                                        val ownerID = appState.userID ?: return@reject
+                                        appState.campsites.sharedLotteries.reject(decision, ownerID)
+                                            .addOnCompleteListener {
+                                                if (!it.isSuccessful || it.result != true) {
+                                                    Toast.makeText(context, "Could not reject reservation", Toast.LENGTH_LONG).show()
+                                                }
+                                            }
+                                        return@reject
+                                    }
                                     val now = System.currentTimeMillis()
                                     appState.chat.addMessage(ChatMessage(
                                         campsiteID = current.campsiteID, campsiteName = current.name,
@@ -767,9 +840,77 @@ fun CampsiteOwnerMainScreen(
     }
 }
 
+/** Codex prompt: "so for campsite owner, when list is clicked, I want there to be options for past reservations and active reservations" */
+@RequiresApi(Build.VERSION_CODES.O)
+@Composable
+private fun OwnerReservationListDialog(
+    messages: List<ChatMessage>,
+    ownerID: String,
+    campsiteNames: Map<String, String>,
+    entrantNames: Map<String, String>,
+    onDismiss: () -> Unit,
+) {
+    var past by rememberSaveable { mutableStateOf(false) }
+    val reservations = ownerReservationList(messages, ownerID, LocalDate.now(), past)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Reservations") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = !past,
+                    onClick = { past = false },
+                    label = { Text("Active reservations") }
+                )
+                FilterChip(
+                    selected = past,
+                    onClick = { past = true },
+                    label = { Text("Past reservations") }
+                )
+                if (reservations.isEmpty()) {
+                    Text(if (past) "No past reservations" else "No active reservations")
+                } else {
+                    key(past) {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            items(reservations) { reservation ->
+                                Column {
+                                    Text(
+                                        campsiteNames[reservation.campsiteID]
+                                            ?: reservation.campsiteName.ifBlank { "Campsite unavailable" },
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(entrantNames[reservation.entrantID]?.ifBlank { null } ?: reservation.entrantID)
+                                    Text("Location ${reservation.locationIndex + 1}")
+                                    Text(reservation.reservationDates().distinct().sorted().joinToString()
+                                        .ifBlank { "Booked stay dates unavailable" })
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } }
+    )
+}
+
 /** Popup form for campsite owners to add or edit campsite details.
  *  Captures name, location, description and amenities, maximum occupancy, map coordinates,
  *  optional image URL, tags, booking dates, registration dates, and rules and policies.
+ *
+ *  A new listing starts with the owner's [defaultRules] and requires nonblank rules.
+ *  An existing listing starts with its own published rules. Closing the rules editor
+ *  keeps the draft in this form. Saving the campsite publishes the nonblank lines.
+ *
+ *  Codex prompt: "for campsite being added in campsite owner let there be an option at the
+ *  bottom that requires to be filled and it be about rules and policies, can be exited but its
+ *  automatically saved, and then if there is content inside let there be an edit option,
+ *  when campsite is made, for that certain owner let there rules and policies be the default
+ *  for a new campsite that can be edited"
  *
  *  Prompt: "US 02.01.02 As a campsite owner, I want to provide campsite details including
  *  name, location, description (amenities), maximum occupancy, map location, optional image, and tags."
@@ -780,30 +921,32 @@ fun AddEditCampsite(
     title: String,
     initial: PreviewCampsite?,
     onDismiss: () -> Unit,
+    defaultRules: List<String> = emptyList(),
+    saving: Boolean = false,
     onSave: (PreviewCampsite) -> Unit,
 ) {
     var name by remember { mutableStateOf(initial?.name ?: "") }
     var location by remember { mutableStateOf(initial?.location ?: "") }
-    var startMillis by remember { mutableStateOf(initial?.startMillis) }
-    var endMillis by remember { mutableStateOf(initial?.endMillis) }
-    var startMillisRegis by remember { mutableStateOf(initial?.startMillisRegis) }
-    var endMillisRegis by remember { mutableStateOf(initial?.endMillisRegis) }
+    var stayStartMillis by remember { mutableStateOf(initial?.stayStartMillis) }
+    var stayEndMillis by remember { mutableStateOf(initial?.stayEndMillis) }
     var campsiteImage by remember { mutableStateOf(initial?.campsiteImage ?: "") }
     var description by remember { mutableStateOf(initial?.description ?: "") }
     var occupancy by remember { mutableStateOf(initial?.maxOccupancy?.toString() ?: "4") }
     var tagsText by remember { mutableStateOf(initial?.tags?.joinToString(", ") ?: "") }
     var latitude by remember { mutableStateOf(initial?.latitude?.toString() ?: "") }
     var longitude by remember { mutableStateOf(initial?.longitude?.toString() ?: "") }
+    var rulesText by rememberSaveable(initial?.campsiteID) {
+        mutableStateOf((initial?.rules ?: defaultRules).joinToString("\n"))
+    }
+    var showRulesEditor by rememberSaveable { mutableStateOf(false) }
 
     val context = LocalContext.current
     val format = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
 
     val (processingPhoto, takePhoto, openPhotoPicker) = rememberPhotoPicker { campsiteImage = it }
 
-    val startText = startMillis?.let { format.format(Date(it)) } ?: "Not set"
-    val endText = endMillis?.let { format.format(Date(it)) } ?: "Not set"
-    val startTextRegis = startMillisRegis?.let { format.format(Date(it)) } ?: "Not set"
-    val endTextRegis = endMillisRegis?.let { format.format(Date(it)) } ?: "Not set"
+    val startText = stayStartMillis?.let { format.format(Date(it)) } ?: "Not set"
+    val endText = stayEndMillis?.let { format.format(Date(it)) } ?: "Not set"
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -831,10 +974,10 @@ fun AddEditCampsite(
                                 PreviewCampsite(
                                     name = name,
                                     location = location,
-                                    startMillis = startMillis,
-                                    endMillis = endMillis,
-                                    startMillisRegis = startMillisRegis,
-                                    endMillisRegis = endMillisRegis,
+                                    startMillis = initial?.startMillis,
+                                    endMillis = initial?.endMillis,
+                                    startMillisRegis = null,
+                                    endMillisRegis = null,
                                     waitingList = initial?.waitingList ?: emptyList(),
                                     campsiteImage = campsiteImage,
                                     campsiteID = initial?.campsiteID.orEmpty(),
@@ -842,11 +985,20 @@ fun AddEditCampsite(
                                     maxOccupancy = occupancy.toIntOrNull() ?: 4,
                                     tags = tagsText.split(",").map(String::trim).filter(String::isNotEmpty),
                                     latitude = latitude.toDoubleOrNull(),
-                                    longitude = longitude.toDoubleOrNull()
+                                    longitude = longitude.toDoubleOrNull(),
+                                    rules = rulesText.lineSequence().map(String::trim).filter(String::isNotEmpty).toList(),
+                                    waitlistCapacity = initial?.waitlistCapacity,
+                                    sharedLotteryID = initial?.sharedLotteryID,
+                                    stayStartMillis = stayStartMillis,
+                                    stayEndMillis = stayEndMillis
                                 )
                             )
                         },
-                        enabled = name.isNotBlank() &&
+                        enabled = !saving && name.isNotBlank() &&
+                            ((stayStartMillis == null && stayEndMillis == null) ||
+                                (stayStartMillis != null && stayEndMillis != null &&
+                                    !stayEndMillis!!.pickerDate().isBefore(stayStartMillis!!.pickerDate()))) &&
+                            (initial != null || rulesText.isNotBlank()) &&
                             occupancy.toIntOrNull()?.let { it > 0 } == true &&
                             ((latitude.isBlank() && longitude.isBlank()) ||
                                 (latitude.toDoubleOrNull()?.let { lat ->
@@ -971,58 +1123,109 @@ fun AddEditCampsite(
                         }
                     }
 
-                    Text("Booking dates")
+                    Text("Available stay dates")
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         OutlinedButton(
-                            onClick = { pickDate(context, null) { startMillis = it } },
+                            onClick = { pickDate(context, null) { stayStartMillis = it } },
                             modifier = Modifier.weight(1f)
                         ) { Text("Entry: $startText", maxLines = 1) }
 
                         OutlinedButton(
-                            onClick = { pickDate(context, startMillis) { endMillis = it } },
+                            onClick = { pickDate(context, stayStartMillis) { stayEndMillis = it } },
                             modifier = Modifier.weight(1f)
                         ) { Text("End: $endText", maxLines = 1) }
                     }
 
-                    Text("Registration period")
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    Text(
+                        if (initial == null) "Rules and policies (required)" else "Rules and policies",
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    OutlinedButton(
+                        enabled = !saving,
+                        onClick = { showRulesEditor = true }
                     ) {
-                        OutlinedButton(
-                            onClick = { pickDate(context, null) { startMillisRegis = it } },
-                            modifier = Modifier.weight(1f)
-                        ) { Text("Entry: $startTextRegis", maxLines = 1) }
-
-                        OutlinedButton(
-                            onClick = { pickDate(context, startMillisRegis) { endMillisRegis = it } },
-                            modifier = Modifier.weight(1f)
-                        ) { Text("End: $endTextRegis", maxLines = 1) }
+                        Text(if (rulesText.isBlank()) "Add rules and policies" else "Edit rules and policies")
                     }
                 }
             }
         }
     }
+
+    if (showRulesEditor) {
+        AlertDialog(
+            onDismissRequest = { showRulesEditor = false },
+            title = { Text("Rules and policies") },
+            text = {
+                OutlinedTextField(
+                    value = rulesText,
+                    onValueChange = { rulesText = it },
+                    label = { Text("Campsite rules and policies") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 4,
+                    maxLines = 8
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { showRulesEditor = false }) { Text("Done") }
+            }
+        )
+    }
 }
 
+/**
+ * US 02.04.06 and 02.04.07. Save dates and an optional waitlist cap from one editor.
+ * Codex prompts: "work on user stories 2.04.07, 2.04.06, 2.05.01, how would the idea be implemented first"
+ * and "work on it then, and make the test cases, and then document the code with the necessary prompts"
+ */
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 private fun LotteryDialog(
     campsite: PreviewCampsite,
     liveCampsite: Campsite?,
+    group: SharedLottery?,
+    groupLoading: Boolean,
+    campsiteOptions: List<PreviewCampsite>,
     entrantNames: Map<String, String>,
+    saving: Boolean,
     onDismiss: () -> Unit,
-    onSave: (Long?, Long?) -> Unit,
+    onSave: (Long, Long, Int?, List<String>, Int) -> Unit,
 ) {
     val context = LocalContext.current
     val format = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
-    var start by remember(campsite.campsiteID) { mutableStateOf(campsite.startMillis) }
-    var end by remember(campsite.campsiteID) { mutableStateOf(campsite.endMillis) }
-    val drawn = liveCampsite?.isLotteryDrawn() == true
-    val entrants = liveCampsite?.getWaitingList().orEmpty()
+    var start by remember(campsite.campsiteID, group?.id) {
+        mutableStateOf(group?.opens?.pickerMillis() ?: liveCampsite?.getStartDate()?.pickerMillis() ?: campsite.startMillis)
+    }
+    var end by remember(campsite.campsiteID, group?.id) {
+        mutableStateOf(group?.closes?.pickerMillis() ?: liveCampsite?.getEndDate()?.pickerMillis() ?: campsite.endMillis)
+    }
+    val drawn = group?.drawn ?: (liveCampsite?.isLotteryDrawn() == true)
+    val entrants = group?.entrants ?: liveCampsite?.getWaitingList().orEmpty()
+    val currentCapacity = when {
+        group != null -> group.capacity
+        liveCampsite != null -> liveCampsite.waitlistCapacity
+        else -> campsite.waitlistCapacity
+    }
+    var capacityText by rememberSaveable(campsite.campsiteID, group?.id) { mutableStateOf(currentCapacity?.toString().orEmpty()) }
+    val anchorID = group?.anchorID ?: campsite.campsiteID
+    var selected by remember(campsite.campsiteID, group?.id) {
+        mutableStateOf(group?.campsiteIDs ?: listOf(anchorID))
+    }
+    val shared = group != null || selected.size > 1
+    var winnersText by rememberSaveable(campsite.campsiteID, group?.id) { mutableStateOf((group?.winnerCount ?: 5).toString()) }
+    val winners = winnersText.trim().toIntOrNull()
+    val capacity = capacityText.trim().toIntOrNull()
+    val capacityValid = capacityText.isBlank() || capacity != null && capacity > 0 && capacity >= entrants.size
+    val now by registrationClock()
+    val openingLocked = if (group != null) !now.isBefore(group.opens) else entrants.isNotEmpty()
+    val editable = !groupLoading && !drawn && (group?.closes ?: liveCampsite?.getEndDate())?.let { now.isBefore(it) } != false
+    val memberSelectionEnabled = editable && !openingLocked && !saving &&
+        (group != null || campsiteOptions.any { it.campsiteID == anchorID })
+    val selectionChanged = selected.toSet() != group?.campsiteIDs?.toSet()
+    val membershipValid = !shared || selected.size >= 2 &&
+        (!selectionChanged || start?.pickerDate()?.atStartOfDay()?.let { now.isBefore(it) } == true)
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1033,23 +1236,65 @@ private fun LotteryDialog(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 item {
-                    Text("Starts: " + (start?.let { format.format(Date(it)) } ?: "Not set"))
-                    Text("Closes: " + (end?.let { format.format(Date(it)) } ?: "Not set"))
-                    if (!drawn) {
+                    Text("Registration opens: " + (start?.let { format.format(Date(it)) } ?: "Not set"))
+                    Text("Registration closes: " + (end?.let { format.format(Date(it)) } ?: "Not set"))
+                    if (groupLoading) Text("Loading shared lottery…")
+                    if (editable) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(onClick = { pickDate(context, null) { start = it } }) {
-                                Text("Start date", fontSize = 12.sp)
+                            OutlinedButton(enabled = !openingLocked && !saving, onClick = { pickDate(context, null) { start = it } }) {
+                                Text("Set opening", fontSize = 12.sp)
                             }
-                            OutlinedButton(onClick = { pickDate(context, start) { end = it } }) {
-                                Text("End date", fontSize = 12.sp)
+                            OutlinedButton(enabled = !saving, onClick = { pickDate(context, start) { end = it } }) {
+                                Text("Set closing", fontSize = 12.sp)
                             }
                         }
+                        OutlinedTextField(
+                            value = capacityText,
+                            onValueChange = { capacityText = it },
+                            label = { Text("Waitlist capacity") },
+                            supportingText = {
+                                Text(if (capacityValid) "Leave blank for unlimited" else "Enter a positive limit of at least ${entrants.size}")
+                            },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                            enabled = !saving
+                        )
+                    }
+                }
+                if (shared || memberSelectionEnabled && campsiteOptions.size > 1) {
+                    item { Text("Campsites in this lottery", fontWeight = FontWeight.Bold) }
+                    items(campsiteOptions.filter { memberSelectionEnabled || it.campsiteID in selected }, key = { "site-${it.campsiteID}" }) { option ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(
+                                checked = option.campsiteID in selected,
+                                modifier = Modifier.testTag("lotterySite_${option.campsiteID}"),
+                                enabled = memberSelectionEnabled && option.campsiteID != anchorID,
+                                onCheckedChange = { checked ->
+                                    selected = if (checked) selected + option.campsiteID else selected - option.campsiteID
+                                }
+                            )
+                            Text(option.name)
+                        }
+                    }
+                }
+                if (shared && editable) {
+                    item {
+                        if (!membershipValid) Text("Select at least two campsites and an opening date in the future to change the campsite selection.")
+                        OutlinedTextField(
+                            value = winnersText,
+                            onValueChange = { winnersText = it },
+                            label = { Text("Number of winners") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            enabled = !saving,
+                            singleLine = true
+                        )
                     }
                 }
                 item {
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text("Waiting list (${entrants.size} entrants)", fontWeight = FontWeight.Bold)
+                    val count = currentCapacity?.let { "${entrants.size}/$it" } ?: "${entrants.size}"
+                    Text("Waiting list ($count entrants)", fontWeight = FontWeight.Bold)
                 }
                 items(entrants, key = { it }) { entrantID ->
                     Row(
@@ -1061,7 +1306,9 @@ private fun LotteryDialog(
                         if (drawn) {
                             val locations = liveCampsite?.getLocationsWon(entrantID).orEmpty()
                             Text(
-                                if (locations.isEmpty()) "Not selected"
+                                if (group != null) {
+                                    if (entrantID in group.winners) "Selected" else "Not selected"
+                                } else if (locations.isEmpty()) "Not selected"
                                 else locations.joinToString { "Location ${it + 1}" },
                                 fontSize = 13.sp,
                                 color = if (locations.isNotEmpty()) Color(0xFF2E7D32) else Color.Gray
@@ -1072,16 +1319,37 @@ private fun LotteryDialog(
             }
         },
         confirmButton = {
-            if (!drawn) {
-                TextButton(enabled = start != null && end != null, onClick = {
-                    onSave(start, end)
-                }) { Text("Save dates") }
+            if (editable) {
+                val selectedStart = start
+                val selectedEnd = end
+                TextButton(
+                    enabled = !saving && capacityValid && membershipValid &&
+                        (!shared || (winners ?: 0) > 0) && selectedStart != null && selectedEnd != null,
+                    onClick = {
+                        if (selectedStart != null && selectedEnd != null) {
+                            onSave(selectedStart, selectedEnd, capacity, selected, winners ?: 5)
+                        }
+                    }
+                ) { Text(if (saving) "Saving…" else "Save lottery") }
             }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } }
     )
 }
 
+private fun LocalDateTime.pickerMillis() = atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+private fun Long.pickerDate() = Instant.ofEpochMilli(this).atZone(ZoneId.systemDefault()).toLocalDate()
+
+private fun PreviewCampsite.stayRange(): Pair<LocalDateTime, LocalDateTime>? {
+    val start = stayStartMillis?.pickerDate() ?: return null
+    val end = stayEndMillis?.pickerDate() ?: return null
+    return start.atStartOfDay() to end.atTime(23, 59, 59)
+}
+
+/**
+ * Codex prompt: "just have one version of the UI, the one that has sign up and login and each
+ * of entrant, owner and admin, and include the QR bitmap helper again"
+ */
 internal fun createCampsiteQrBitmap(campsiteID: String): Bitmap {
     val matrix = QRCodeWriter().encode(campsiteID, BarcodeFormat.QR_CODE, 384, 384)
     val pixels = IntArray(matrix.width * matrix.height) { index ->

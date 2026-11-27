@@ -58,7 +58,9 @@ class DatabaseChat {
                 type = doc.get("type")?.toString()?.ifBlank { null } ?: MESSAGE_TEXT,
                 locationIndex = asLong(doc.get("locationIndex"))?.toInt() ?: -1,
                 sentAt = asLong(doc.get("sentAt")) ?: 0L,
-                stayDates = (doc.get("stayDates") as? List<*>)?.filterIsInstance<String>().orEmpty()
+                stayDates = (doc.get("stayDates") as? List<*>)?.filterIsInstance<String>().orEmpty(),
+                lotteryID = doc.getString("lotteryID").orEmpty(),
+                rulesAcknowledged = asBoolean(doc.get("rulesAcknowledged")) ?: false
             )
         } catch (e: Exception) {
             android.util.Log.e("DB", "could not read message ${doc.id}", e)

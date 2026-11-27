@@ -23,6 +23,7 @@ class MainActivity : ComponentActivity() {
             setContent {
                 CodeTheme {
                     val appState = remember { AppState() }
+                    ForegroundLotteryDrawEffect(appState, lifecycle)
                     LotteryNotificationEffect(appState)
                     ReservationHistoryEffect(appState)
                     CampsiteNavController(appState)

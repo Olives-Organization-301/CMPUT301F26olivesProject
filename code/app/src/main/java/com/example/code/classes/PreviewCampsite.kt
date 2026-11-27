@@ -35,7 +35,7 @@ data class WaitlistEntrant( // contents of the waitingList
  *  name, location, description (amenities), maximum occupancy, map location, optional image, and tags."
  *  Implemented with Android Studio AI Agent.
  */
-class PreviewCampsite(
+data class PreviewCampsite(
     val name: String,
     val location: String,
     val startMillis: Long?,
@@ -50,5 +50,10 @@ class PreviewCampsite(
     val tags: List<String> = emptyList(),
     val latitude: Double? = null,
     val longitude: Double? = null,
+    val rules: List<String> = emptyList(),
+    val waitlistCapacity: Int? = null,
+    val sharedLotteryID: String? = null,
+    val stayStartMillis: Long? = null,
+    val stayEndMillis: Long? = null,
 )
 // waitingList for the lottery system

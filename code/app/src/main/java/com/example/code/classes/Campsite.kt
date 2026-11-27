@@ -54,6 +54,10 @@ class Campsite(
     private var description: String = ""
     private var waitingList = mutableListOf<String>()
     private var finalList = mutableListOf<String>() // Use Entrant IDs instead
+    var waitlistCapacity: Int? = null
+    var lotteryDrawnAt: Long? = null
+    var lotteryNotificationsPending: Boolean = false
+    var sharedLotteryID: String? = null
     // Lottery winners per location: "0" -> entrant IDs who won location 1, "1" -> location 2, ...
     // (String keys because Firestore map keys must be strings)
     private var locationWinners = mutableMapOf<String, MutableList<String>>()
@@ -154,17 +158,18 @@ class Campsite(
      *  the final list lost.
      */
     fun generateFinalList() {
+        lotteryDrawnAt = System.currentTimeMillis()
         locationWinners.clear()
         for (i in maxOccupancy.indices) {
             // Shuffle the whole waiting list and take as many people as this location holds
-            val winners = waitingList.shuffled().take(maxOccupancy[i])
+            val winners = waitingList.shuffled().take(maxOccupancy[i].coerceAtLeast(0))
             locationWinners[i.toString()] = winners.toMutableList()
         }
         finalList = locationWinners.values.flatten().distinct().toMutableList()
     }
 
     // True once generateFinalList() has run
-    fun isLotteryDrawn(): Boolean = locationWinners.isNotEmpty()
+    fun isLotteryDrawn(): Boolean = lotteryDrawnAt != null || locationWinners.isNotEmpty() || finalList.isNotEmpty()
 
     // Indexes of the locations [entrantID] won (0 = location 1), empty if they won none
     fun getLocationsWon(entrantID: String): List<Int> =
@@ -191,6 +196,9 @@ class Campsite(
         "rating" to rating,
         "waitingList" to waitingList,
         "finalList" to finalList,
+        "waitlistCapacity" to waitlistCapacity,
+        "lotteryDrawnAt" to lotteryDrawnAt,
+        "lotteryID" to sharedLotteryID,
         "locationWinners" to locationWinners,
         "coordinates" to coordinates.map { it.toMap() },
         "thumbnailImage" to thumbnailImage,
@@ -200,6 +208,7 @@ class Campsite(
         "detailsImage" to detailsImage,
         "description" to description,
         "tags" to tags,
+        "rules" to rules,
         // Stored as ISO-8601 strings, since Firestore can't store LocalDateTime or Pair
         "vacationStartTimes" to vacationStartTimes.map { (start, end) ->
             mapOf("start" to start.toString(), "end" to end.toString())
