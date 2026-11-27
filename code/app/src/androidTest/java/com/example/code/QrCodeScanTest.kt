@@ -167,7 +167,6 @@ class QrCodeScanTest {
         maxOccupancy = mutableListOf(4),
         price = 50.0f,
         coordinates = mutableListOf(Coordinates("Canada", "Alberta", name, "")),
-        lotteryStartDate = LocalDate.now().plusDays(1).atStartOfDay(),
         lotteryEndDate = LocalDate.now().plusDays(2).atTime(23, 59)
     )
 
@@ -189,7 +188,7 @@ class QrCodeScanTest {
         val entrants = mockk<DatabaseEntrants>(relaxed = true)
         every { campsites.addToWaitingList(any<Campsite>(), any(), any()) } answers {
             firstArg<Campsite>().addEntrant(secondArg())
-            thirdArg<(Boolean) -> Unit>()(true)
+            thirdArg<(WaitlistJoinResult) -> Unit>()(WaitlistJoinResult.JOINED)
         }
         every { entrants.entrants } returns listOf(entrant)
         every { entrants.addEntrantCampsite(any(), any(), any(), any()) } answers {
@@ -371,6 +370,7 @@ class QrCodeScanTest {
         scan(createCampsiteQrBitmap(jasper.campsiteID))
         viewCampsite()
         composeTestRule.onNodeWithText("Join Waiting List").performClick()
+        composeTestRule.onNodeWithText("Agree").performClick()
         composeTestRule.runOnIdle {
             assertEquals(listOf(entrant.getUserID()), jasper.getWaitingList())
             assertEquals(listOf(jasper.campsiteID), entrant.getCampsiteLists()[WAITING_LIST])

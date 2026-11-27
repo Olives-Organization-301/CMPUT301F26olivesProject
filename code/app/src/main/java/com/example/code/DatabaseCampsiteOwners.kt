@@ -4,6 +4,7 @@ import androidx.compose.runtime.mutableStateListOf
 import com.example.code.classes.CampsiteOwner
 import com.google.firebase.Firebase
 import com.google.firebase.firestore.firestore
+import com.google.firebase.firestore.SetOptions
 
 /** Database used to let campsite owners persist in the database
  */
@@ -61,7 +62,7 @@ class DatabaseCampsiteOwners {
         if (index != -1) {
             _campsiteOwners[index] = owner
         }
-        campsiteOwnersRef.document(owner.getUserID()).set(owner)
+        campsiteOwnersRef.document(owner.getUserID()).set(owner, SetOptions.merge())
     }
 
     fun updateCampsiteOwnerUsername(campsiteOwner: CampsiteOwner, newUsername: String) {
@@ -70,13 +71,19 @@ class DatabaseCampsiteOwners {
         if (index != -1) {
             _campsiteOwners[index] = campsiteOwner
         }
-        campsiteOwnersRef.document(campsiteOwner.getUserID()).set(campsiteOwner)
+        campsiteOwnersRef.document(campsiteOwner.getUserID()).set(campsiteOwner, SetOptions.merge())
     }
 
     fun deleteCampsiteOwner(campsiteOwner: CampsiteOwner) {
         _campsiteOwners.removeAll { it.getUserID() == campsiteOwner.getUserID() }
         campsiteOwnersRef.document(campsiteOwner.getUserID()).delete()
     }
+
+    /** Loads the template saved by this owner's last successful campsite creation. */
+    fun getDefaultCampsiteRules(ownerID: String) =
+        campsiteOwnersRef.document(ownerID).get().continueWith { result ->
+            (result.result.get("defaultCampsiteRules") as? List<*>)?.filterIsInstance<String>().orEmpty()
+        }
 
     // Search for campsite owner by document ID
     fun searchCampsiteOwner(ownerID: String, onResult: (CampsiteOwner?) -> Unit) {

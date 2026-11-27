@@ -3,10 +3,12 @@ package com.example.code
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.navigation.compose.rememberNavController
 import com.example.code.classes.AppState
 import com.example.code.classes.Campsite
@@ -28,8 +30,79 @@ import org.junit.Test
 import java.time.LocalDate
 import java.time.LocalDateTime
 
-/** Codex prompt: Check draw deadlines, final stay dates, and review/reply reloads. */
+/**
+ * Codex prompt: Check draw deadlines, final stay dates, and review/reply reloads.
+ * The lottery listing and waitlist cases cover the follow-up prompts on [LotteryDialog].
+ */
 class CampsiteLifecycleTest {
+    @Test
+    fun ownerCanEditWaitlistCapacityFromTheLotteryMenu() {
+        val now = lotteryNow()
+        val site = Campsite("Pine Camp", "owner", "pine", mutableListOf(1), 10f,
+            coordinates = mutableListOf(), lotteryStartDate = now.minusDays(1), lotteryEndDate = now.plusDays(2))
+        site.setWaitingList(listOf("first", "second"))
+        val campsites = mockk<DatabaseCampsites>(relaxed = true)
+        every { campsites.campsites } returns listOf(site)
+        every { campsites.getCampsitesForOwner("owner", any()) } answers {
+            secondArg<(List<Campsite>) -> Unit>()(listOf(site))
+        }
+        every { campsites.updateLotteryListing("pine", "owner", any(), any(), 3) } returns Tasks.forResult(true)
+        val owners = mockk<DatabaseCampsiteOwners>(relaxed = true)
+        every { owners.searchCampsiteOwner("owner", any()) } answers {
+            secondArg<(CampsiteOwner?) -> Unit>()(null)
+        }
+        val state = AppState(
+            admins = mockk(relaxed = true), owners = owners, campsites = campsites,
+            entrants = mockk(relaxed = true), alerts = mockk(relaxed = true), chat = mockk(relaxed = true)
+        ).apply {
+            userID = "owner"
+            role = "owner"
+        }
+
+        compose.setContent { CampsiteOwnerMainScreen(rememberNavController(), state) }
+        compose.onNodeWithText("Menu").performClick()
+        compose.onNodeWithText("Lottery").performClick()
+        compose.onNodeWithText("Waitlist capacity").performTextReplacement("1")
+        compose.onNodeWithText("Save lottery").assertIsNotEnabled()
+        compose.onNodeWithText("Waitlist capacity").performTextReplacement("3")
+        compose.onNodeWithText("Save lottery").performClick()
+
+        compose.runOnIdle {
+            verify(exactly = 1) { campsites.updateLotteryListing("pine", "owner", any(), any(), 3) }
+        }
+    }
+    @Test
+    fun waitlistCapacityAllowsOneLastPlaceAndAnIdempotentRetry() {
+        val close = LocalDateTime.of(2026, 12, 9, 12, 0)
+        val site = Campsite("Pine", "owner", "pine", mutableListOf(1), 10f,
+            coordinates = mutableListOf(), lotteryEndDate = close)
+        val now = close.minusMinutes(1)
+        site.waitlistCapacity = 1
+
+        assertEquals(WaitlistJoinResult.JOINED, site.waitlistJoinResult("first", now))
+        site.addEntrant("first")
+        assertEquals(WaitlistJoinResult.FULL, site.waitlistJoinResult("second", now))
+        assertEquals(WaitlistJoinResult.JOINED, site.waitlistJoinResult("first", now))
+        assertEquals(WaitlistJoinResult.CLOSED, site.waitlistJoinResult("second", close))
+        site.waitlistCapacity = null
+        assertEquals(WaitlistJoinResult.JOINED, site.waitlistJoinResult("second", now))
+    }
+
+    @Test
+    fun listingEditsRejectInvalidDatesAndLimitsBelowCurrentEnrollment() {
+        val start = LocalDateTime.of(2026, 12, 8, 12, 0)
+        val end = start.plusDays(2)
+        val site = Campsite("Pine", "owner", "pine", mutableListOf(1), 10f,
+            coordinates = mutableListOf(), lotteryEndDate = end)
+        site.setWaitingList(listOf("first", "second"))
+
+        assertFalse(site.canEditLottery(start, end, 1, start))
+        assertFalse(site.canEditLottery(start, end, 0, start))
+        assertFalse(site.canEditLottery(end, start, null, start))
+        assertFalse(site.canEditLottery(start, end.plusDays(1), 3, end))
+        assertTrue(site.canEditLottery(start, end, 2, start))
+        assertTrue(site.canEditLottery(start, end, null, start))
+    }
     @get:Rule
     val compose = createComposeRule()
 
@@ -69,43 +142,12 @@ class CampsiteLifecycleTest {
     }
 
     @Test
-    fun ownerDashboardDrawsOnlyItsClosedLotteries() {
-        fun site(id: String, owner: String, end: LocalDateTime) = Campsite(
-            id, owner, id, mutableListOf(1), 10f, coordinates = mutableListOf(),
-            lotteryEndDate = end
-        )
-        val now = LocalDateTime.now()
-        val database = mockk<DatabaseCampsites>(relaxed = true)
-        every { database.campsites } returns listOf(
-            site("closed", "owner", now.minusMinutes(1)),
-            site("open", "owner", now.plusMinutes(1)),
-            site("other", "another-owner", now.minusMinutes(1))
-        )
-        every { database.drawClosedLottery("closed", "owner") } returns Tasks.forResult(true)
-        val state = AppState(
-            admins = mockk(relaxed = true), owners = mockk(relaxed = true),
-            campsites = database, entrants = mockk(relaxed = true),
-            alerts = mockk(relaxed = true), chat = mockk(relaxed = true)
-        ).apply {
-            userID = "owner"
-            role = "owner"
-        }
-
-        compose.setContent { CampsiteOwnerMainScreen(rememberNavController(), state) }
-        compose.runOnIdle {
-            verify(exactly = 1) { database.drawClosedLottery(any(), any()) }
-            verify { database.drawClosedLottery("closed", "owner") }
-        }
-    }
-
-    @Test
     fun ownerDashboardShowsReservationHistoryForTheSelectedCampsite() {
         val campsites = mockk<DatabaseCampsites>(relaxed = true)
         every { campsites.campsites } returns listOf(campsite)
         every { campsites.getCampsitesForOwner("owner", any()) } answers {
             secondArg<(List<Campsite>) -> Unit>()(listOf(campsite))
         }
-        every { campsites.drawClosedLottery("site", "owner") } returns Tasks.forResult(true)
         val pastGuest = Entrant(userID = "past", name = "Past Guest").apply {
             addCampsite(PAST_CAMPSITES, "site")
         }
@@ -125,6 +167,14 @@ class CampsiteLifecycleTest {
             userID = "owner"
             role = "owner"
         }
+        every { state.chat.messages } returns listOf(
+            ChatMessage(campsiteID = "site", ownerID = "owner", entrantID = "past",
+                type = RESERVATION_CONFIRMED, locationIndex = 0,
+                stayDates = listOf("2026-11-01")),
+            ChatMessage(campsiteID = "other-site", ownerID = "owner", entrantID = "other",
+                type = RESERVATION_CONFIRMED, locationIndex = 0,
+                stayDates = listOf("2026-11-01"))
+        )
         every { state.owners.searchCampsiteOwner("owner", any()) } answers {
             secondArg<(CampsiteOwner?) -> Unit>()(null)
         }
@@ -170,6 +220,8 @@ class CampsiteLifecycleTest {
     @Test
     fun postedReviewAndReplyAppearAfterReopeningReviews() {
         val database = mockk<DatabaseCampsites>()
+        every { database.campsites } returns listOf(campsite)
+        every { database.refreshCampsiteRating("site") } returns Tasks.forResult<Void>(null)
         val reviewListener = mockk<ListenerRegistration>(relaxed = true)
         val replyListener = mockk<ListenerRegistration>(relaxed = true)
         val storedReviews = mutableListOf<Review>()

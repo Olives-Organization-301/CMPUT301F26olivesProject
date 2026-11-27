@@ -39,5 +39,7 @@ data class ChatMessage(
     var type: String = MESSAGE_TEXT,       // MESSAGE_TEXT, LOTTERY_WON, LOTTERY_LOST, RESERVATION_CONFIRMED or RESERVATION_DECLINED
     var locationIndex: Int = -1,           // LOTTERY_WON / RESERVATION_*: which location (0 = location 1)
     var sentAt: Long = System.currentTimeMillis(),  // for ordering (timestamp is only for display)
-    var stayDates: List<String> = emptyList()
+    var stayDates: List<String> = emptyList(),
+    var lotteryID: String = "",
+    var rulesAcknowledged: Boolean = false,
 )

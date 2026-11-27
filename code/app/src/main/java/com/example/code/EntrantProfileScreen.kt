@@ -54,6 +54,7 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.example.code.classes.AppState
 import com.example.code.classes.Campsite
+import com.example.code.classes.ChatMessage
 import com.example.code.classes.Entrant
 import com.google.firebase.Firebase
 import com.google.firebase.firestore.firestore
@@ -117,7 +118,28 @@ fun ProfileScreen(
         }
     }
 
-    val recentCampsites = entrant?.getCampsiteLists()?.get("Past_Campsites") ?: emptyList()
+    // Codex prompt: "ok show the campsite name and booked stay dates and make test cases for those"
+    val pastCampsiteIDs = entrant?.getCampsiteLists()?.get(PAST_CAMPSITES).orEmpty()
+    val campsiteNames = appState.campsites.campsites.associate { it.campsiteID to it.getName() }
+    val pastConversations = appState.chat.messages
+        .filter { it.entrantID == appState.userID && it.campsiteID in pastCampsiteIDs }
+        .groupBy(ChatMessage::campsiteID)
+    val today = java.time.LocalDate.now()
+    val pastDates = pastConversations.mapValues { (_, messages) ->
+        messages.map(ChatMessage::locationIndex)
+            .filter { it >= 0 }
+            .distinct()
+            .mapNotNull { latestReservation(messages, it) }
+            .filter { it.type == RESERVATION_CONFIRMED }
+            .map { it.reservationDates() }
+            .filter { dates -> dates.all { it.isBefore(today) } }
+            .flatten()
+            .distinct()
+            .sorted()
+    }
+    val recentCampsites = pastCampsiteIDs.distinct().sortedByDescending {
+        pastDates[it]?.lastOrNull()
+    }
     var showEditDialog by remember { mutableStateOf(false) }
     var showPolicyDialog by remember { mutableStateOf(false) }
     var showQrDialog by remember { mutableStateOf(false) }
@@ -225,12 +247,23 @@ fun ProfileScreen(
                             .background(MaterialTheme.colorScheme.surfaceVariant)
                     )
 
-                    Text(
-                        text = campsite,
+                    Column(
                         modifier = Modifier
                             .weight(1f)
                             .padding(horizontal = 12.dp)
-                    )
+                    ) {
+                        val name = campsiteNames[campsite]?.takeIf(String::isNotBlank)
+                            ?: pastConversations[campsite].orEmpty()
+                                .maxByOrNull { it.sentAt }?.campsiteName?.takeIf(String::isNotBlank)
+                            ?: "Campsite unavailable"
+                        val dates = pastDates[campsite].orEmpty()
+                        Text(name)
+                        Text(
+                            if (dates.isEmpty()) "Booked stay dates unavailable"
+                            else "Booked stay dates: ${dates.joinToString()}",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
 
                     // Details icon ("click me for more info!"), emoji so no dependencies
                     Text("ℹ️", fontSize = 18.sp)
