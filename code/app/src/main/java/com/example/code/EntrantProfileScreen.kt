@@ -908,9 +908,16 @@ fun QrCodeScanDialog(
     // What was picked: a Uri from the photo picker, or a Bitmap from LocalQrTestImage
     var picked by remember { mutableStateOf<Any?>(null) }
     var bitmap by remember { mutableStateOf<Bitmap?>(null) }
-    var foundCampsite by remember { mutableStateOf<Campsite?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
+    var decodedText by remember { mutableStateOf<String?>(null) }
     var scanning by remember { mutableStateOf(false) }
+    val foundCampsite = decodedText?.let { findCampsiteForQr(appState, it) }
+    val error = when {
+        picked == null || scanning -> null
+        bitmap == null -> "Couldn't open that image."
+        decodedText == null -> "No QR code found in that image."
+        foundCampsite == null -> "That QR code isn't for a campsite in this app."
+        else -> null
+    }
 
     // System photo picker (no storage permission needed)
     val pickImage = rememberLauncherForActivityResult(
@@ -929,8 +936,7 @@ fun QrCodeScanDialog(
     LaunchedEffect(picked) {
         val choice = picked ?: return@LaunchedEffect
         scanning = true
-        error = null
-        foundCampsite = null
+        decodedText = null
         val (bmp, text) = withContext(Dispatchers.Default) {
             val loaded = when (choice) {
                 is Uri -> loadScaledBitmap(context, choice)
@@ -940,14 +946,7 @@ fun QrCodeScanDialog(
             loaded to loaded?.let { decodeQrCode(it) }
         }
         bitmap = bmp
-        when {
-            bmp == null -> error = "Couldn't open that image."
-            text == null -> error = "No QR code found in that image."
-            else -> {
-                foundCampsite = findCampsiteForQr(appState, text)
-                if (foundCampsite == null) error = "That QR code isn't for a campsite in this app."
-            }
-        }
+        decodedText = text
         scanning = false
     }
 
@@ -987,8 +986,8 @@ fun QrCodeScanDialog(
                 Spacer(Modifier.height(12.dp))
                 when {
                     scanning -> Text("Scanning…")
-                    error != null -> Text(error!!, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center)
-                    foundCampsite != null -> Text("Found: ${foundCampsite!!.getName()}", fontWeight = FontWeight.Bold)
+                    error != null -> Text(error, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center)
+                    foundCampsite != null -> Text("Found: ${foundCampsite.getName()}", fontWeight = FontWeight.Bold)
                 }
                 if (bitmap != null) {
                     TextButton(onClick = { openPicker() }) { Text("Choose a different image") }
