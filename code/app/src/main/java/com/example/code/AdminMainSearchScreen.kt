@@ -3,6 +3,7 @@ package com.example.code
 
 import android.os.Build
 import androidx.annotation.RequiresApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,6 +19,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -39,10 +43,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.sp
 import com.example.code.classes.AppState
 import com.example.code.classes.Campsite
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /** # Search Screen
  *  Implementation of the Admins' Main Screen as seen in the Figma.
@@ -89,7 +98,7 @@ fun AdminMainSearchScreen(navController: NavController, appState: AppState) {
     }
 
     androidx.compose.runtime.LaunchedEffect(selectedTop) {
-        if (selectedTop == "Campsites") {
+        if (selectedTop == "Campsites" || selectedTop == "Images") {
             campsiteDb.fetchAllCampsites { _ -> }
         } else if (selectedTop == "User Database") {
             entrantDb.fetchAllEntrants { _ -> }
@@ -146,6 +155,16 @@ fun AdminMainSearchScreen(navController: NavController, appState: AppState) {
 
                     )
 
+                    "Images" -> ImagesTab(
+                        campsites = campsiteDb.campsites.filter {it.getName().contains(query, ignoreCase = true)},
+                        onRemove = { campsite ->
+                            askRemove("Remove the photo for \"${campsite.getName()}\" ?"){
+                                campsiteDb.removeCampsiteImage(campsite.campsiteID)
+                            }
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+
                 }
             }
         }
@@ -183,7 +202,7 @@ fun TopTabs(selected: String, onSelect: (String) -> Unit ){
             .padding(horizontal = 8.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ){
-        listOf("User Database", "Campsites").forEach { tab ->
+        listOf("User Database", "Campsites", "Images").forEach { tab ->
             Button(
                 onClick = { onSelect(tab) },
                 modifier = Modifier.weight(1f),
@@ -283,6 +302,56 @@ fun CampsitesTab(
         if(campsites.isEmpty()) item {EmptyState("No campsites found")}
         items(campsites){ campsite ->
             CampsiteCard(campsite, onRemove = { onRemove(campsite)})
+        }
+    }
+}
+
+@Composable
+fun ImagesTab(
+    campsites: List<Campsite>,
+    onRemove: (Campsite) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val withPhotos = campsites.filter { !it.detailsPhoto().isNullOrBlank() }
+    if (withPhotos.isEmpty()) {
+        EmptyState("No uploaded images")
+        return
+    }
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(2),
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = PaddingValues(vertical = 12.dp)
+    ) {
+        items(withPhotos, key = { it.campsiteID }) { campsite ->
+            val photo = campsite.detailsPhoto().orEmpty()
+            // Decode off the main thread; the photos are 1280px wide
+            val bitmap by produceState<ImageBitmap?>(null, photo) {
+                value = withContext(Dispatchers.Default) { decodeBase64ToImageBitmap(photo) }
+            }
+            Card(shape = RoundedCornerShape(16.dp)) {
+                Column {
+                    bitmap?.let {
+                        Image(
+                            bitmap = it,
+                            contentDescription = campsite.getName(),
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxWidth().height(120.dp)
+                        )
+                    }
+                    Text(
+                        campsite.getName(),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        maxLines = 1,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                    Box(Modifier.padding(8.dp)) {
+                        RemoveButton(onClick = { onRemove(campsite) })
+                    }
+                }
+            }
         }
     }
 }

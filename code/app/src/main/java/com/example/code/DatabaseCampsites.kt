@@ -292,6 +292,21 @@ class DatabaseCampsites {
             "timestamp" to System.currentTimeMillis()
         )
 
+    //claude.ai used for creating the removeCampsiteImage function and it's accompanying methods
+    //In the main kotlin functions.
+    //chat here: https://claude.ai/share/cdf52d32-f73c-4fc2-b19e-b7015e307051
+
+    fun removeCampsiteImage(campsiteID: String): Task<Void>{
+        val batch = db.batch()
+        batch.update(
+            campsitesRef.document(campsiteID),
+            mapOf("detailsImage" to null, "thumbnailImage" to null)
+        )
+        batch.delete(campsiteImageRef(campsiteID))
+        return batch.commit()
+    }
+
+
     fun updateCampsiteName(campsite: Campsite, newName: String) {
         try {
             val index = _campsites.indexOfFirst { it.campsiteID == campsite.campsiteID }
