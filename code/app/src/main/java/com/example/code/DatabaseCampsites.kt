@@ -477,9 +477,35 @@ class DatabaseCampsites {
             onResult(if (error != null) null else snapshot?.documents?.map { doc ->
                 Review(doc.id, doc.getString("entrantID").orEmpty(), campsiteID,
                     doc.getLong("rating")?.toInt() ?: 0, doc.getString("review").orEmpty(),
-                    doc.getString("authorName").orEmpty())
+                    doc.getString("authorName").orEmpty()).apply {
+                    @Suppress("UNCHECKED_CAST")
+                    upvotedEntrants = (doc.get("upvotedEntrants") as? List<String>).orEmpty().toMutableList()
+                    @Suppress("UNCHECKED_CAST")
+                    downvotedEntrants = (doc.get("downvotedEntrants") as? List<String>).orEmpty().toMutableList()
+                }
             })
         }
+
+    /** Recomputes the campsite's rating (out of 5) as the mean of all its reviews and saves it.
+     *  Reviews store their rating out of 10, so each one is halved. */
+    internal fun refreshCampsiteRating(campsiteID: String): Task<Void> =
+        reviews(campsiteID).get().continueWithTask { task ->
+            val ratings = task.result.documents.mapNotNull { it.getLong("rating") }.filter { it > 0 }
+            val average = if (ratings.isEmpty()) null
+                else Math.round(ratings.average() / 2.0 * 10.0) / 10f // one decimal place
+            _campsites.firstOrNull { it.campsiteID == campsiteID }?.setRating(average)
+            campsitesRef.document(campsiteID).update("rating", average)
+        }
+
+    /** Sets this entrant's vote on a review: 1 = upvote, -1 = downvote, 0 = remove their vote.
+     *  An entrant can only be in one of the two lists at a time. */
+    internal fun voteOnReview(review: Review, entrantID: String, vote: Int): Task<Void> {
+        val ref = reviews(review.campsiteID).document(review.reviewID)
+        return ref.update(mapOf(
+            "upvotedEntrants" to if (vote == 1) FieldValue.arrayUnion(entrantID) else FieldValue.arrayRemove(entrantID),
+            "downvotedEntrants" to if (vote == -1) FieldValue.arrayUnion(entrantID) else FieldValue.arrayRemove(entrantID)
+        ))
+    }
 
     internal fun postReview(review: Review): Task<Boolean> {
         val ref = reviews(review.campsiteID).document(review.entrantID)
@@ -488,9 +514,15 @@ class DatabaseCampsites {
             transaction.set(ref, mapOf(
                 "entrantID" to review.entrantID, "authorName" to review.authorName,
                 "rating" to review.rating, "review" to review.review,
+                "upvotedEntrants" to emptyList<String>(), "downvotedEntrants" to emptyList<String>(),
                 "createdAt" to FieldValue.serverTimestamp()
             ))
             true
+        }.continueWithTask { posted ->
+            // Once the review is saved, update the campsite's aggregate rating to include it
+            if (posted.isSuccessful && posted.result == true) {
+                refreshCampsiteRating(review.campsiteID).continueWith { true }
+            } else posted
         }
     }
 
