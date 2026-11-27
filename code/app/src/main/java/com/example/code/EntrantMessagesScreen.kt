@@ -249,6 +249,7 @@ private fun ChatThread(
     var reservingLottery by remember { mutableStateOf<String?>(null) }
     var savingReservation by remember { mutableStateOf(false) }
     var reservationError by remember { mutableStateOf(false) }
+    var pendingReservationDates by remember(campsiteID, entrantID) { mutableStateOf<List<LocalDate>?>(null) }
     val pickedDates = messages.filter { it.type == RESERVATION_CONFIRMED }
         .map { it.locationIndex }.distinct().associateWith { location ->
             latestReservation(messages, location)
@@ -398,29 +399,47 @@ private fun ChatThread(
             initiallySelected = pickedDates[location].orEmpty().toSet(),
             onDismiss = {
                 if (!savingReservation) {
+                    pendingReservationDates = null
                     reservingLocation = null
                     reservationError = false
                 }
             },
             saving = savingReservation,
             saveFailed = reservationError,
-            onConfirm = { dates ->
-                if (entrant != null) {
-                    savingReservation = true
-                    reservationError = false
-                    confirmReservation(appState, site, entrant, location, dates) { saved ->
-                        savingReservation = false
-                        reservationError = !saved
-                        if (saved) reservingLocation = null
-                    }
-                }
-            },
+            onConfirm = { dates -> if (entrant != null) pendingReservationDates = dates },
             onDecline = {
+                pendingReservationDates = null
                 reservingLocation = null
                 // Message + notification, locks this location, updates the entrant's lists
                 declineReservation(appState, site, entrant, entrantID, location)
             }
         )
+        // US 02.11.01. Follow-up prompt: "do that" for single-campsite acknowledgement at confirmation.
+        pendingReservationDates?.let { dates ->
+            if (entrant != null) {
+                val rules = remember(campsiteID, dates) {
+                    val live = appState.campsites.campsites.firstOrNull { it.campsiteID == campsiteID }
+                    (live ?: site).getRules().toList()
+                }
+                CampsiteRulesDialog(
+                    campsiteName = site.getName(),
+                    rules = rules,
+                    onDecline = { pendingReservationDates = null },
+                    onAgree = {
+                        if (!savingReservation && pendingReservationDates != null) {
+                            pendingReservationDates = null
+                            savingReservation = true
+                            reservationError = false
+                            confirmReservation(appState, site, entrant, location, dates, rules) { saved ->
+                                savingReservation = false
+                                reservationError = !saved
+                                if (saved) reservingLocation = null
+                            }
+                        }
+                    }
+                )
+            }
+        }
     }
 }
 

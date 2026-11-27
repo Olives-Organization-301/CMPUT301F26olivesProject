@@ -39,8 +39,9 @@ location and available date or set of dates, then agrees to that site's rules.
 The confirmation transaction checks eligibility, the current rules and date
 availability against the same lottery document used for other claims. It
 records the booked campsite for reservation lists and history. Cancellation
-or owner rejection releases the dates. Legacy single-campsite documents keep their
-previous draw and reservation flow.
+or owner rejection releases the dates. Single-campsite winners still select
+dates for their drawn location and must also acknowledge the current campsite
+rules before their reservation is saved.
 
 Prompts and implementation notes are in `SharedLottery.kt`, `Lottery.kt`,
 and `LotteryDrawRepository.kt`.

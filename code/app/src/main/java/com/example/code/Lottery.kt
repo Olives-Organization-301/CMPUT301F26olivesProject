@@ -198,6 +198,7 @@ fun confirmReservation(
     entrant: Entrant,
     locationIndex: Int,
     dates: List<LocalDate>,
+    acknowledgedRules: List<String>,
     onComplete: (Boolean) -> Unit
 ) {
     val storedDates = dates.distinct().sorted().map(LocalDate::toString)
@@ -205,7 +206,7 @@ fun confirmReservation(
         campsite, entrant.getUserID(), RESERVATION_CONFIRMED, locationIndex,
         System.currentTimeMillis(), "You reserved spots for location ${locationIndex + 1} for ${campsite.getName()}"
     ).copy(stayDates = storedDates)
-    appState.entrants.confirmStay(entrant, message, onComplete)
+    appState.entrants.confirmStay(entrant, message, acknowledgedRules, onComplete)
 }
 
 /** "Decline reservation": sends the automated "You declined..." message (which also becomes a

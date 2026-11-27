@@ -512,7 +512,7 @@ fun CampsiteDetailsScreen(
 private fun locationText(campsite: Campsite): String = campsite.getLocationSummary()
 
 /**
- * Displays the campsite's published rules before registration. Agreement becomes available
+ * Displays the campsite's published rules before registration or booking. Agreement becomes available
  * when the final rule is in view. Dismissing the dialog follows the same path as Decline.
  *
  * Codex prompt: "let it be that after an entrant chooses a campsite, a pop up appears of the
