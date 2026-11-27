@@ -276,7 +276,14 @@ fun CampsiteDetailsScreen(
                         .padding(horizontal = 24.dp, vertical = 16.dp)
                 ) {
                     when (selectedTab) {
-                        0 -> CampsiteDetailsTab(campsite, owner)
+                        0 -> CampsiteDetailsTab(
+                            campsite,
+                            owner,
+                            // Live rating from the synced campsite list, so a new review shows up here
+                            appState.campsites.campsites
+                                .firstOrNull { it.campsiteID == campsite?.campsiteID }?.getRating()
+                                ?: campsite?.getRating()
+                        )
                         else -> CampsiteReviewsTab(campsite, entrant.takeIf { appState.role == "entrant" }, appState.campsites, textColor)
                     }
                 }
@@ -429,7 +436,7 @@ private fun locationText(campsite: Campsite): String = campsite.getLocationSumma
 /** Details tab: owner, lottery dates, rating, occupancy, location and description */
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
-private fun CampsiteDetailsTab(campsite: Campsite?, owner: CampsiteOwner?) {
+private fun CampsiteDetailsTab(campsite: Campsite?, owner: CampsiteOwner?, rating: Float?) {
     // This is where the DETAILS are
     Text(owner?.username ?: "", fontWeight = FontWeight.Bold, fontSize = 18.sp)
     Text(
@@ -443,7 +450,7 @@ private fun CampsiteDetailsTab(campsite: Campsite?, owner: CampsiteOwner?) {
         fontSize = 18.sp
     )
     Text(
-        "Rating: ${campsite?.getRating()?.let { "$it/5" } ?: ""}",
+        "Rating: ${rating?.let { "${"%.1f".format(it)}/5" } ?: "No reviews yet"}",
         fontWeight = FontWeight.Medium,
         fontSize = 18.sp
     )

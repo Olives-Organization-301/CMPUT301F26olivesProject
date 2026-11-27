@@ -27,7 +27,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -37,8 +36,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
@@ -84,6 +83,7 @@ import com.example.code.classes.Alert
 import com.example.code.classes.AppState
 import com.example.code.classes.Campsite
 import com.example.code.classes.CampsiteOwner
+import com.example.code.classes.ChatMessage
 import com.example.code.classes.Coordinates
 import com.example.code.classes.PreviewCampsite
 import com.example.code.classes.WaitlistEntrant
@@ -138,7 +138,6 @@ fun CampsiteOwnerMainScreen(
     val context = LocalContext.current
     var searchString by remember { mutableStateOf("") }
     var showAdd by remember { mutableStateOf(false) }
-    var showAccountDialog by remember { mutableStateOf(false) }
     var showQRCodeDialog by remember { mutableStateOf(false) }
     var selectedQRCampsite by remember { mutableStateOf<PreviewCampsite?>(null) }
     var ownerName by remember { mutableStateOf("Campsite Owner") }
@@ -203,7 +202,12 @@ fun CampsiteOwnerMainScreen(
                                                 endMillisRegis = null,
                                                 waitingList = emptyList(),
                                                 campsiteImage = cImage,
-                                                campsiteID = c.campsiteID
+                                                campsiteID = c.campsiteID,
+                                                description = c.getDescription(),
+                                                maxOccupancy = c.getPeakOccupancy(),
+                                                tags = c.getTags(),
+                                                latitude = c.getMainCoordinates()?.getLatitude(),
+                                                longitude = c.getMainCoordinates()?.getLongitude()
                                             )
                                         )
                                     }
@@ -227,7 +231,12 @@ fun CampsiteOwnerMainScreen(
                                                 endMillisRegis = null,
                                                 waitingList = emptyList(),
                                                 campsiteImage = cImage,
-                                                campsiteID = c.campsiteID
+                                                campsiteID = c.campsiteID,
+                                                description = c.getDescription(),
+                                                maxOccupancy = c.getPeakOccupancy(),
+                                                tags = c.getTags(),
+                                                latitude = c.getMainCoordinates()?.getLatitude(),
+                                                longitude = c.getMainCoordinates()?.getLongitude()
                                             )
                                         )
                                     }
@@ -339,57 +348,47 @@ fun CampsiteOwnerMainScreen(
 
                                             Spacer(Modifier.width(8.dp))
 
-                                            var menuExpanded by remember { mutableStateOf(false) }
+                                            var showMenu by remember { mutableStateOf(false) }
 
-                                            Box(modifier = Modifier.wrapContentSize(Alignment.TopEnd)) {
-                                                Button(
-                                                    onClick = { menuExpanded = true },
-                                                    shape = RoundedCornerShape(20.dp),
-                                                    colors = ButtonDefaults.buttonColors(containerColor = colors.primaryButton, contentColor = colors.primaryText),
-                                                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
-                                                ) {
-                                                    Row(
-                                                        verticalAlignment = Alignment.CenterVertically,
-                                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                                    ) {
-                                                        Text("Menu", maxLines = 1, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                                        Text("▼", fontSize = 10.sp)
+                                            Button(
+                                                onClick = { showMenu = true },
+                                                shape = RoundedCornerShape(20.dp),
+                                                colors = ButtonDefaults.buttonColors(containerColor = colors.primaryButton, contentColor = colors.primaryText),
+                                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                                            ) {
+                                                Text("Menu", maxLines = 1, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                            }
+
+                                            if (showMenu) {
+                                                AlertDialog(
+                                                    onDismissRequest = { showMenu = false },
+                                                    title = { Text(preview.name) },
+                                                    confirmButton = {
+                                                        TextButton(onClick = { showMenu = false }) {
+                                                            Text("Close")
+                                                        }
+                                                    },
+                                                    text = {
+                                                        Column(Modifier.verticalScroll(rememberScrollState())) {
+                                                            TextButton(onClick = {
+                                                                showMenu = false
+                                                                showEdit = preview
+                                                            }) { Text("Edit") }
+                                                            TextButton(onClick = {
+                                                                showMenu = false
+                                                                showLottery = preview
+                                                            }) { Text("Lottery") }
+                                                            TextButton(onClick = {
+                                                                showMenu = false
+                                                                showAlert = preview
+                                                            }) { Text("Alert") }
+                                                            TextButton(onClick = {
+                                                                showMenu = false
+                                                                showReservations = preview
+                                                            }) { Text("Reservations") }
+                                                        }
                                                     }
-                                                }
-
-                                                DropdownMenu(
-                                                    expanded = menuExpanded,
-                                                    onDismissRequest = { menuExpanded = false }
-                                                ) {
-                                                    DropdownMenuItem(
-                                                        text = { Text("Edit") },
-                                                        onClick = {
-                                                            menuExpanded = false
-                                                            showEdit = preview
-                                                        }
-                                                    )
-                                                    DropdownMenuItem(
-                                                        text = { Text("Lottery") },
-                                                        onClick = {
-                                                            menuExpanded = false
-                                                            showLottery = preview
-                                                        }
-                                                    )
-                                                    DropdownMenuItem(
-                                                        text = { Text("Alert") },
-                                                        onClick = {
-                                                            menuExpanded = false
-                                                            showAlert = preview
-                                                        }
-                                                    )
-                                                    DropdownMenuItem(
-                                                        text = { Text("Reservations") },
-                                                        onClick = {
-                                                            menuExpanded = false
-                                                            showReservations = preview
-                                                        }
-                                                    )
-                                                }
+                                                )
                                             }
                                         }
                                     }
@@ -432,7 +431,7 @@ fun CampsiteOwnerMainScreen(
                 ) { Text("QR Code", maxLines = 1, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
 
                 Button(
-                    onClick = { showAccountDialog = true },
+                    onClick = { navController.navigate("campsiteOwnerProfileScreen") },
                     shape = RoundedCornerShape(20.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = colors.secondaryButton.copy(alpha = 0.4f), contentColor = colors.title),
                     modifier = Modifier.weight(1f)
@@ -572,47 +571,6 @@ fun CampsiteOwnerMainScreen(
         )
     }
 
-    if (showAccountDialog) {
-        AlertDialog(
-            onDismissRequest = { showAccountDialog = false },
-            title = {
-                Text(
-                    text = "Campsite Owner Details",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 20.sp
-                )
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Name: $ownerName", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                    Text("Owner ID: ${appState.userID ?: "Unknown"}", fontSize = 13.sp, color = Color.Gray)
-                    Text("Role: Campsite Owner", fontSize = 13.sp, color = Color(0xFF274690), fontWeight = FontWeight.Medium)
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showAccountDialog = false
-                        appState.userID = null
-                        appState.role = null
-                        DeviceIdentity.clearEntrantId(context)
-                        navController.navigate("loginScreen") {
-                            popUpTo(0) { inclusive = true }
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Text("Log Out", color = Color.White)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showAccountDialog = false }) {
-                    Text("Close")
-                }
-            }
-        )
-    }
-
     if (showAdd) {
         AddEditCampsite(
             title = "Add Campsite",
@@ -620,12 +578,6 @@ fun CampsiteOwnerMainScreen(
             onDismiss = { showAdd = false },
             onSave = { newCampsite ->
                 appState.campsites.generateUniqueCampsiteID { uniqueId ->
-                    val coords = Coordinates(
-                        country = "Canada",
-                        region = "",
-                        city = newCampsite.location,
-                        address = ""
-                    )
                     val realCampsite = Campsite(
                         name = newCampsite.name,
                         ownerID = appState.userID ?: "unknown_owner",
@@ -633,12 +585,22 @@ fun CampsiteOwnerMainScreen(
                         maxOccupancy = mutableListOf(4),
                         price = 50.0f,
                         rating = 5.0f,
-                        coordinates = mutableListOf(coords),
+                        coordinates = mutableListOf(Coordinates(
+                            country = "Canada",
+                            region = "",
+                            city = newCampsite.location,
+                            address = newCampsite.location,
+                            latitude = newCampsite.latitude,
+                            longitude = newCampsite.longitude
+                        )),
                         detailsImage = newCampsite.campsiteImage.ifBlank { null },
                         thumbnailImage = newCampsite.campsiteImage.ifBlank { null },
                         lotteryStartDate = LocalDateTime.now(),
                         lotteryEndDate = LocalDateTime.now().plusDays(7)
                     )
+                    realCampsite.setDescription(newCampsite.description)
+                    realCampsite.setTags(newCampsite.tags)
+                    realCampsite.setMaxOccupancy(listOf(newCampsite.maxOccupancy))
                     appState.campsites.addCampsite(realCampsite)
                         .addOnSuccessListener {
                             previewCampsites.add(
@@ -650,7 +612,12 @@ fun CampsiteOwnerMainScreen(
                                     startMillisRegis = newCampsite.startMillisRegis,
                                     endMillisRegis = newCampsite.endMillisRegis,
                                     campsiteImage = newCampsite.campsiteImage,
-                                    campsiteID = uniqueId
+                                    campsiteID = uniqueId,
+                                    description = newCampsite.description,
+                                    maxOccupancy = newCampsite.maxOccupancy,
+                                    tags = newCampsite.tags,
+                                    latitude = newCampsite.latitude,
+                                    longitude = newCampsite.longitude
                                 )
                             )
                         }
@@ -669,15 +636,28 @@ fun CampsiteOwnerMainScreen(
             initial = current,
             onDismiss = { showEdit = null },
             onSave = { updated ->
-                val changedImage = updated.campsiteImage.takeIf { it != current.campsiteImage }
-                appState.campsites.updateCampsiteListing(current.campsiteID, updated.name, changedImage)
-                    .addOnSuccessListener {
-                        val index = previewCampsites.indexOfFirst { it.campsiteID == current.campsiteID }
-                        if (index >= 0) previewCampsites[index] = updated
-                    }
-                    .addOnFailureListener {
-                        Toast.makeText(context, "Could not save campsite changes", Toast.LENGTH_LONG).show()
-                    }
+                appState.campsites.updateCampsiteDetails(
+                    current.campsiteID,
+                    updated.name,
+                    updated.location,
+                    updated.description,
+                    updated.maxOccupancy,
+                    updated.latitude,
+                    updated.longitude,
+                    updated.tags
+                ).addOnSuccessListener {
+                    val changedImage = updated.campsiteImage.takeIf { it != current.campsiteImage }
+                    appState.campsites.updateCampsiteListing(current.campsiteID, updated.name, changedImage)
+                        .addOnSuccessListener {
+                            val index = previewCampsites.indexOfFirst { it.campsiteID == current.campsiteID }
+                            if (index >= 0) previewCampsites[index] = updated
+                        }
+                        .addOnFailureListener {
+                            Toast.makeText(context, "Could not save campsite image", Toast.LENGTH_LONG).show()
+                        }
+                }.addOnFailureListener {
+                    Toast.makeText(context, "Could not save campsite changes", Toast.LENGTH_LONG).show()
+                }
                 showEdit = null
             }
         )
@@ -729,77 +709,72 @@ fun CampsiteOwnerMainScreen(
     }
 
     showReservations?.let { current ->
-        val previousEntrants = appState.entrants.entrants.filter { entrant ->
-            val lists = entrant.getCampsiteLists()
-            current.campsiteID in lists[PAST_CAMPSITES].orEmpty() ||
-                current.campsiteID in lists[RESERVED_CAMPSITES].orEmpty()
+        val siteMessages = appState.chat.messages.filter {
+            it.campsiteID == current.campsiteID && it.ownerID == appState.userID
         }
-
+        val decisions = ownerReservationDecisions(siteMessages)
+        val entrantsById = appState.entrants.entrants.associateBy { it.getUserID() }
+        val confirmed = decisions.filter { it.type == RESERVATION_CONFIRMED }
+        val declined = decisions.filter { it.type == RESERVATION_DECLINED }
         AlertDialog(
             onDismissRequest = { showReservations = null },
-            title = {
-                Text(
-                    text = "Previous Reservations: ${current.name}",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp
-                )
-            },
+            title = { Text("Reservations: ${current.name}", fontWeight = FontWeight.Bold) },
             text = {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 350.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    if (previousEntrants.isEmpty()) {
-                        Text(
-                            text = "No previous reservations found for this campsite.",
-                            color = Color.Gray,
-                            fontSize = 14.sp
-                        )
-                    } else {
-                        LazyColumn(
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            items(previousEntrants) { entrant ->
-                                Card(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                                ) {
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(12.dp),
-                                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                                    ) {
-                                        Text(
-                                            text = entrant.name.ifBlank { entrant.username.ifBlank { entrant.email } },
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 15.sp
+                Column(Modifier.fillMaxWidth().heightIn(max = 400.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Booked dates: ${ownerBookedDates(siteMessages).joinToString().ifBlank { "None" }}")
+                    Text("Active reservations", fontWeight = FontWeight.Bold)
+                    LazyColumn(Modifier.fillMaxWidth().heightIn(max = 170.dp)) {
+                        items(confirmed) { decision ->
+                            val entrant = entrantsById[decision.entrantID]
+                            Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                                Text(entrant?.name?.ifBlank { entrant.username } ?: decision.entrantID)
+                                Text("Location ${decision.locationIndex + 1}: ${decision.stayDates.joinToString()}")
+                                TextButton(onClick = {
+                                    val now = System.currentTimeMillis()
+                                    appState.chat.addMessage(ChatMessage(
+                                        campsiteID = current.campsiteID, campsiteName = current.name,
+                                        sender = ownerName, timestamp = Date(now).toString(),
+                                        text = "The owner rejected your reservation for Location ${decision.locationIndex + 1}.",
+                                        fromOwner = true, entrantID = decision.entrantID,
+                                        ownerID = appState.userID.orEmpty(), automated = true,
+                                        type = RESERVATION_DECLINED, locationIndex = decision.locationIndex, sentAt = now
+                                    ))
+                                    entrantsById[decision.entrantID]?.let { entrant ->
+                                        val hasOtherConfirmed = ownerReservationDecisions(
+                                            appState.chat.conversation(current.campsiteID, decision.entrantID) +
+                                                appState.chat.messages.filter {
+                                                    it.campsiteID == current.campsiteID && it.entrantID == decision.entrantID
+                                                }
+                                        ).any { it.type == RESERVATION_CONFIRMED && it.locationIndex != decision.locationIndex }
+                                        if (!hasOtherConfirmed) appState.entrants.removeEntrantCampsite(
+                                            entrant, RESERVED_CAMPSITES, current.campsiteID
                                         )
-                                        if (entrant.email.isNotBlank()) {
-                                            Text(text = entrant.email, fontSize = 12.sp, color = Color.DarkGray)
-                                        }
-                                        if (entrant.phoneNumber.isNotBlank()) {
-                                            Text(text = "Phone: ${entrant.phoneNumber}", fontSize = 12.sp, color = Color.DarkGray)
-                                        }
                                     }
-                                }
+                                }) { Text("Reject reservation") }
                             }
+                        }
+                    }
+                    Text("Cancelled reservations", fontWeight = FontWeight.Bold)
+                    LazyColumn(Modifier.fillMaxWidth().heightIn(max = 120.dp)) {
+                        items(declined) { decision ->
+                            Text("${entrantsById[decision.entrantID]?.name ?: decision.entrantID} · Location ${decision.locationIndex + 1}")
                         }
                     }
                 }
             },
-            confirmButton = {
-                TextButton(onClick = { showReservations = null }) {
-                    Text("Close")
-                }
-            }
+            confirmButton = { TextButton(onClick = { showReservations = null }) { Text("Close") } }
         )
     }
 }
 
+/** Popup form for campsite owners to add or edit campsite details.
+ *  Captures name, location, description and amenities, maximum occupancy, map coordinates,
+ *  optional image URL, tags, booking dates, registration dates, and rules and policies.
+ *
+ *  Prompt: "US 02.01.02 As a campsite owner, I want to provide campsite details including
+ *  name, location, description (amenities), maximum occupancy, map location, optional image, and tags."
+ *  Implemented with Android Studio AI Agent.
+ */
 @Composable
 fun AddEditCampsite(
     title: String,
@@ -814,6 +789,11 @@ fun AddEditCampsite(
     var startMillisRegis by remember { mutableStateOf(initial?.startMillisRegis) }
     var endMillisRegis by remember { mutableStateOf(initial?.endMillisRegis) }
     var campsiteImage by remember { mutableStateOf(initial?.campsiteImage ?: "") }
+    var description by remember { mutableStateOf(initial?.description ?: "") }
+    var occupancy by remember { mutableStateOf(initial?.maxOccupancy?.toString() ?: "4") }
+    var tagsText by remember { mutableStateOf(initial?.tags?.joinToString(", ") ?: "") }
+    var latitude by remember { mutableStateOf(initial?.latitude?.toString() ?: "") }
+    var longitude by remember { mutableStateOf(initial?.longitude?.toString() ?: "") }
 
     val context = LocalContext.current
     val format = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
@@ -857,18 +837,32 @@ fun AddEditCampsite(
                                     endMillisRegis = endMillisRegis,
                                     waitingList = initial?.waitingList ?: emptyList(),
                                     campsiteImage = campsiteImage,
-                                    campsiteID = initial?.campsiteID.orEmpty()
+                                    campsiteID = initial?.campsiteID.orEmpty(),
+                                    description = description.trim(),
+                                    maxOccupancy = occupancy.toIntOrNull() ?: 4,
+                                    tags = tagsText.split(",").map(String::trim).filter(String::isNotEmpty),
+                                    latitude = latitude.toDoubleOrNull(),
+                                    longitude = longitude.toDoubleOrNull()
                                 )
                             )
                         },
-                        enabled = name.isNotBlank() && !processingPhoto
+                        enabled = name.isNotBlank() &&
+                            occupancy.toIntOrNull()?.let { it > 0 } == true &&
+                            ((latitude.isBlank() && longitude.isBlank()) ||
+                                (latitude.toDoubleOrNull()?.let { lat ->
+                                    longitude.toDoubleOrNull()?.let { lon -> lat in -90.0..90.0 && lon in -180.0..180.0 }
+                                } == true)) &&
+                            !processingPhoto
                     ) {
                         Text("Save")
                     }
                 }
 
                 Column(
-                    modifier = Modifier.padding(horizontal = 20.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 20.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     OutlinedTextField(
@@ -884,6 +878,46 @@ fun AddEditCampsite(
                         value = location,
                         onValueChange = { location = it },
                         label = { Text("Address or place name") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    OutlinedTextField(
+                        value = description,
+                        onValueChange = { description = it },
+                        label = { Text("Description and amenities") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 3,
+                        maxLines = 6
+                    )
+                    OutlinedTextField(
+                        value = occupancy,
+                        onValueChange = { occupancy = it.filter(Char::isDigit) },
+                        label = { Text("Maximum occupancy") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = latitude,
+                        onValueChange = { latitude = it },
+                        label = { Text("Map latitude (optional)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = longitude,
+                        onValueChange = { longitude = it },
+                        label = { Text("Map longitude (optional)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = tagsText,
+                        onValueChange = { tagsText = it },
+                        label = { Text("Tags (comma separated)") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -1090,6 +1124,8 @@ fun NotificationDialog(
 ){
     var alertTitle by remember { mutableStateOf("") }
     var alertBody by remember { mutableStateOf("") }
+    var showSentAlerts by remember { mutableStateOf(false) }
+    var sentAlerts by remember { mutableStateOf<List<Alert>>(emptyList()) }
 
     fun CreateAlert(campsite: PreviewCampsite, owner: String, title: String, body: String){
         for(entrant in campsite.waitingList){
@@ -1107,6 +1143,10 @@ fun NotificationDialog(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                OutlinedButton(onClick = {
+                    appState.alerts.fetchSentBy(ownerName) { sentAlerts = it }
+                    showSentAlerts = true
+                }) { Text("View sent notifications") }
                 OutlinedTextField(
                     value = alertTitle,
                     onValueChange = { alertTitle = it },
@@ -1140,4 +1180,26 @@ fun NotificationDialog(
             }
         }
     )
+
+    if (showSentAlerts) {
+        AlertDialog(
+            onDismissRequest = { showSentAlerts = false },
+            title = { Text("Notifications sent") },
+            text = {
+                if (sentAlerts.isEmpty()) Text("No notifications have been sent.")
+                else LazyColumn(Modifier.heightIn(max = 360.dp)) {
+                    items(sentAlerts) { alert ->
+                        Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                            Text(alert.title, fontWeight = FontWeight.Bold)
+                            Text(alert.body)
+                            Text("To: ${alert.recipient}", fontSize = 12.sp, color = Color.Gray)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showSentAlerts = false }) { Text("Close") }
+            }
+        )
+    }
 }
