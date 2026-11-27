@@ -3,6 +3,7 @@ package com.example.code
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
@@ -16,12 +17,17 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.code.classes.AppState
 import com.example.code.classes.Entrant
 import io.mockk.every
+import io.mockk.justRun
 import io.mockk.mockk
+import io.mockk.mockkStatic
+import io.mockk.unmockkStatic
 import io.mockk.verify
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -35,6 +41,18 @@ class EntrantProfileTest {
 
     @get:Rule
     val composeTestRule = createComposeRule()
+
+    @Before
+    fun stubImageWrites() {
+        mockkStatic("com.example.code.EntrantProfileScreenKt")
+        justRun { saveImageRecordToFirestore(any(), any(), any(), any(), any()) }
+        justRun { deleteEntrantImagesFromFirestore(any()) }
+    }
+
+    @After
+    fun restoreImageWrites() {
+        unmockkStatic("com.example.code.EntrantProfileScreenKt")
+    }
 
     /**
      * Builds an AppState whose databases are MockK stand-ins, so the UI tests never touch Firestore.
@@ -139,8 +157,8 @@ class EntrantProfileTest {
         composeTestRule.onNodeWithText("Jasper Lake").assertIsDisplayed()
 
         // Buttons
-        composeTestRule.onNodeWithText("View User Policy").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Edit User Profile").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Policy").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Edit Profile").assertIsDisplayed()
 
         // The other entrant's information is not shown
         composeTestRule.onNodeWithText("Jane Smith").assertDoesNotExist()
@@ -156,7 +174,7 @@ class EntrantProfileTest {
         // Policy is not open yet
         composeTestRule.onNodeWithText("User Policy").assertDoesNotExist()
 
-        composeTestRule.onNodeWithText("View User Policy").performClick()
+        composeTestRule.onNodeWithText("Policy").performClick()
         composeTestRule.waitForIdle()
 
         // Dialog title and every section (scroll to each since the dialog scrolls)
@@ -186,7 +204,7 @@ class EntrantProfileTest {
         val appState = fakeAppState(listOf(john, jane), loggedIn = john)
         openProfile(appState)
 
-        composeTestRule.onNodeWithText("Edit User Profile").performClick()
+        composeTestRule.onNodeWithText("Edit Profile").performClick()
         composeTestRule.waitForIdle()
 
         // Dialog starts with the current values
@@ -251,7 +269,7 @@ class EntrantProfileTest {
         composeTestRule.onNodeWithText("Jane Smith").assertIsDisplayed()
         assertEquals(2, appState.entrants.entrants.size)
 
-        composeTestRule.onNodeWithText("Edit User Profile").performClick()
+        composeTestRule.onNodeWithText("Edit Profile").performClick()
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithText("Delete Profile").performScrollTo().performClick()
         composeTestRule.waitForIdle()
@@ -275,7 +293,7 @@ class EntrantProfileTest {
     // Test if it's blank initially, then add first default picture
     // Once first default picture shows up, update it to the second default picture
     // After that, delete the profile picture and test that it's blank
-    // (The Photo Picker is a system screen tests can't drive, so "Swap test image" stands in for it)
+    // Select the built-in avatars through their thumbnails.
     @Test
     fun testProfilePicture() {
         val john = johnDoe()
@@ -292,11 +310,11 @@ class EntrantProfileTest {
         // Picture images are drawn with this description; the blank placeholder has none
         fun pictures() = composeTestRule.onAllNodesWithContentDescription("Profile picture")
         fun openEdit() {
-            composeTestRule.onNodeWithText("Edit User Profile").performClick()
+            composeTestRule.onNodeWithText("Edit Profile").performClick()
             composeTestRule.waitForIdle()
         }
-        fun click(text: String) {
-            composeTestRule.onNodeWithText(text).performScrollTo().performClick()
+        fun selectAvatar(description: String) {
+            composeTestRule.onNodeWithContentDescription(description).performScrollTo().performClick()
             composeTestRule.waitForIdle()
         }
         // Save is one of the dialog's own buttons, outside the scrolling content, so don't scroll to it
@@ -310,14 +328,11 @@ class EntrantProfileTest {
         pictures().assertCountEquals(0)
 
         openEdit()
-        composeTestRule.onNodeWithText("Add").performScrollTo().assertIsDisplayed()
-        composeTestRule.onNodeWithText("Update").assertDoesNotExist()
+        composeTestRule.onNodeWithText("Choose from Gallery").performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithText("Remove").assertDoesNotExist()
 
         // 2. Add the first default picture
-        click("Swap test image")
-        composeTestRule.onNodeWithText("Add").assertDoesNotExist()
-        composeTestRule.onNodeWithText("Update").performScrollTo().assertIsDisplayed()
+        selectAvatar("Test Profile Avatar")
         composeTestRule.onNodeWithText("Remove").performScrollTo().assertIsDisplayed()
         // Nothing is saved until Save is pressed
         assertEquals("", john.profileImage)
@@ -331,8 +346,8 @@ class EntrantProfileTest {
         // 3. Update it to the second default picture
         openEdit()
         // The saved picture is loaded back into the dialog
-        composeTestRule.onNodeWithText("Update").performScrollTo().assertIsDisplayed()
-        click("Swap test image")
+        composeTestRule.onNodeWithText("Remove").performScrollTo().assertIsDisplayed()
+        selectAvatar("Test Gift Avatar")
         save()
 
         assertEquals(TEST_PFP_GIFT, john.profileImage)
@@ -341,8 +356,7 @@ class EntrantProfileTest {
 
         // 4. Remove it: blank again
         openEdit()
-        click("Remove")
-        composeTestRule.onNodeWithText("Add").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Remove").performScrollTo().performClick()
         composeTestRule.onNodeWithText("Remove").assertDoesNotExist()
         save()
 

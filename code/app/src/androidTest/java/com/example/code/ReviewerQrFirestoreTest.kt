@@ -31,6 +31,7 @@ class ReviewerQrFirestoreTest {
 
     /** Codex prompt: Scan the demo QR and verify the entry in both live Firestore records. */
     @Test
+    @ReviewerFirestoreWrite
     fun reviewerQrJoinPersistsOnServer() {
         assumeTrue(InstrumentationRegistry.getArguments().getString("writeReviewerFirestore") == "true")
         val entrantID = "olives_reviewer_20261126_entrant_20"

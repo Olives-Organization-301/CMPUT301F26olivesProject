@@ -87,6 +87,7 @@ import com.example.code.classes.CampsiteOwner
 import com.example.code.classes.Coordinates
 import com.example.code.classes.PreviewCampsite
 import com.example.code.classes.WaitlistEntrant
+import kotlinx.coroutines.delay
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
 import java.time.Instant
@@ -156,6 +157,26 @@ fun CampsiteOwnerMainScreen(
 
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
 
+    LaunchedEffect(appState.userID, appState.campsites.campsites.toList()) {
+        val ownerID = appState.userID ?: return@LaunchedEffect
+        val attempted = mutableSetOf<String>()
+        while (true) {
+            val now = LocalDateTime.now()
+            appState.campsites.campsites
+                .filter { it.getOwnerID() == ownerID && it.isReadyToDraw(now) }
+                .forEach { campsite ->
+                    if (attempted.add(campsite.campsiteID)) {
+                        appState.campsites.drawClosedLottery(campsite.campsiteID, ownerID)
+                            .addOnFailureListener { error ->
+                                attempted.remove(campsite.campsiteID)
+                                android.util.Log.e("DB", "Closing lottery failed for ${campsite.campsiteID}", error)
+                            }
+                    }
+                }
+            delay(1_000)
+        }
+    }
+
     // Load real campsites and owner name using viewCampsites function
     LaunchedEffect(appState.userID) {
         val ownerID = appState.userID
@@ -171,17 +192,17 @@ fun CampsiteOwnerMainScreen(
                                     for (c in campsites) {
                                         val cName = try { c.getName().ifBlank { "Campsite" } } catch (e: Exception) { "Campsite" }
                                         val cLoc = try { c.getMainCoordinates()?.getCity()?.ifBlank { "Location" } ?: "Location" } catch (e: Exception) { "Location" }
-                                        val cThumb = c.getThumbnailImage() ?: ""
+                                        val cImage = c.thumbnailPhoto().orEmpty()
                                         previewCampsites.add(
                                             PreviewCampsite(
                                                 name = cName,
                                                 location = cLoc,
-                                                startMillis = null,
-                                                endMillis = null,
+                                                startMillis = c.getStartDate()?.atZone(ZoneId.systemDefault())?.toInstant()?.toEpochMilli(),
+                                                endMillis = c.getEndDate()?.atZone(ZoneId.systemDefault())?.toInstant()?.toEpochMilli(),
                                                 startMillisRegis = null,
                                                 endMillisRegis = null,
                                                 waitingList = emptyList(),
-                                                campsiteImage = cThumb,
+                                                campsiteImage = cImage,
                                                 campsiteID = c.campsiteID
                                             )
                                         )
@@ -195,17 +216,17 @@ fun CampsiteOwnerMainScreen(
                                     for (c in campsites) {
                                         val cName = try { c.getName().ifBlank { "Campsite" } } catch (e: Exception) { "Campsite" }
                                         val cLoc = try { c.getMainCoordinates()?.getCity()?.ifBlank { "Location" } ?: "Location" } catch (e: Exception) { "Location" }
-                                        val cThumb = c.getThumbnailImage() ?: ""
+                                        val cImage = c.thumbnailPhoto().orEmpty()
                                         previewCampsites.add(
                                             PreviewCampsite(
                                                 name = cName,
                                                 location = cLoc,
-                                                startMillis = null,
-                                                endMillis = null,
+                                                startMillis = c.getStartDate()?.atZone(ZoneId.systemDefault())?.toInstant()?.toEpochMilli(),
+                                                endMillis = c.getEndDate()?.atZone(ZoneId.systemDefault())?.toInstant()?.toEpochMilli(),
                                                 startMillisRegis = null,
                                                 endMillisRegis = null,
                                                 waitingList = emptyList(),
-                                                campsiteImage = cThumb,
+                                                campsiteImage = cImage,
                                                 campsiteID = c.campsiteID
                                             )
                                         )
@@ -277,7 +298,9 @@ fun CampsiteOwnerMainScreen(
                         contentPadding = PaddingValues(vertical = 12.dp)
                     ) {
                         items(filteredCampsites) { preview ->
-                            val matchedCampsite = appState.campsites.campsites.firstOrNull { it.campsiteID == preview.campsiteID || it.getName() == preview.name }
+                            val matchedCampsite = appState.campsites.campsites.firstOrNull {
+                                it.campsiteID == preview.campsiteID
+                            }
                             val thumbnail = matchedCampsite.thumbnailPhoto() ?: preview.campsiteImage.takeIf { it.isNotBlank() }
 
                             Card(
@@ -524,7 +547,9 @@ fun CampsiteOwnerMainScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        val matchedCampsite = appState.campsites.campsites.firstOrNull { it.campsiteID == campsite.campsiteID || it.getName() == campsite.name }
+                        val matchedCampsite = appState.campsites.campsites.firstOrNull {
+                            it.campsiteID == campsite.campsiteID
+                        }
                         if (matchedCampsite != null) {
                             appState.viewingCampsiteID = matchedCampsite.campsiteID
                             selectedQRCampsite = null
@@ -594,7 +619,6 @@ fun CampsiteOwnerMainScreen(
             initial = null,
             onDismiss = { showAdd = false },
             onSave = { newCampsite ->
-                previewCampsites.add(newCampsite)
                 appState.campsites.generateUniqueCampsiteID { uniqueId ->
                     val coords = Coordinates(
                         country = "Canada",
@@ -610,10 +634,29 @@ fun CampsiteOwnerMainScreen(
                         price = 50.0f,
                         rating = 5.0f,
                         coordinates = mutableListOf(coords),
+                        detailsImage = newCampsite.campsiteImage.ifBlank { null },
+                        thumbnailImage = newCampsite.campsiteImage.ifBlank { null },
                         lotteryStartDate = LocalDateTime.now(),
                         lotteryEndDate = LocalDateTime.now().plusDays(7)
                     )
                     appState.campsites.addCampsite(realCampsite)
+                        .addOnSuccessListener {
+                            previewCampsites.add(
+                                PreviewCampsite(
+                                    name = newCampsite.name,
+                                    location = newCampsite.location,
+                                    startMillis = newCampsite.startMillis,
+                                    endMillis = newCampsite.endMillis,
+                                    startMillisRegis = newCampsite.startMillisRegis,
+                                    endMillisRegis = newCampsite.endMillisRegis,
+                                    campsiteImage = newCampsite.campsiteImage,
+                                    campsiteID = uniqueId
+                                )
+                            )
+                        }
+                        .addOnFailureListener {
+                            Toast.makeText(context, "Could not save campsite", Toast.LENGTH_LONG).show()
+                        }
                 }
                 showAdd = false
             }
@@ -641,11 +684,10 @@ fun CampsiteOwnerMainScreen(
     }
 
     showLottery?.let { current ->
-        val liveCampsite = appState.campsites.campsites.firstOrNull { it.campsiteID == current.campsiteID || it.getName() == current.name }
         LotteryDialog(
             campsite = current,
-            liveCampsite = liveCampsite,
-            entrantNames = emptyMap(),
+            liveCampsite = appState.campsites.campsites.firstOrNull { it.campsiteID == current.campsiteID },
+            entrantNames = appState.entrants.entrants.associate { it.getUserID() to it.name.ifBlank { it.username } },
             onDismiss = { showLottery = null },
             onSave = { startMillis, endMillis ->
                 val ownerID = appState.userID
@@ -687,16 +729,10 @@ fun CampsiteOwnerMainScreen(
     }
 
     showReservations?.let { current ->
-        val matchedCampsite = appState.campsites.campsites.firstOrNull { it.campsiteID == current.campsiteID || it.getName() == current.name }
         val previousEntrants = appState.entrants.entrants.filter { entrant ->
             val lists = entrant.getCampsiteLists()
-            val past = lists["Past_Campsites"] ?: emptyList()
-            val reserved = lists["Reserved_Campsites"] ?: emptyList()
-            val campsiteId = matchedCampsite?.campsiteID ?: ""
-            val campsiteName = current.name
-
-            campsiteId in past || campsiteId in reserved ||
-            campsiteName in past || campsiteName in reserved
+            current.campsiteID in lists[PAST_CAMPSITES].orEmpty() ||
+                current.campsiteID in lists[RESERVED_CAMPSITES].orEmpty()
         }
 
         AlertDialog(

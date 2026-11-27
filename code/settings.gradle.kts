@@ -27,9 +27,8 @@ include(":app")
 
 gradle.beforeProject {
     val relPath = project.path.replace(':', '/')
-    if (System.getProperty("os.name").lowercase().contains("win")) {
+    if (System.getProperty("os.name").startsWith("Windows", ignoreCase = true)) {
         val nonOneDriveBuildDir = File("C:/AndroidBuilds/CMPUT301F26olivesProject$relPath/build")
         project.layout.buildDirectory.set(nonOneDriveBuildDir)
     }
 }
- 
