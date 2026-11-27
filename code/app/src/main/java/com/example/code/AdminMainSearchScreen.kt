@@ -5,6 +5,7 @@ import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,6 +44,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.ImageBitmap
@@ -50,6 +52,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.sp
 import com.example.code.classes.AppState
 import com.example.code.classes.Campsite
+import com.example.code.classes.Review
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -98,7 +101,7 @@ fun AdminMainSearchScreen(navController: NavController, appState: AppState) {
     }
 
     androidx.compose.runtime.LaunchedEffect(selectedTop) {
-        if (selectedTop == "Campsites" || selectedTop == "Images") {
+        if (selectedTop == "Campsites" || selectedTop == "Images" || selectedTop == "Reviews") {
             campsiteDb.fetchAllCampsites { _ -> }
         } else if (selectedTop == "User Database") {
             entrantDb.fetchAllEntrants { _ -> }
@@ -165,6 +168,13 @@ fun AdminMainSearchScreen(navController: NavController, appState: AppState) {
                         modifier = Modifier.weight(1f)
                     )
 
+                    "Reviews" -> ReviewsTab(
+                        campsites = campsiteDb.campsites.filter { it.getName().contains(query, ignoreCase = true) },
+                        campsiteDb = campsiteDb,
+                        askRemove = askRemove,
+                        modifier = Modifier.weight(1f)
+                    )
+
                 }
             }
         }
@@ -202,7 +212,7 @@ fun TopTabs(selected: String, onSelect: (String) -> Unit ){
             .padding(horizontal = 8.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ){
-        listOf("User Database", "Campsites", "Images").forEach { tab ->
+        listOf("User Database", "Campsites", "Images", "Reviews", "Logs").forEach { tab ->
             Button(
                 onClick = { onSelect(tab) },
                 modifier = Modifier.weight(1f),
@@ -389,6 +399,73 @@ fun CampsiteCard(campsite: Campsite,  onRemove: () -> Unit){
                 Text("Price: \$${campsite.getPrice()} | Max Occupancy: ${campsite.getTotalOccupancy()}", fontSize = 11.sp, color = Color.DarkGray)
             }
             RemoveButton(onClick = onRemove)
+        }
+    }
+}
+
+@RequiresApi(Build.VERSION_CODES.O)
+@Composable
+fun ReviewsTab(
+    campsites: List<Campsite>,
+    campsiteDb: DatabaseCampsites,
+    askRemove: (String, () -> Unit) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var selected by remember { mutableStateOf<Campsite?>(null) }
+    val current = selected
+
+    if (current == null) {
+        LazyColumn(
+            modifier = modifier,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(vertical = 12.dp)
+        ) {
+            if (campsites.isEmpty()) item { EmptyState("No campsites found") }
+            items(campsites, key = { it.campsiteID }) { c ->
+                Card(
+                    modifier = Modifier.fillMaxWidth().clickable { selected = c },
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Text(c.getName(), fontWeight = FontWeight.Bold, modifier = Modifier.padding(16.dp))
+                }
+            }
+        }
+    } else {
+        var reviews by remember(current.campsiteID) { mutableStateOf<List<Review>>(emptyList()) }
+        DisposableEffect(current.campsiteID) {
+            val registration = campsiteDb.observeReviews(current.campsiteID) { reviews = it ?: emptyList() }
+            onDispose { registration.remove() }
+        }
+
+        Column(modifier = modifier) {
+            TextButton(onClick = { selected = null }) { Text("← Back to campsites") }
+            Text("Reviews for ${current.getName()}", fontWeight = FontWeight.Bold)
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(vertical = 12.dp)
+            ) {
+                if (reviews.isEmpty()) item { EmptyState("No reviews yet") }
+                items(reviews, key = { it.reviewID }) { r ->
+                    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("${r.authorName}: ★ ${r.rating}", fontWeight = FontWeight.Bold)
+                            Text(r.review, fontSize = 14.sp)
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                RemoveButton("Remove rating") {
+                                    askRemove("Remove the rating from ${r.authorName}'s review?") {
+                                        campsiteDb.removeReviewRating(r)
+                                    }
+                                }
+                                RemoveButton("Remove review") {
+                                    askRemove("Remove ${r.authorName}'s review?") {
+                                        campsiteDb.deleteReview(r)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

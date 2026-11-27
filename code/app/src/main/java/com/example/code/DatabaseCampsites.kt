@@ -509,6 +509,24 @@ class DatabaseCampsites {
         }
     }
 
+    //claude.ai used to create remove campsite ratings and reviews and it's following functions
+    //in the main methods.
+    //chat here: https://claude.ai/share/cdf52d32-f73c-4fc2-b19e-b7015e307051
+
+    internal fun removeReviewRating(review: Review): Task<Void> =
+        reviews(review.campsiteID).document(review.reviewID).update("rating", 0)
+
+    internal fun deleteReview(review: Review): Task<Void>{
+        val reviewRef = reviews(review.campsiteID).document(review.reviewID)
+        return reviewRef.collection("replies").get().continueWithTask{ task ->
+                val batch = db.batch()
+                task.result?.documents?.forEach{batch.delete(it.reference) }
+                batch.delete(reviewRef)
+                batch.commit()
+        }
+    }
+
+
     internal fun observeReviewReplies(review: Review, onResult: (List<ReviewReply>?) -> Unit) =
         reviews(review.campsiteID).document(review.reviewID).collection("replies").orderBy("createdAt")
             .addSnapshotListener { snapshot, error ->
