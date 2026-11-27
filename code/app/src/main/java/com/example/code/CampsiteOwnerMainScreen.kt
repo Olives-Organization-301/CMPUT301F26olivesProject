@@ -138,7 +138,6 @@ fun CampsiteOwnerMainScreen(
     val context = LocalContext.current
     var searchString by remember { mutableStateOf("") }
     var showAdd by remember { mutableStateOf(false) }
-    var showAccountDialog by remember { mutableStateOf(false) }
     var showQRCodeDialog by remember { mutableStateOf(false) }
     var selectedQRCampsite by remember { mutableStateOf<PreviewCampsite?>(null) }
     var ownerName by remember { mutableStateOf("Campsite Owner") }
@@ -432,7 +431,7 @@ fun CampsiteOwnerMainScreen(
                 ) { Text("QR Code", maxLines = 1, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
 
                 Button(
-                    onClick = { showAccountDialog = true },
+                    onClick = { navController.navigate("campsiteOwnerProfileScreen") },
                     shape = RoundedCornerShape(20.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = colors.secondaryButton.copy(alpha = 0.4f), contentColor = colors.title),
                     modifier = Modifier.weight(1f)
@@ -566,47 +565,6 @@ fun CampsiteOwnerMainScreen(
             },
             dismissButton = {
                 TextButton(onClick = { selectedQRCampsite = null }) {
-                    Text("Close")
-                }
-            }
-        )
-    }
-
-    if (showAccountDialog) {
-        AlertDialog(
-            onDismissRequest = { showAccountDialog = false },
-            title = {
-                Text(
-                    text = "Campsite Owner Details",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 20.sp
-                )
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Name: $ownerName", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                    Text("Owner ID: ${appState.userID ?: "Unknown"}", fontSize = 13.sp, color = Color.Gray)
-                    Text("Role: Campsite Owner", fontSize = 13.sp, color = Color(0xFF274690), fontWeight = FontWeight.Medium)
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showAccountDialog = false
-                        appState.userID = null
-                        appState.role = null
-                        DeviceIdentity.clearEntrantId(context)
-                        navController.navigate("loginScreen") {
-                            popUpTo(0) { inclusive = true }
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Text("Log Out", color = Color.White)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showAccountDialog = false }) {
                     Text("Close")
                 }
             }
