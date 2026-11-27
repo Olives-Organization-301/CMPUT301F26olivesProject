@@ -19,8 +19,6 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class EntrantLoginScreenTest {
 
-<<<<<<< Updated upstream
-=======
     @get:Rule
     val composeTestRule = createAndroidComposeRule<ComponentActivity>()
 
@@ -69,16 +67,9 @@ class EntrantLoginScreenTest {
     }
 
     @Test
-    fun testOwnerLoginButtonTriggersCallback() {
-        var ownerLoginClicked = false
-        composeTestRule.setContent {
-            LoginScreenContent(
-                onOwnerLogin = { ownerLoginClicked = true }
-            )
-        }
-
-        composeTestRule.onNodeWithText("Campsite Owner Login").performClick() // tests that campsite owner login was clicked
-        assert(ownerLoginClicked)
+    fun ownerLoginIsNotASeparateHomeScreenButton() {
+        composeTestRule.setContent { LoginScreenContent() }
+        composeTestRule.onNodeWithText("Campsite Owner Login").assertDoesNotExist()
+        composeTestRule.onNodeWithText("Log in").assertExists()
     }
->>>>>>> Stashed changes
 }

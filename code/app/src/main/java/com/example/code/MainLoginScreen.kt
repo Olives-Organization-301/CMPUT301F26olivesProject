@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -84,20 +85,26 @@ fun LoginScreen(
     appState: AppState,
     darkTheme: Boolean = isSystemInDarkTheme()
 ) {
-    var showRoleDialog by remember { mutableStateOf(false) }
+    var showRoleDialog by rememberSaveable { mutableStateOf(false) }
     // true when "Sign up" was pressed, so the role's login screen opens in sign-up mode
-    var signingUp by remember { mutableStateOf(false) }
+    var signingUp by rememberSaveable { mutableStateOf(false) }
+    val backStackEntry by navController.currentBackStackEntryAsState()
 
     LoginScreenContent(
-        onSignUp = {showRoleDialog = true},
-        onLogIn = {showRoleDialog = true},
+        onSignUp = { signingUp = true; showRoleDialog = true },
+        onLogIn = { signingUp = false; showRoleDialog = true },
         darkTheme = darkTheme
     )
+
+    var selected by remember { mutableStateOf(false) }
+    val newUser by remember { mutableStateOf(Firebase.auth.currentUser == null) }
 
     if (showRoleDialog && backStackEntry?.destination?.route == "loginScreen") {
         AlertDialog(
             onDismissRequest = { showRoleDialog = false },
-            confirmButton = {},
+            confirmButton = {
+                TextButton(onClick = { showRoleDialog = false }) { Text("Back") }
+            },
             title = { Text("Continue as") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -108,12 +115,74 @@ fun LoginScreen(
                     ).forEach { (label, route) ->
                         Button(
                             modifier = Modifier.fillMaxWidth(),
-                            onClick = { showRoleDialog = false; navController.navigate("$route?signUp=$signingUp") }
+                            onClick = { navController.navigate("$route?signUp=$signingUp") }
                         ) { Text(label) }
                     }
-                }
+                } // Role select block end
             }
         )
+    }
+
+    // Sign-up form for new users (shown as its own full-screen dialog)
+    if (newUser && selected) {
+        var newUsername by remember { mutableStateOf("") }
+        var newEmail by remember { mutableStateOf("") }
+        var newPhoneNumber by remember { mutableStateOf("") }
+        var newName by remember { mutableStateOf("") }
+        var newDOB by remember { mutableStateOf("") }
+
+        Dialog(
+            onDismissRequest = { selected = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Surface(modifier = Modifier.fillMaxSize()) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.padding(25.dp),
+                ) {
+                    TextField(
+                        label = { Text("Username") },
+                        value = newUsername,
+                        onValueChange = { newUsername = it }
+                    )
+                    TextField(
+                        label = { Text("Email") },
+                        value = newEmail,
+                        onValueChange = { newEmail = it }
+                    )
+                    TextField(
+                        label = { Text("Phone Number") },
+                        value = newPhoneNumber,
+                        onValueChange = { newPhoneNumber = it }
+                    )
+                    TextField(
+                        label = { Text("Name") },
+                        value = newName,
+                        onValueChange = { newName = it }
+                    )
+                    TextField(
+                        label = { Text("Date of Birth") },
+                        value = newDOB,
+                        onValueChange = { newDOB = it }
+                    )
+                    Button(
+                        onClick = {
+                            signUp(appState, newUsername, newEmail, newPhoneNumber, newName, newDOB)
+                            selected = false
+                            navController.navigate("mainSearchScreen")
+                        }
+                    ) { Text("Enter") }
+                }
+            }
+        }
+    }
+
+    // Returning user: navigate as a side effect, not directly during composition
+    if (!newUser && selected) {
+        LaunchedEffect(Unit) {
+            selected = false
+            navController.navigate("mainSearchScreen")
+        }
     }
 
 }
@@ -251,7 +320,7 @@ private fun HomeButton(
 fun signUp(appState: AppState, newUsername: String, newEmail: String, newPhoneNumber: String, newName: String, newDOB: String){
     Firebase.auth.signInAnonymously().addOnSuccessListener {
         val newUID = Firebase.auth.uid
-        val newEntrant = Entrant(username = newUsername, email = newEmail, userID = newUID!!, phoneNumber = newPhoneNumber, name = newName, dateOfBirth = newDOB)
+        val newEntrant = Entrant(username = newUsername, email = newEmail, userID = newUID!!, phoneNumber = newPhoneNumber, name = newName, dateOfBirth = newDOB, profileImage = "")
         appState.entrants.addEntrant(newEntrant)
     }
 }
