@@ -8,6 +8,8 @@ import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.hasScrollToIndexAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.navigation.compose.rememberNavController
 import androidx.compose.ui.test.assertCountEquals
@@ -16,6 +18,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.code.classes.AppState
@@ -143,7 +146,12 @@ class EntrantCampsiteDetailsTest {
         addCampsite("Past_Campsites", "c_4")
     }
 
-    private fun testSite(id: String, name: String, country: String, month: Int) = Campsite(
+    private fun testSite(
+        id: String,
+        name: String,
+        country: String,
+        lotteryStart: LocalDateTime
+    ) = Campsite(
         name = name,
         ownerID = "owner_1",
         campsiteID = id,
@@ -151,17 +159,20 @@ class EntrantCampsiteDetailsTest {
         price = 50.0f,
         rating = 4.5f,
         coordinates = mutableListOf(Coordinates(country, "", "", "")),
-        lotteryStartDate = LocalDateTime.of(2026, month, 1, 9, 0),
-        lotteryEndDate = LocalDateTime.of(2026, month, 6, 17, 0)
+        lotteryStartDate = lotteryStart,
+        lotteryEndDate = lotteryStart.plusDays(5)
     )
 
-    private fun campsite1() = testSite("c_1", "Banff National Park", "Canada", 1)  // the one we join
-    private fun campsite2() = testSite("c_2", "Jasper Lake", "Canada", 2)          // user's active
-    private fun campsite3() = testSite("c_3", "Yosemite Valley", "USA", 3)
-    private fun campsite4() = testSite("c_4", "Waterton Lakes", "Canada", 4)       // user's past
-    private fun campsite5() = testSite("c_5", "Zion Canyon", "USA", 5)
-
-    private fun allCampsites() = listOf(campsite1(), campsite2(), campsite3(), campsite4(), campsite5())
+    private fun allCampsites(): List<Campsite> {
+        val now = LocalDateTime.now()
+        return listOf(
+            testSite("c_1", "Banff National Park", "Canada", now.plusDays(7)),
+            testSite("c_2", "Jasper Lake", "Canada", now.minusDays(1)),
+            testSite("c_3", "Yosemite Valley", "USA", now.plusDays(14)),
+            testSite("c_4", "Waterton Lakes", "Canada", now.minusDays(14)),
+            testSite("c_5", "Zion Canyon", "USA", now.plusDays(21))
+        )
+    }
 
     // ---------- Navigation helpers ----------
 
@@ -177,7 +188,7 @@ class EntrantCampsiteDetailsTest {
     // (Type a partial name: the full name would also match the search box itself.)
     private fun openCampsite(search: String, name: String) {
         composeTestRule.onNodeWithText("Search for a campsite").performTextReplacement(search)
-        composeTestRule.waitForIdle()
+        composeTestRule.onNode(hasScrollToIndexAction()).performScrollToNode(hasText(name))
         composeTestRule.onNodeWithText(name).performClick()
         composeTestRule.waitForIdle()
         // Details screen header shows the campsite name
@@ -572,7 +583,8 @@ class EntrantCampsiteDetailsTest {
     @Test
     fun datesButtonShowsTheCampsitesDates() {
         // Banff with the pairs above as its available dates
-        val banff = campsite1().apply { setVacationStartTimes(availableDates) }
+        val banff = testSite("c_1", "Banff National Park", "Canada", LocalDateTime.now().plusDays(7))
+            .apply { setVacationStartTimes(availableDates) }
         val appState = fakeAppState(userTest(), listOf(banff))
         appState.viewingCampsiteID = banff.campsiteID
 

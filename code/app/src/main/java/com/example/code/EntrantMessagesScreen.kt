@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -260,7 +261,13 @@ private fun ChatThread(
     }
     val timeFormatter = remember { SimpleDateFormat("MMM d, h:mm a", Locale.getDefault()) }
 
-    Column(modifier = Modifier.fillMaxSize().imePadding().padding(horizontal = 15.dp)) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .navigationBarsPadding()
+            .imePadding()
+            .padding(horizontal = 15.dp)
+    ) {
         Spacer(Modifier.height(48.dp))
 
         // Header: back + campsite name
