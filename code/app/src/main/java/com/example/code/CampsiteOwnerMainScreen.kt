@@ -27,7 +27,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -37,8 +36,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
@@ -139,7 +138,6 @@ fun CampsiteOwnerMainScreen(
     val context = LocalContext.current
     var searchString by remember { mutableStateOf("") }
     var showAdd by remember { mutableStateOf(false) }
-    var showAccountDialog by remember { mutableStateOf(false) }
     var showQRCodeDialog by remember { mutableStateOf(false) }
     var selectedQRCampsite by remember { mutableStateOf<PreviewCampsite?>(null) }
     var ownerName by remember { mutableStateOf("Campsite Owner") }
@@ -350,57 +348,47 @@ fun CampsiteOwnerMainScreen(
 
                                             Spacer(Modifier.width(8.dp))
 
-                                            var menuExpanded by remember { mutableStateOf(false) }
+                                            var showMenu by remember { mutableStateOf(false) }
 
-                                            Box(modifier = Modifier.wrapContentSize(Alignment.TopEnd)) {
-                                                Button(
-                                                    onClick = { menuExpanded = true },
-                                                    shape = RoundedCornerShape(20.dp),
-                                                    colors = ButtonDefaults.buttonColors(containerColor = colors.primaryButton, contentColor = colors.primaryText),
-                                                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
-                                                ) {
-                                                    Row(
-                                                        verticalAlignment = Alignment.CenterVertically,
-                                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                                    ) {
-                                                        Text("Menu", maxLines = 1, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                                        Text("▼", fontSize = 10.sp)
+                                            Button(
+                                                onClick = { showMenu = true },
+                                                shape = RoundedCornerShape(20.dp),
+                                                colors = ButtonDefaults.buttonColors(containerColor = colors.primaryButton, contentColor = colors.primaryText),
+                                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                                            ) {
+                                                Text("Menu", maxLines = 1, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                            }
+
+                                            if (showMenu) {
+                                                AlertDialog(
+                                                    onDismissRequest = { showMenu = false },
+                                                    title = { Text(preview.name) },
+                                                    confirmButton = {
+                                                        TextButton(onClick = { showMenu = false }) {
+                                                            Text("Close")
+                                                        }
+                                                    },
+                                                    text = {
+                                                        Column(Modifier.verticalScroll(rememberScrollState())) {
+                                                            TextButton(onClick = {
+                                                                showMenu = false
+                                                                showEdit = preview
+                                                            }) { Text("Edit") }
+                                                            TextButton(onClick = {
+                                                                showMenu = false
+                                                                showLottery = preview
+                                                            }) { Text("Lottery") }
+                                                            TextButton(onClick = {
+                                                                showMenu = false
+                                                                showAlert = preview
+                                                            }) { Text("Alert") }
+                                                            TextButton(onClick = {
+                                                                showMenu = false
+                                                                showReservations = preview
+                                                            }) { Text("Reservations") }
+                                                        }
                                                     }
-                                                }
-
-                                                DropdownMenu(
-                                                    expanded = menuExpanded,
-                                                    onDismissRequest = { menuExpanded = false }
-                                                ) {
-                                                    DropdownMenuItem(
-                                                        text = { Text("Edit") },
-                                                        onClick = {
-                                                            menuExpanded = false
-                                                            showEdit = preview
-                                                        }
-                                                    )
-                                                    DropdownMenuItem(
-                                                        text = { Text("Lottery") },
-                                                        onClick = {
-                                                            menuExpanded = false
-                                                            showLottery = preview
-                                                        }
-                                                    )
-                                                    DropdownMenuItem(
-                                                        text = { Text("Alert") },
-                                                        onClick = {
-                                                            menuExpanded = false
-                                                            showAlert = preview
-                                                        }
-                                                    )
-                                                    DropdownMenuItem(
-                                                        text = { Text("Reservations") },
-                                                        onClick = {
-                                                            menuExpanded = false
-                                                            showReservations = preview
-                                                        }
-                                                    )
-                                                }
+                                                )
                                             }
                                         }
                                     }
@@ -443,7 +431,7 @@ fun CampsiteOwnerMainScreen(
                 ) { Text("QR Code", maxLines = 1, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
 
                 Button(
-                    onClick = { showAccountDialog = true },
+                    onClick = { navController.navigate("campsiteOwnerProfileScreen") },
                     shape = RoundedCornerShape(20.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = colors.secondaryButton.copy(alpha = 0.4f), contentColor = colors.title),
                     modifier = Modifier.weight(1f)
@@ -577,47 +565,6 @@ fun CampsiteOwnerMainScreen(
             },
             dismissButton = {
                 TextButton(onClick = { selectedQRCampsite = null }) {
-                    Text("Close")
-                }
-            }
-        )
-    }
-
-    if (showAccountDialog) {
-        AlertDialog(
-            onDismissRequest = { showAccountDialog = false },
-            title = {
-                Text(
-                    text = "Campsite Owner Details",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 20.sp
-                )
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Name: $ownerName", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                    Text("Owner ID: ${appState.userID ?: "Unknown"}", fontSize = 13.sp, color = Color.Gray)
-                    Text("Role: Campsite Owner", fontSize = 13.sp, color = Color(0xFF274690), fontWeight = FontWeight.Medium)
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showAccountDialog = false
-                        appState.userID = null
-                        appState.role = null
-                        DeviceIdentity.clearEntrantId(context)
-                        navController.navigate("loginScreen") {
-                            popUpTo(0) { inclusive = true }
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Text("Log Out", color = Color.White)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showAccountDialog = false }) {
                     Text("Close")
                 }
             }
@@ -912,7 +859,10 @@ fun AddEditCampsite(
                 }
 
                 Column(
-                    modifier = Modifier.padding(horizontal = 20.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 20.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     OutlinedTextField(
