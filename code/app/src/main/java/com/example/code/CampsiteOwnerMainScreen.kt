@@ -4,12 +4,14 @@ import android.app.DatePickerDialog
 import android.content.Context
 import android.graphics.Bitmap
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.widget.Toast
 import androidx.annotation.RequiresApi
-import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,32 +25,41 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.text.font.FontWeight
 import androidx.navigation.NavController
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -59,6 +70,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.window.Dialog
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -66,6 +78,7 @@ import java.util.Calendar
 import java.util.Date
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.window.DialogProperties
 import com.example.code.classes.Alert
 import com.example.code.classes.AppState
@@ -73,27 +86,55 @@ import com.example.code.classes.Campsite
 import com.example.code.classes.CampsiteOwner
 import com.example.code.classes.Coordinates
 import com.example.code.classes.PreviewCampsite
-import java.time.Instant
-import java.time.LocalDateTime
-import java.time.ZoneId
+import com.example.code.classes.WaitlistEntrant
 import kotlinx.coroutines.delay
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
-/** # Search Screen
- *  Implementation of the Entrants' Main Screen as seen in the Figma.
- *
- *  Prototype was gained from this conversation with Claude Sonnet 5.0:
- *  https://claude.ai/chat/fa52c57a-03b0-486b-b988-87d2f36ff18a
- *  Prompt: "How do I Correctly pad this Main screen? How do I make the Cards?"
- *
- */
-//https://claude.ai/share/a95788a4-8990-40f1-95c7-b5a744a1e94d: Prompt:I need to make a button to be able to go to campsitechatscreen
+import java.time.Instant
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.util.UUID
 
-// From Gabe; I edited Campsite Details in order to change the dates of the campsites,
-// so it requires this API for date parsing
+data class OwnerThemeColors(
+    val gradient: List<Color>,
+    val title: Color,
+    val subtitle: Color,
+    val footer: Color,
+    val primaryButton: Color,
+    val primaryText: Color,
+    val secondaryButton: Color,
+    val secondaryText: Color
+)
+
+private val OwnerLightColors = OwnerThemeColors(
+    gradient = listOf(Color(0xFFFFF8EE), Color(0xFFFDE8CB)),
+    title = Color(0xFF2B1B17),
+    subtitle = Color(0xFF7A6A62),
+    footer = Color(0xFF1A1A1A),
+    primaryButton = Color(0xFF45238A),
+    primaryText = Color.White,
+    secondaryButton = Color(0xFF6B49B0),
+    secondaryText = Color.White
+)
+
+private val OwnerDarkColors = OwnerThemeColors(
+    gradient = listOf(Color(0xFF101828), Color(0xFF1F2B45)),
+    title = Color.White,
+    subtitle = Color(0xFF9AA5BD),
+    footer = Color.White,
+    primaryButton = Color(0xFFFFB84D),
+    primaryText = Color(0xFF1A1A1A),
+    secondaryButton = Color(0xFFFFE7BF),
+    secondaryText = Color(0xFF1A1A1A)
+)
+
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
-fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
+fun CampsiteOwnerMainScreen(
+    navController: NavController,
+    appState: AppState,
+    darkTheme: Boolean = isSystemInDarkTheme()
+) {
     val context = LocalContext.current
     var searchString by remember { mutableStateOf("") }
     var showAdd by remember { mutableStateOf(false) }
@@ -105,13 +146,16 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
     var showEdit by remember { mutableStateOf<PreviewCampsite?>(null) }
     var showLottery by remember { mutableStateOf<PreviewCampsite?>(null) }
     var showAlert by remember { mutableStateOf<PreviewCampsite?>(null) }
+    var showReservations by remember { mutableStateOf<PreviewCampsite?>(null) }
     val format = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
+
+    val colors = if (darkTheme) OwnerDarkColors else OwnerLightColors
 
     val previewCampsites = remember {
         mutableStateListOf<PreviewCampsite>()
     }
 
-    val mainHandler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
+    val mainHandler = remember { Handler(Looper.getMainLooper()) }
 
     LaunchedEffect(appState.userID, appState.campsites.campsites.toList()) {
         val ownerID = appState.userID ?: return@LaunchedEffect
@@ -204,109 +248,203 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
         previewCampsites.filter { it.name.contains(searchString, ignoreCase = true) }
     }
 
-    // Column Wrapping the Search/Card Screens and Menu bar
-    Column(modifier = Modifier.fillMaxSize()) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Brush.horizontalGradient(colors.gradient))
+            .systemBarsPadding()
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
 
-        Box(modifier = Modifier.weight(1f)) {
+            Box(modifier = Modifier.weight(1f)) {
 
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-            ) {
-                // To avoid clipping it into the top of the screen
-                Spacer(Modifier.height(48.dp))
-
-                // Signed in owner verification banner
-                Text(
-                    text = "Signed in as: $ownerName",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp,
-                    color = Color(0xFF274690),
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-
-                // Search Bar
-                TextField(
-                    value = searchString,
-                    onValueChange = { searchString = it },
-                    label = { Text("Search for your campsite") },
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 16.dp)
-                )
-
-                // The Cards of Campsites
-                LazyColumn(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    contentPadding = PaddingValues(vertical = 12.dp)
+                        .fillMaxSize()
+                        .padding(horizontal = 20.dp, vertical = 12.dp)
                 ) {
-                    items(filteredCampsites) { preview ->
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(120.dp),
-                            shape = RoundedCornerShape(24.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFFB0B0B0))
-                        ) {
-                            Row(
+                    // Signed in owner verification banner
+                    Text(
+                        text = "Signed in as: $ownerName",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = colors.title,
+                        modifier = Modifier.padding(bottom = 12.dp, top = 8.dp)
+                    )
+
+                    // Search Bar
+                    TextField(
+                        value = searchString,
+                        onValueChange = { searchString = it },
+                        placeholder = { Text("Search for your campsite", color = colors.subtitle) },
+                        shape = RoundedCornerShape(28.dp),
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = colors.title.copy(alpha = 0.06f),
+                            unfocusedContainerColor = colors.title.copy(alpha = 0.04f),
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                            focusedTextColor = colors.title,
+                            unfocusedTextColor = colors.title
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp)
+                    )
+
+                    // The Cards of Campsites
+                    LazyColumn(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        contentPadding = PaddingValues(vertical = 12.dp)
+                    ) {
+                        items(filteredCampsites) { preview ->
+                            val matchedCampsite = appState.campsites.campsites.firstOrNull {
+                                it.campsiteID == preview.campsiteID
+                            }
+                            val thumbnail = matchedCampsite.thumbnailPhoto() ?: preview.campsiteImage.takeIf { it.isNotBlank() }
+
+                            Card(
                                 modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                    .fillMaxWidth()
+                                    .height(135.dp),
+                                shape = RoundedCornerShape(24.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFFB0B0B0))
                             ) {
-                                ProfilePicture(
-                                    profileImage = preview.campsiteImage,
-                                    modifier = Modifier
-                                        .size(96.dp)
-                                        .clip(RoundedCornerShape(16.dp))
-                                )
-                                Spacer(Modifier.width(12.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(preview.name, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.White)
-                                    Text(preview.location, color = Color.White)
-                                    Text("Entry: " + (preview.startMillis?.let { format.format(Date(it)) } ?: "Not set"), color = Color.White)
-                                    Text("End: " + (preview.endMillis?.let { format.format(Date(it)) } ?: "Not set"), color = Color.White)
-                                }
-
-                                Spacer(Modifier.width(8.dp))
-
-                                Column(
-                                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                                    horizontalAlignment = Alignment.End
+                                CampsiteImageBackground(
+                                    image = thumbnail,
+                                    defaultImage = R.drawable.campsite_thumbnail,
+                                    fallback = Color(0xFFB0B0B0),
+                                    modifier = Modifier.fillMaxSize()
                                 ) {
-                                    Button(onClick = { showEdit = preview }) { Text("  Edit  ", maxLines = 1) }
-                                    Button(onClick = { showLottery = preview }) { Text("Lottery", maxLines = 1) }
-                                    Button(onClick = { showAlert = preview }) { Text(" Alert ", maxLines = 1)}
+                                    CompositionLocalProvider(
+                                        LocalContentColor provides Color.White
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .padding(horizontal = 20.dp, vertical = 12.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column(
+                                                modifier = Modifier.weight(1f),
+                                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                                            ) {
+                                                Text(preview.name, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.White)
+                                                if (preview.location.isNotBlank()) {
+                                                    Text(preview.location, fontSize = 12.sp, color = Color.White.copy(alpha = 0.9f))
+                                                }
+                                                Text("Entry: " + (preview.startMillis?.let { format.format(Date(it)) } ?: "Not set"), fontSize = 11.sp, color = Color.White.copy(alpha = 0.8f))
+                                                Text("End: " + (preview.endMillis?.let { format.format(Date(it)) } ?: "Not set"), fontSize = 11.sp, color = Color.White.copy(alpha = 0.8f))
+                                            }
+
+                                            Spacer(Modifier.width(8.dp))
+
+                                            var menuExpanded by remember { mutableStateOf(false) }
+
+                                            Box(modifier = Modifier.wrapContentSize(Alignment.TopEnd)) {
+                                                Button(
+                                                    onClick = { menuExpanded = true },
+                                                    shape = RoundedCornerShape(20.dp),
+                                                    colors = ButtonDefaults.buttonColors(containerColor = colors.primaryButton, contentColor = colors.primaryText),
+                                                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                                                ) {
+                                                    Row(
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                                    ) {
+                                                        Text("Menu", maxLines = 1, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                                        Text("▼", fontSize = 10.sp)
+                                                    }
+                                                }
+
+                                                DropdownMenu(
+                                                    expanded = menuExpanded,
+                                                    onDismissRequest = { menuExpanded = false }
+                                                ) {
+                                                    DropdownMenuItem(
+                                                        text = { Text("Edit") },
+                                                        onClick = {
+                                                            menuExpanded = false
+                                                            showEdit = preview
+                                                        }
+                                                    )
+                                                    DropdownMenuItem(
+                                                        text = { Text("Lottery") },
+                                                        onClick = {
+                                                            menuExpanded = false
+                                                            showLottery = preview
+                                                        }
+                                                    )
+                                                    DropdownMenuItem(
+                                                        text = { Text("Alert") },
+                                                        onClick = {
+                                                            menuExpanded = false
+                                                            showAlert = preview
+                                                        }
+                                                    )
+                                                    DropdownMenuItem(
+                                                        text = { Text("Reservations") },
+                                                        onClick = {
+                                                            menuExpanded = false
+                                                            showReservations = preview
+                                                        }
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
+                FloatingActionButton(
+                    onClick = { showAdd = true },
+                    containerColor = colors.primaryButton,
+                    contentColor = colors.primaryText,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(16.dp)
+                ) { Icon(Icons.Filled.Add, contentDescription = "Add campsite") }
             }
-            FloatingActionButton(
-                onClick = { showAdd = true },
+
+            // Bottom Navigation Bar
+            Row(
                 modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(16.dp)
-            ) { Icon(Icons.Filled.Add, contentDescription = "Add campsite") }
-        }
-/**
- * Displays Account details for campsite owner and allows user to log out
- * **/
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(Color.LightGray)
-                .navigationBarsPadding()
-                .padding(8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Button(onClick = { }, modifier = Modifier.weight(1f)) { Text("List", maxLines = 1) }
-            Button(onClick = { showQRCodeDialog = true }, modifier = Modifier.weight(1f)) { Text("QR Code", maxLines = 1) }
-            Button(onClick = { navController.navigate("campsiteOwnerProfileScreen") }, modifier = Modifier.weight(1f)) { Text("Account", maxLines = 1) }
-            Button(onClick = { navController.navigate("campsiteChat") }, modifier = Modifier.weight(1f)) { Text("Messages", maxLines = 1) }
+                    .fillMaxWidth()
+                    .background(colors.title.copy(alpha = 0.05f))
+                    .navigationBarsPadding()
+                    .padding(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = { },
+                    shape = RoundedCornerShape(20.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = colors.secondaryButton.copy(alpha = 0.4f), contentColor = colors.title),
+                    modifier = Modifier.weight(1f)
+                ) { Text("List", maxLines = 1, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
+
+                Button(
+                    onClick = { showQRCodeDialog = true },
+                    shape = RoundedCornerShape(20.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = colors.secondaryButton.copy(alpha = 0.4f), contentColor = colors.title),
+                    modifier = Modifier.weight(1f)
+                ) { Text("QR Code", maxLines = 1, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
+
+                Button(
+                    onClick = { showAccountDialog = true },
+                    shape = RoundedCornerShape(20.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = colors.secondaryButton.copy(alpha = 0.4f), contentColor = colors.title),
+                    modifier = Modifier.weight(1f)
+                ) { Text("Account", maxLines = 1, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
+
+                Button(
+                    onClick = { navController.navigate("campsiteChat") },
+                    shape = RoundedCornerShape(20.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = colors.secondaryButton.copy(alpha = 0.4f), contentColor = colors.title),
+                    modifier = Modifier.weight(1f)
+                ) { Text("Messages", maxLines = 1, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+            }
         }
     }
 
@@ -396,7 +534,7 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
                     Spacer(Modifier.height(16.dp))
 
                     QRCodeImage(
-                        data = campsite.campsiteID,
+                        data = campsite.campsiteID.ifBlank { campsite.name },
                         modifier = Modifier
                             .size(180.dp)
                             .background(Color.White, RoundedCornerShape(8.dp))
@@ -409,7 +547,9 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
             confirmButton = {
                 Button(
                     onClick = {
-                        val matchedCampsite = appState.campsites.campsites.firstOrNull { it.campsiteID == campsite.campsiteID }
+                        val matchedCampsite = appState.campsites.campsites.firstOrNull {
+                            it.campsiteID == campsite.campsiteID
+                        }
                         if (matchedCampsite != null) {
                             appState.viewingCampsiteID = matchedCampsite.campsiteID
                             selectedQRCampsite = null
@@ -582,9 +722,80 @@ fun CampsiteOwnerMainScreen(navController: NavController, appState: AppState) {
     showAlert?.let { current ->
         NotificationDialog(
             campsite = current,
-            onDismiss = {showAlert = null},
+            onDismiss = { showAlert = null },
             ownerName = ownerName,
             appState = appState
+        )
+    }
+
+    showReservations?.let { current ->
+        val previousEntrants = appState.entrants.entrants.filter { entrant ->
+            val lists = entrant.getCampsiteLists()
+            current.campsiteID in lists[PAST_CAMPSITES].orEmpty() ||
+                current.campsiteID in lists[RESERVED_CAMPSITES].orEmpty()
+        }
+
+        AlertDialog(
+            onDismissRequest = { showReservations = null },
+            title = {
+                Text(
+                    text = "Previous Reservations: ${current.name}",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 350.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    if (previousEntrants.isEmpty()) {
+                        Text(
+                            text = "No previous reservations found for this campsite.",
+                            color = Color.Gray,
+                            fontSize = 14.sp
+                        )
+                    } else {
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            items(previousEntrants) { entrant ->
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(12.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Text(
+                                            text = entrant.name.ifBlank { entrant.username.ifBlank { entrant.email } },
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 15.sp
+                                        )
+                                        if (entrant.email.isNotBlank()) {
+                                            Text(text = entrant.email, fontSize = 12.sp, color = Color.DarkGray)
+                                        }
+                                        if (entrant.phoneNumber.isNotBlank()) {
+                                            Text(text = "Phone: ${entrant.phoneNumber}", fontSize = 12.sp, color = Color.DarkGray)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showReservations = null }) {
+                    Text("Close")
+                }
+            }
         )
     }
 }
@@ -763,13 +974,6 @@ fun AddEditCampsite(
     }
 }
 
-/*
-Implementation of owner screen as outlined in the figma. Search screen was used as reference.
-AddCampsite, pickdate, and parts of campsiteOwnerMainScreen UI were developed using claude 3.5 in
-this chat: https://claude.ai/share/140477f9-42aa-4b16-8189-dad57b7d8afb
-Prompt: "How do I change this so that the delete and edit buttons are on top of each other at the end of each card"
- */
-/** Codex prompt: Show the real waiting list and per-location draw results in the owner dialog. */
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 private fun LotteryDialog(
@@ -798,30 +1002,37 @@ private fun LotteryDialog(
                     Text("Starts: " + (start?.let { format.format(Date(it)) } ?: "Not set"))
                     Text("Closes: " + (end?.let { format.format(Date(it)) } ?: "Not set"))
                     if (!drawn) {
+                        Spacer(modifier = Modifier.height(8.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedButton(onClick = { pickDate(context, null) { start = it } }) {
-                                Text("Start date")
+                                Text("Start date", fontSize = 12.sp)
                             }
-                            OutlinedButton(onClick = { pickDate(context, null) { end = it } }) {
-                                Text("End date")
+                            OutlinedButton(onClick = { pickDate(context, start) { end = it } }) {
+                                Text("End date", fontSize = 12.sp)
                             }
                         }
                     }
-                    if (liveCampsite == null) {
-                        Text("Loading lottery?")
-                    } else if (drawn) {
-                        Text("Draw complete ? ${liveCampsite.getFinalList().size} selected")
-                    } else if (liveCampsite.isReadyToDraw(LocalDateTime.now())) {
-                        Text("Lottery closed ? drawing results")
-                    }
+                }
+                item {
+                    Spacer(modifier = Modifier.height(8.dp))
                     Text("Waiting list (${entrants.size} entrants)", fontWeight = FontWeight.Bold)
                 }
                 items(entrants, key = { it }) { entrantID ->
-                    Text(entrantNames[entrantID]?.ifBlank { null } ?: entrantID)
-                    if (drawn) {
-                        val locations = liveCampsite?.getLocationsWon(entrantID).orEmpty()
-                        Text(if (locations.isEmpty()) "Not selected"
-                            else locations.joinToString { "Location ${it + 1}" })
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(entrantNames[entrantID]?.ifBlank { null } ?: entrantID, fontSize = 14.sp)
+                        if (drawn) {
+                            val locations = liveCampsite?.getLocationsWon(entrantID).orEmpty()
+                            Text(
+                                if (locations.isEmpty()) "Not selected"
+                                else locations.joinToString { "Location ${it + 1}" },
+                                fontSize = 13.sp,
+                                color = if (locations.isNotEmpty()) Color(0xFF2E7D32) else Color.Gray
+                            )
+                        }
                     }
                 }
             }
@@ -837,7 +1048,6 @@ private fun LotteryDialog(
     )
 }
 
-/** Codex prompt: Generate a scannable campsite QR code from its Firestore document ID. */
 internal fun createCampsiteQrBitmap(campsiteID: String): Bitmap {
     val matrix = QRCodeWriter().encode(campsiteID, BarcodeFormat.QR_CODE, 384, 384)
     val pixels = IntArray(matrix.width * matrix.height) { index ->
@@ -852,6 +1062,7 @@ fun QRCodeImage(data: String, modifier: Modifier = Modifier) {
     val image = remember(data) { createCampsiteQrBitmap(data).asImageBitmap() }
     Image(bitmap = image, contentDescription = "Campsite QR code", modifier = modifier)
 }
+
 private fun pickDate(context: Context, minDateMillis: Long?, onSelected: (Long) -> Unit) {
     val cal = Calendar.getInstance()
     val dialog = DatePickerDialog(
@@ -882,69 +1093,51 @@ fun NotificationDialog(
 
     fun CreateAlert(campsite: PreviewCampsite, owner: String, title: String, body: String){
         for(entrant in campsite.waitingList){
-            val alertID = java.util.UUID.randomUUID()
-            val newAlert = Alert(alertID.toString(), title, body, entrant.id, owner )
+            val alertID = UUID.randomUUID()
+            val newAlert = Alert(alertID.toString(), title, body, entrant.id, owner)
             appState.alerts.addAlert(newAlert)
         }
-
     }
 
-    Dialog(
+    AlertDialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ){
-        Surface(modifier = Modifier.fillMaxSize()) {
+        title = { Text("Send alert to entrants of ${campsite.name}") },
+        text = {
             Column(
-                modifier = Modifier.fillMaxSize().padding(15.dp)
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Spacer(Modifier.height(48.dp))
-                Row(){
-                    Text(
-                        text = "Send alert to entrants of ${campsite.name}",
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Text(
-                        text = "✕",
-                        fontSize = 24.sp,
-                        modifier = Modifier.clickable { onDismiss() }
-                    )
-                }
-
                 OutlinedTextField(
                     value = alertTitle,
                     onValueChange = { alertTitle = it },
-                    label = { Text("Title", fontSize = 11.sp) },
-                    modifier = Modifier.fillMaxWidth().padding(5.dp),
-                    singleLine = true
+                    label = { Text("Title") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
                 )
-
                 OutlinedTextField(
                     value = alertBody,
                     onValueChange = { alertBody = it },
-                    label = { Text("Message", fontSize = 11.sp) },
-                    modifier = Modifier.weight(1f).fillMaxWidth().padding(5.dp),
-                    singleLine = true
+                    label = { Text("Message") },
+                    modifier = Modifier.fillMaxWidth()
                 )
-                Button(
-                    onClick = {
-                        CreateAlert(campsite, ownerName, alertTitle, alertBody)
-                        alertTitle = ""
-                        alertBody = ""
-                        onDismiss()
-                    },
-                    modifier = Modifier.fillMaxWidth().padding(5.dp)
-                ){
-                    Text("Send Alert")
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    CreateAlert(campsite, ownerName, alertTitle, alertBody)
+                    alertTitle = ""
+                    alertBody = ""
+                    onDismiss()
                 }
-                Spacer(modifier = Modifier.weight(1f))
-
-
+            ) {
+                Text("Send Alert")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
             }
         }
-
-    }
-
-
+    )
 }

@@ -256,8 +256,8 @@ private fun ChatThread(
 
     // Keep the newest message in view
     val listState = rememberLazyListState()
-    LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
+    LaunchedEffect(messages.size, messages.lastOrNull()?.messageID) {
+        if (messages.isNotEmpty()) listState.scrollToItem(messages.lastIndex)
     }
     val timeFormatter = remember { SimpleDateFormat("MMM d, h:mm a", Locale.getDefault()) }
 

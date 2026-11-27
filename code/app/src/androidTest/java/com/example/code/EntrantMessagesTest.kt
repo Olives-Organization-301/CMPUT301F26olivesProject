@@ -11,6 +11,8 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -574,11 +576,6 @@ class EntrantMessagesTest {
         openChat(c4)
         sendChat("Is the site dog friendly?")
 
-        // Shown in the chat as the entrant's own message
-        composeTestRule.onNodeWithText("Is the site dog friendly?").assertIsDisplayed()
-        // The text box was cleared
-        composeTestRule.onNodeWithText("Type a message...").assertIsDisplayed()
-
         // Sent once, addressed to the campsite's owner
         verify(exactly = 1) {
             appState.chat.addMessage(match {
@@ -588,6 +585,11 @@ class EntrantMessagesTest {
         }
         // ...and is now part of the conversation the owner would load
         assertTrue(appState.chat.conversation("c_4", user).any { it.text == "Is the site dog friendly?" })
+        val sentMessage = composeTestRule.onNode(
+            hasText("Is the site dog friendly?") and !hasSetTextAction()
+        )
+        composeTestRule.waitUntil(5_000) { sentMessage.isDisplayed() }
+        composeTestRule.onNodeWithText("Type a message...").assertIsDisplayed()
         // Ordinary chat messages don't create notifications; only the lottery results are showing
         assertNoNotificationFor("Is the site dog friendly?")
         assertEquals(totalResults, postedNotifications().size)

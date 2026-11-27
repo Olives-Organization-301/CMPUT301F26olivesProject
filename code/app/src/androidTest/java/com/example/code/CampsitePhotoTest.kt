@@ -10,6 +10,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -76,20 +77,31 @@ class CampsitePhotoTest {
             ) {}
         }
 
-        fun centerPixel(): Color {
-            val image = compose.onNodeWithTag("campsite-photo").captureToImage()
-            return image.toPixelMap()[image.width / 2, image.height / 2]
+        fun awaitCenterPixel(matches: (Color) -> Boolean): Color {
+            var matchedPixel: Color? = null
+            compose.waitUntil(10_000) {
+                val image = try {
+                    compose.onNodeWithTag("campsite-photo").captureToImage()
+                } catch (_: ComposeTimeoutException) {
+                    // An emulator can miss the redraw requested by the window capture.
+                    return@waitUntil false
+                }
+                val pixel = image.toPixelMap()[image.width / 2, image.height / 2]
+                if (!matches(pixel)) return@waitUntil false
+                matchedPixel = pixel
+                true
+            }
+            return checkNotNull(matchedPixel)
         }
 
-        val default = centerPixel()
+        val default = awaitCenterPixel { true }
         compose.runOnIdle { photo.value = encoded }
-        compose.waitUntil(5_000) {
-            val pixel = centerPixel()
+        awaitCenterPixel { pixel ->
             pixel.red > 0.7f && pixel.blue > 0.7f && pixel.green < 0.3f
         }
 
         compose.runOnIdle { photo.value = "invalid photo" }
-        assertEquals(default, centerPixel())
+        awaitCenterPixel { it == default }
     }
 
     @Test
