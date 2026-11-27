@@ -59,6 +59,9 @@ import com.example.code.classes.Campsite
 import com.example.code.classes.Review
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import androidx.compose.foundation.clickable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.produceState
 
 /*
 the following admin theme colors code (light and dark) was
@@ -142,8 +145,8 @@ fun AdminMainSearchScreen(
     }
 
     LaunchedEffect(selectedTop) {
-        if (selectedTop == "Campsites") {
-            campsiteDb.fetchAllCampsites { _ -> }
+        if (selectedTop == "Campsites" || selectedTop == "Images" || selectedTop == "Reviews"){
+        campsiteDb.fetchAllCampsites { _ -> }
         } else if (selectedTop == "User Database") {
             entrantDb.fetchAllEntrants { _ -> }
             ownerDb.fetchAllOwners { _ -> }
@@ -214,6 +217,25 @@ fun AdminMainSearchScreen(
                             colors = colors,
                             modifier = Modifier.weight(1f)
                         )
+
+                        "Images" -> ImagesTab(
+                            campsites = campsiteDb.campsites.filter { it.getName().contains(query, ignoreCase = true) },
+                            onRemove = { campsite ->
+                                askRemove("Remove the photo for \"${campsite.getName()}\"?") {
+                                    campsiteDb.removeCampsiteImage(campsite.campsiteID)
+                                }
+                            },
+                            colors = colors,
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        "Reviews" -> ReviewsTab(
+                            campsites = campsiteDb.campsites.filter { it.getName().contains(query, ignoreCase = true) },
+                            campsiteDb = campsiteDb,
+                            askRemove = askRemove,
+                            colors = colors,
+                            modifier = Modifier.weight(1f)
+                        )
                     }
                 }
             }
@@ -238,7 +260,7 @@ fun TopTabs(selected: String, onSelect: (String) -> Unit, colors: AdminThemeColo
             .padding(horizontal = 20.dp, vertical = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ){
-        listOf("User Database", "Campsites").forEach { tab ->
+        listOf("User Database", "Campsites", "Images", "Reviews").forEach { tab ->
             val isSelected = selected == tab
             Button(
                 onClick = { onSelect(tab) },
@@ -252,7 +274,7 @@ fun TopTabs(selected: String, onSelect: (String) -> Unit, colors: AdminThemeColo
                 ),
                 contentPadding = PaddingValues(horizontal = 8.dp)
             ){
-                Text(tab, maxLines = 1, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                Text(tab, maxLines = 1, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -409,6 +431,142 @@ fun CampsiteCard(campsite: Campsite, onRemove: () -> Unit, colors: AdminThemeCol
                     }
                     Spacer(Modifier.width(8.dp))
                     RemoveButton("Remove", onClick = onRemove, colors = colors)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ImagesTab(
+    campsites: List<Campsite>,
+    onRemove: (Campsite) -> Unit,
+    colors: AdminThemeColors,
+    modifier: Modifier = Modifier
+) {
+    val withPhotos = campsites.filter { !it.detailsPhoto().isNullOrBlank() }
+    if (withPhotos.isEmpty()) {
+        EmptyState("No uploaded images", colors)
+        return
+    }
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(2),
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(vertical = 4.dp)
+    ) {
+        items(withPhotos, key = { it.campsiteID }) { campsite ->
+            val photo = campsite.detailsPhoto().orEmpty()
+            // Decode off the main thread; the photos are 1280px wide
+            val bitmap by produceState<ImageBitmap?>(null, photo) {
+                value = withContext(Dispatchers.Default) { decodeBase64ToImageBitmap(photo) }
+            }
+            Card(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = colors.title.copy(alpha = 0.05f))
+            ) {
+                Column {
+                    bitmap?.let {
+                        Image(
+                            bitmap = it,
+                            contentDescription = campsite.getName(),
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxWidth().height(120.dp)
+                        )
+                    }
+                    Text(
+                        campsite.getName(),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        color = colors.title,
+                        maxLines = 1,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                    )
+                    Box(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                        RemoveButton("Remove", onClick = { onRemove(campsite) }, colors = colors)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@RequiresApi(Build.VERSION_CODES.O)
+@Composable
+fun ReviewsTab(
+    campsites: List<Campsite>,
+    campsiteDb: DatabaseCampsites,
+    askRemove: (String, () -> Unit) -> Unit,
+    colors: AdminThemeColors,
+    modifier: Modifier = Modifier
+) {
+    var selected by remember { mutableStateOf<Campsite?>(null) }
+    val current = selected
+    val cardColors = CardDefaults.cardColors(containerColor = colors.title.copy(alpha = 0.05f))
+
+    if (current == null) {
+        LazyColumn(
+            modifier = modifier,
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(vertical = 4.dp)
+        ) {
+            if (campsites.isEmpty()) item { EmptyState("No campsites found", colors) }
+            items(campsites, key = { it.campsiteID }) { c ->
+                Card(
+                    modifier = Modifier.fillMaxWidth().clickable { selected = c },
+                    shape = RoundedCornerShape(24.dp),
+                    colors = cardColors
+                ) {
+                    Text(
+                        c.getName(),
+                        fontWeight = FontWeight.Bold,
+                        color = colors.title,
+                        modifier = Modifier.padding(16.dp)
+                    )
+                }
+            }
+        }
+    } else {
+        var reviews by remember(current.campsiteID) { mutableStateOf<List<Review>>(emptyList()) }
+        DisposableEffect(current.campsiteID) {
+            val registration = campsiteDb.observeReviews(current.campsiteID) { reviews = it ?: emptyList() }
+            onDispose { registration.remove() }
+        }
+
+        Column(modifier = modifier) {
+            TextButton(onClick = { selected = null }) {
+                Text("← Back to campsites", color = colors.title)
+            }
+            Text("Reviews for ${current.getName()}", fontWeight = FontWeight.Bold, color = colors.title)
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(vertical = 12.dp)
+            ) {
+                if (reviews.isEmpty()) item { EmptyState("No reviews yet", colors) }
+                items(reviews, key = { it.reviewID }) { r ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(24.dp),
+                        colors = cardColors
+                    ) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("${r.authorName}: ★ ${r.rating}", fontWeight = FontWeight.Bold, color = colors.title)
+                            Text(r.review, fontSize = 14.sp, color = colors.subtitle)
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                RemoveButton("Remove rating", onClick = {
+                                    askRemove("Remove the rating from ${r.authorName}'s review?") {
+                                        campsiteDb.removeReviewRating(r)
+                                    }
+                                }, colors = colors)
+                                RemoveButton("Remove review", onClick = {
+                                    askRemove("Remove ${r.authorName}'s review?") {
+                                        campsiteDb.deleteReview(r)
+                                    }
+                                }, colors = colors)
+                            }
+                        }
+                    }
                 }
             }
         }
