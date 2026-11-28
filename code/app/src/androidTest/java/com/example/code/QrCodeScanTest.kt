@@ -275,7 +275,6 @@ class QrCodeScanTest {
 
     private fun openScanDialog() {
         composeTestRule.onNodeWithText("QR").performClick()
-        composeTestRule.waitForIdle()
     }
 
     /** "Picks" [image] in the dialog and waits for the scan (it runs off the main thread) to finish. */

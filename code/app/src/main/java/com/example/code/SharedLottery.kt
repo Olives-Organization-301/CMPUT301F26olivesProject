@@ -32,6 +32,7 @@ internal data class SharedLottery(
     val drawn: Boolean,
     val bookings: Map<String, SharedLotteryBooking>,
     val notificationsPending: Boolean = false,
+    val ownerIDs: List<String> = listOf(ownerID),
 ) {
     val anchorID: String get() = campsiteIDs.first()
 
@@ -50,12 +51,17 @@ internal data class SharedLottery(
 }
 
 /**
- * US 02.04.02 stores one registration window, waitlist and result for several owner campsites.
+ * US 02.04.02 and 02.04.08 store one registration window, waitlist and result for
+ * campsites from one or more owners. A different owner's site must be offered first.
  * The first campsite anchors the entry in the existing entrant screens. Confirmations use the
  * actual campsite ID, so owner reservations and entrant history still show the booked campsite.
  *
- * Codex prompts: "now i need ideas for 2.04.03, 2.04.02, and how it should interact with any previous functions or user stories"
- * and "work on this, make testcases, and document the code"
+ * Codex prompts: "now i need ideas for 2.04.03, 2.04.02, and how it should interact with any previous functions or user stories";
+ * "work on this, make testcases, and document the code"; and "work on 2.04.08".
+ * For 02.04.08, the coordinator owns the first campsite and saves ownerIDs from the selected
+ * site documents. Another owner's site must have allowSharedLottery set by that owner. The
+ * transaction rechecks this offer and membership so two devices cannot claim a site twice.
+ * Booking and cancellation messages use the booked site's owner, not the coordinator.
  */
 @RequiresApi(Build.VERSION_CODES.O)
 internal class SharedLotteryRepository(private val db: FirebaseFirestore) {
@@ -109,7 +115,9 @@ internal class SharedLotteryRepository(private val db: FirebaseFirestore) {
             val siteDocs = (previousIDs + campsiteIDs).distinct().map { tx.get(campsites.document(it)) }
             if (siteDocs.any { site ->
                 val member = site.getString("lotteryID")
-                !site.exists() || siteOwner(site) != ownerID ||
+                !site.exists() || siteOwner(site).isNullOrBlank() ||
+                    (site.id !in previousIDs && siteOwner(site) != ownerID &&
+                        site.getBoolean("allowSharedLottery") != true) ||
                     if (site.id in previousIDs) member != ref.id else
                         !member.isNullOrBlank() || site.get("lotteryDrawnAt") != null ||
                             (site.get("locationWinners") as? Map<*, *>)?.isNotEmpty() == true ||
@@ -118,6 +126,9 @@ internal class SharedLotteryRepository(private val db: FirebaseFirestore) {
 
             val fields = mapOf(
                 "ownerID" to ownerID,
+                "ownerIDs" to campsiteIDs.mapNotNull { id ->
+                    siteDocs.firstOrNull { it.id == id }?.let(::siteOwner)
+                }.distinct(),
                 "name" to (siteDocs.first { it.id == campsiteIDs.first() }.getString("name") ?: "Shared lottery"),
                 "campsiteIDs" to campsiteIDs,
                 "lotteryStartDate" to opens.toString(),
@@ -186,6 +197,7 @@ internal class SharedLotteryRepository(private val db: FirebaseFirestore) {
                 !validStayDates(dates, site, lotteryNow().toLocalDate())) return@runTransaction false
 
             val name = site.getString("name") ?: site.getString("campsiteName") ?: campsiteID
+            val campsiteOwner = siteOwner(site) ?: return@runTransaction false
             val previousRevision = (profile.get(FieldPath.of("reservationRevision", campsiteID)) as? Number)?.toLong() ?: 0L
             val sentAt = maxOf(System.currentTimeMillis(), previousRevision + 1)
             tx.update(ref, FieldPath.of("bookings", entrantID),
@@ -200,7 +212,7 @@ internal class SharedLotteryRepository(private val db: FirebaseFirestore) {
             )
             tx.set(messageRef, ChatMessage(
                 messageID = messageRef.id, campsiteID = campsiteID, campsiteName = name,
-                sender = name, entrantID = entrantID, ownerID = lottery.ownerID, automated = true,
+                sender = name, entrantID = entrantID, ownerID = campsiteOwner, automated = true,
                 type = RESERVATION_CONFIRMED, locationIndex = location, sentAt = sentAt,
                 text = "You reserved location ${location + 1} at $name.",
                 stayDates = storedDates, lotteryID = id, rulesAcknowledged = true
@@ -243,11 +255,13 @@ internal class SharedLotteryRepository(private val db: FirebaseFirestore) {
         return db.runTransaction { tx ->
             val lottery = parse(tx.get(ref)) ?: return@runTransaction false
             val booking = lottery.bookings[entrantID] ?: return@runTransaction false
-            if ((ownerID != null && lottery.ownerID != ownerID) || booking.status != RESERVATION_CONFIRMED ||
+            if (booking.status != RESERVATION_CONFIRMED ||
                 booking.campsiteID != campsiteID || booking.dates.none { it >= lotteryNow().toLocalDate().toString() }) {
                 return@runTransaction false
             }
             val site = tx.get(campsites.document(campsiteID))
+            val campsiteOwner = siteOwner(site) ?: return@runTransaction false
+            if (ownerID != null && campsiteOwner != ownerID) return@runTransaction false
             val profileSnapshot = tx.get(profile)
             val name = site.getString("name") ?: campsiteID
             val revision = (profileSnapshot.get(FieldPath.of("reservationRevision", campsiteID)) as? Number)?.toLong() ?: 0L
@@ -257,7 +271,7 @@ internal class SharedLotteryRepository(private val db: FirebaseFirestore) {
             )
             tx.set(cancellation, ChatMessage(
                 messageID = cancellation.id, campsiteID = campsiteID, campsiteName = name, sender = name,
-                entrantID = entrantID, ownerID = lottery.ownerID, automated = true, type = RESERVATION_DECLINED,
+                entrantID = entrantID, ownerID = campsiteOwner, automated = true, type = RESERVATION_DECLINED,
                 text = if (ownerID == null) "You cancelled your reservation." else "The owner rejected your reservation.",
                 locationIndex = booking.location, sentAt = maxOf(System.currentTimeMillis(), revision + 1), lotteryID = id
             ))
@@ -293,7 +307,8 @@ internal class SharedLotteryRepository(private val db: FirebaseFirestore) {
         return SharedLottery(doc.id, doc.getString("ownerID").orEmpty(), sites, opens, closes,
             (doc.get("waitlistCapacity") as? Number)?.toInt(), (doc.get("winnerCount") as? Number)?.toInt() ?: 5,
             doc.strings("waitingList"), doc.strings("finalList"), doc.get("lotteryDrawnAt") != null, bookings,
-            doc.getBoolean("lotteryNotificationsPending") == true)
+            doc.getBoolean("lotteryNotificationsPending") == true,
+            doc.strings("ownerIDs").ifEmpty { listOf(doc.getString("ownerID").orEmpty()) })
     }
 
     private fun bookingFields(campsiteID: String, location: Int, dates: List<String>, status: String) =

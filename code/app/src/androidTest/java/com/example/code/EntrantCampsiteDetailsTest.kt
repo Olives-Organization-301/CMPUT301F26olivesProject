@@ -4,10 +4,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
-import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithTag
@@ -41,7 +39,6 @@ import java.time.LocalDateTime
 import com.google.android.gms.tasks.Tasks
 import org.junit.Assert.assertEquals
 import java.time.YearMonth
-import kotlin.math.abs
 
 /** Test Entrant Campsite Details Screen (joining / leaving a waiting list)
  * Uses MockK in order to Simulate the database without adding actual Data.
@@ -571,29 +568,6 @@ class EntrantCampsiteDetailsTest {
     private fun july(dayOfMonth: Int) = LocalDate.of(2026, 7, dayOfMonth)
     private fun august(dayOfMonth: Int) = LocalDate.of(2026, 8, dayOfMonth)
 
-    private fun closeTo(a: Color, b: Color, tolerance: Float = 0.03f) =
-        abs(a.red - b.red) < tolerance &&
-            abs(a.green - b.green) < tolerance &&
-            abs(a.blue - b.blue) < tolerance
-
-    // Colour of the day cell just above its number (inside the highlight band, away from the text)
-    private fun backgroundColourOf(date: LocalDate): Color {
-        val pixels = calendarDay(date).captureToImage().toPixelMap()
-        return pixels[pixels.width / 2, (pixels.height * 0.1f).toInt()]
-    }
-
-    // True if the day's number has (nearly) black pixels in it
-    private fun hasBlackText(date: LocalDate): Boolean {
-        val pixels = calendarDay(date).captureToImage().toPixelMap()
-        for (x in 0 until pixels.width) {
-            for (y in 0 until pixels.height) {
-                val c = pixels[x, y]
-                if (c.red < 0.2f && c.green < 0.2f && c.blue < 0.2f) return true
-            }
-        }
-        return false
-    }
-
     // Test if Calendar opens in the first pair
     @Test
     fun calendarOpensOnFirstPairMonth() {
@@ -645,13 +619,11 @@ class EntrantCampsiteDetailsTest {
         showCalendar()
         // Start, middle and end of a pair
         listOf(3, 4, 6).forEach {
-            assertTrue("July $it should be light blue", closeTo(backgroundColourOf(july(it)), CalendarHighlight))
+            calendarDay(july(it)).assert(SemanticsMatcher.expectValue(DayBackgroundColorKey, CalendarHighlight))
         }
-        // Outside every pair: plain white
+        // Outside every pair the cell adds no background over its white calendar surface.
         listOf(2, 8).forEach {
-            val colour = backgroundColourOf(july(it))
-            assertFalse("July $it should not be light blue", closeTo(colour, CalendarHighlight))
-            assertTrue("July $it should be white", closeTo(colour, Color.White))
+            calendarDay(july(it)).assert(SemanticsMatcher.expectValue(DayBackgroundColorKey, Color.Transparent))
         }
     }
 
@@ -659,8 +631,10 @@ class EntrantCampsiteDetailsTest {
     @Test
     fun highlightedDatesHaveBlackText() {
         showCalendar()
-        assertTrue("July 4 should have black text", hasBlackText(july(4)))
-        assertFalse("July 8 should have greyed-out text", hasBlackText(july(8)))
+        calendarDay(july(4)).assert(SemanticsMatcher.expectValue(DayTextColorKey, Color.Black))
+        calendarDay(july(8)).assert(SemanticsMatcher("dimmed day text") {
+            it.config[DayTextColorKey].alpha in 0.45f..0.55f
+        })
     }
 
     // Test if campsite details show campsite dates

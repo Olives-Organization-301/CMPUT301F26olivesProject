@@ -186,6 +186,7 @@ class DatabaseCampsites(private val db: FirebaseFirestore = Firebase.firestore) 
                 campsite.lotteryDrawnAt = (doc.get("lotteryDrawnAt") as? Number)?.toLong()
                 campsite.lotteryNotificationsPending = doc.getBoolean("lotteryNotificationsPending") == true
                 campsite.sharedLotteryID = doc.getString("lotteryID")?.takeIf { it.isNotBlank() }
+                campsite.allowSharedLottery = doc.getBoolean("allowSharedLottery") == true
                 if (legacyActive != null && migrateLegacyFields) {
                     val update = mutableMapOf<String, Any>("activeLotteryList" to FieldValue.delete())
                     if (legacyActive.isNotEmpty()) {
@@ -566,6 +567,23 @@ class DatabaseCampsites(private val db: FirebaseFirestore = Firebase.firestore) 
                 "lotteryEndDate" to end.toString(),
                 "waitlistCapacity" to capacity
             ))
+            true
+        }
+    }
+
+    /**
+     * Only the site's owner can offer an unassigned campsite to another owner's lottery.
+     * Codex prompt: "so how can campsite owners basically collab" (US 02.04.08).
+     */
+    internal fun setSharedLotteryOffer(campsiteID: String, ownerID: String, offered: Boolean): Task<Boolean> {
+        val ref = campsitesRef.document(campsiteID)
+        return db.runTransaction { tx ->
+            val site = tx.get(ref)
+            val siteOwner = sequenceOf("ownerID", "OwnerID", "ownerId", "owner_id")
+                .firstNotNullOfOrNull { site.get(it)?.toString() }
+            if (!site.exists() || siteOwner != ownerID ||
+                !site.getString("lotteryID").isNullOrBlank()) return@runTransaction false
+            tx.update(ref, "allowSharedLottery", offered)
             true
         }
     }

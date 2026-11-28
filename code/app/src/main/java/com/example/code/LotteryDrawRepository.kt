@@ -28,7 +28,9 @@ import kotlin.random.Random
 
 internal data class LotteryDrawTarget(val id: String, val shared: Boolean)
 
-/** Owners process their own draws. Entrants can also process a draw they entered. */
+/** All participating owners may process a shared draw; entrants may process one they entered.
+ * Codex prompts: "work on 2.04.08" and "check it correct if it works properly we are going to present with all devices online".
+ */
 @RequiresApi(Build.VERSION_CODES.O)
 internal fun dueLotteryTargets(
     userID: String,
@@ -43,7 +45,7 @@ internal fun dueLotteryTargets(
     }.map { LotteryDrawTarget(it.campsiteID, shared = false) }
     val shared = lotteries.filter {
         (it.notificationsPending || !it.drawn && !now.isBefore(it.closes)) &&
-            if (owner) it.ownerID == userID else userID in it.entrants
+            if (owner) userID in it.ownerIDs else userID in it.entrants
     }.map { LotteryDrawTarget(it.id, shared = true) }
     return solo + shared
 }
@@ -138,7 +140,8 @@ internal class LotteryDrawRepository(
 
             if (target.shared) {
                 val lottery = parseShared(doc) ?: return@runTransaction null
-                if (!authorized(userID, owner, lottery.ownerID, lottery.entrants, frozen)) return@runTransaction null
+                if (!authorized(userID, owner, lottery.ownerID, lottery.entrants, frozen) &&
+                    !(owner && userID in lottery.ownerIDs)) return@runTransaction null
                 val name = doc.getString("name") ?: "Shared lottery"
                 if (pending && drawnAt != null) {
                     Delivery(drawnAt, sharedLotteryMessages(lottery, name, frozen, lottery.winners, drawnAt))
