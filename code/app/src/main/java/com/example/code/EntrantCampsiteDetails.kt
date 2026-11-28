@@ -616,6 +616,10 @@ internal val CalendarHighlight = Color(0xFFBBDEFB)
 /** Test hook: true when a calendar day is drawn highlighted */
 val DayHighlightedKey = SemanticsPropertyKey<Boolean>("DayHighlighted")
 var SemanticsPropertyReceiver.dayHighlighted by DayHighlightedKey
+val DayBackgroundColorKey = SemanticsPropertyKey<Color>("DayBackgroundColor")
+var SemanticsPropertyReceiver.dayBackgroundColor by DayBackgroundColorKey
+val DayTextColorKey = SemanticsPropertyKey<Color>("DayTextColor")
+var SemanticsPropertyReceiver.dayTextColor by DayTextColorKey
 
 /** True if [date] falls inside any start/end pair (both ends included) */
 @RequiresApi(Build.VERSION_CODES.O)
@@ -750,6 +754,8 @@ private fun CalendarDay(
      * shape            - Get the rounded Corner for the highlighter
      */
     val highlighted = isDateAvailable(date, ranges)
+    val backgroundColor = if (highlighted) CalendarHighlight else Color.Transparent
+    val textColor = if (highlighted) Color.Black else LocalContentColor.current.copy(alpha = 0.5f)
     val roundStart = !isDateAvailable(date.minusDays(1), ranges) ||
         date.dayOfWeek == DayOfWeek.SUNDAY || date.dayOfMonth == 1
     val roundEnd = !isDateAvailable(date.plusDays(1), ranges) ||
@@ -768,14 +774,18 @@ private fun CalendarDay(
             .padding(vertical = 2.dp)
             .then(if (highlighted) Modifier.background(CalendarHighlight, shape) else Modifier)
             .testTag("calendarDay_$date")
-            .semantics { dayHighlighted = highlighted },
+            .semantics {
+                dayHighlighted = highlighted
+                dayBackgroundColor = backgroundColor
+                dayTextColor = textColor
+            },
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = date.dayOfMonth.toString(),
             fontSize = 14.sp,
             fontWeight = if (highlighted) FontWeight.Bold else FontWeight.Normal,
-            color = if (highlighted) Color.Black else LocalContentColor.current.copy(alpha = 0.5f)
+            color = textColor
         )
     }
 }

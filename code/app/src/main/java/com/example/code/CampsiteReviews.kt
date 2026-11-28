@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -189,14 +190,23 @@ private fun ReviewComposer(
         ),
         modifier = Modifier.fillMaxWidth()
     )
-    Button(enabled = ready && text.isNotBlank() && !saving, onClick = {
-        saving = true
-        failed = false
-        onPost(text.trim()) { saved ->
-            saving = false
-            failed = !saved
-            if (saved) text = ""
+    Button(
+        enabled = ready && text.isNotBlank() && !saving,
+        colors = if (action == "Post review") ButtonDefaults.buttonColors(
+            containerColor = Color(0xFF4A3678),
+            contentColor = Color.White,
+            disabledContainerColor = Color(0xFF514A65),
+            disabledContentColor = Color.White.copy(alpha = 0.8f)
+        ) else ButtonDefaults.buttonColors(),
+        onClick = {
+            saving = true
+            failed = false
+            onPost(text.trim()) { saved ->
+                saving = false
+                failed = !saved
+                if (saved) text = ""
+            }
         }
-    }) { Text(action) }
+    ) { Text(action) }
     if (failed) Text("Could not post. Try again.", color = textColor)
 }

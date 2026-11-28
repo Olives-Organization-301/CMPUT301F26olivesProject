@@ -58,6 +58,7 @@ class Campsite(
     var lotteryDrawnAt: Long? = null
     var lotteryNotificationsPending: Boolean = false
     var sharedLotteryID: String? = null
+    var allowSharedLottery: Boolean = false
     // Lottery winners per location: "0" -> entrant IDs who won location 1, "1" -> location 2, ...
     // (String keys because Firestore map keys must be strings)
     private var locationWinners = mutableMapOf<String, MutableList<String>>()
@@ -199,6 +200,7 @@ class Campsite(
         "waitlistCapacity" to waitlistCapacity,
         "lotteryDrawnAt" to lotteryDrawnAt,
         "lotteryID" to sharedLotteryID,
+        "allowSharedLottery" to allowSharedLottery,
         "locationWinners" to locationWinners,
         "coordinates" to coordinates.map { it.toMap() },
         "thumbnailImage" to thumbnailImage,
