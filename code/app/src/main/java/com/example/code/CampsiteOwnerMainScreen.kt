@@ -687,21 +687,41 @@ fun CampsiteOwnerMainScreen(
         )
     }
 
+    // US 02.04.08. Prompt: "work on 2.04.08". Offer a site's participation in its
+    // owner's dialog; the coordinator may select offered sites from other owners.
     showLottery?.let { current ->
         val live = appState.campsites.campsites.firstOrNull { it.campsiteID == current.campsiteID }
         val groupID = if (live == null) current.sharedLotteryID else live.sharedLotteryID
         val group = groupID?.let { appState.campsites.sharedLotteries.find(it) }
-        val eligibleIDs = appState.campsites.campsites.filter {
-            it.getOwnerID() == appState.userID && it.sharedLotteryID == null &&
+        val eligibleSites = appState.campsites.campsites.filter {
+            (it.getOwnerID() == appState.userID || it.allowSharedLottery) && it.sharedLotteryID == null &&
                 !it.isLotteryDrawn() && it.getWaitingList().isEmpty()
-        }.map { it.campsiteID }.toSet()
-        val options = previewCampsites.filter { it.campsiteID in eligibleIDs || it.campsiteID in group?.campsiteIDs.orEmpty() }
+        }
+        val options = (eligibleSites + appState.campsites.campsites.filter {
+            it.campsiteID in group?.campsiteIDs.orEmpty()
+        }).distinctBy { it.campsiteID }.map { site ->
+            previewCampsites.firstOrNull { it.campsiteID == site.campsiteID } ?: PreviewCampsite(
+                name = site.getName(), location = "", startMillis = null, endMillis = null,
+                startMillisRegis = null, endMillisRegis = null, campsiteID = site.campsiteID,
+                description = "Offered by another owner"
+            )
+        }
         LotteryDialog(
             campsite = current,
             liveCampsite = live,
             group = group,
             groupLoading = groupID != null && group == null,
+            canEditGroup = group == null || group.ownerID == appState.userID,
             campsiteOptions = options,
+            offered = live?.allowSharedLottery == true,
+            onOffer = { offered ->
+                val ownerID = appState.userID ?: return@LotteryDialog
+                appState.campsites.setSharedLotteryOffer(current.campsiteID, ownerID, offered)
+                    .addOnCompleteListener { result ->
+                        if (!result.isSuccessful || result.result != true)
+                            Toast.makeText(context, "Could not update shared lottery offer", Toast.LENGTH_LONG).show()
+                    }
+            },
             entrantNames = appState.entrants.entrants.associate { it.getUserID() to it.name.ifBlank { it.username } },
             saving = savingLottery,
             onDismiss = { if (!savingLottery) showLottery = null },
@@ -1187,7 +1207,10 @@ private fun LotteryDialog(
     liveCampsite: Campsite?,
     group: SharedLottery?,
     groupLoading: Boolean,
+    canEditGroup: Boolean,
     campsiteOptions: List<PreviewCampsite>,
+    offered: Boolean,
+    onOffer: (Boolean) -> Unit,
     entrantNames: Map<String, String>,
     saving: Boolean,
     onDismiss: () -> Unit,
@@ -1220,7 +1243,8 @@ private fun LotteryDialog(
     val capacityValid = capacityText.isBlank() || capacity != null && capacity > 0 && capacity >= entrants.size
     val now by registrationClock()
     val openingLocked = if (group != null) !now.isBefore(group.opens) else entrants.isNotEmpty()
-    val editable = !groupLoading && !drawn && (group?.closes ?: liveCampsite?.getEndDate())?.let { now.isBefore(it) } != false
+    val editable = canEditGroup && !groupLoading && !drawn &&
+        (group?.closes ?: liveCampsite?.getEndDate())?.let { now.isBefore(it) } != false
     val memberSelectionEnabled = editable && !openingLocked && !saving &&
         (group != null || campsiteOptions.any { it.campsiteID == anchorID })
     val selectionChanged = selected.toSet() != group?.campsiteIDs?.toSet()
@@ -1236,6 +1260,19 @@ private fun LotteryDialog(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 item {
+                    if (group == null) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(
+                                checked = offered,
+                                enabled = !saving,
+                                onCheckedChange = onOffer,
+                                modifier = Modifier.testTag("offerSharedLottery")
+                            )
+                            Text("Allow another owner to include this campsite in a shared lottery")
+                        }
+                    } else if (!canEditGroup) {
+                        Text("Managed by the owner who created this shared lottery")
+                    }
                     Text("Registration opens: " + (start?.let { format.format(Date(it)) } ?: "Not set"))
                     Text("Registration closes: " + (end?.let { format.format(Date(it)) } ?: "Not set"))
                     if (groupLoading) Text("Loading shared lottery…")
@@ -1274,7 +1311,7 @@ private fun LotteryDialog(
                                     selected = if (checked) selected + option.campsiteID else selected - option.campsiteID
                                 }
                             )
-                            Text(option.name)
+                            Text(option.name + if (option.description == "Offered by another owner") " (another owner)" else "")
                         }
                     }
                 }

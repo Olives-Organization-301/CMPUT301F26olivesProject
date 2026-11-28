@@ -12,6 +12,7 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -19,6 +20,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performTextInput
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
@@ -617,6 +619,9 @@ class EntrantMessagesTest {
         }
         // ...and is now part of the conversation the owner would load
         assertTrue(appState.chat.conversation("c_4", user).any { it.text == "Is the site dog friendly?" })
+        // The keyboard can cover the newest lazy-list item on a small emulator screen.
+        val sentIndex = appState.chat.conversation("c_4", user).lastIndex
+        composeTestRule.onNode(hasScrollToIndexAction()).performScrollToIndex(sentIndex)
         val sentMessage = composeTestRule.onNode(
             hasText("Is the site dog friendly?") and !hasSetTextAction()
         )

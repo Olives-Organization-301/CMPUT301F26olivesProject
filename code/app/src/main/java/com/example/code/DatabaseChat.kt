@@ -5,6 +5,7 @@ import com.example.code.classes.ChatMessage
 import com.google.firebase.Firebase
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentSnapshot
+import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.firestore
 
 /** # Database Chat
@@ -14,8 +15,7 @@ import com.google.firebase.firestore.firestore
  *  Prompt: "Create a Firestore database class for real-time chat message synchronization"
  *
  */
-class DatabaseChat {
-    private val db = Firebase.firestore
+class DatabaseChat(private val db: FirebaseFirestore = Firebase.firestore) {
     private val messagesRef = db.collection("messages")
     private val _messages = mutableStateListOf<ChatMessage>()
 

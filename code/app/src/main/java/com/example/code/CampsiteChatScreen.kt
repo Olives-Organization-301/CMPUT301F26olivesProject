@@ -37,6 +37,8 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.example.code.classes.AppState
 import com.example.code.classes.ChatMessage
+import com.example.code.classes.Campsite
+import com.example.code.classes.Entrant
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -47,14 +49,47 @@ import java.util.Locale
  *  Prototype was gained from a Conversation with Android Studio's agent
  *  Prompt: "Create an interactive chat screen with real-time text messaging and input field"
  *
- *  Codex prompt summary: Open Messages to list entrants with reservations at the owner's
- *  campsites, then verify the flow on the emulator.
+ *  Codex prompts: "so when entrant registers, for campsite owner messages no entrant messages
+ *  appear, fix that"; "make test cases for this in any case"; and "can owner B see messages
+ *  from the entrants on that campsite collab". Registration shows an entrant on every
+ *  member campsite's owner inbox, while each campsite retains its own message thread.
  *
  */
 
 private val ChatBackground = Color(0xFFD4D0CF)
 private val BubbleColor = Color(0xFF2B2B2B)
 private val SubtitleColor = Color(0xFF666666)
+
+/**
+ * Builds one thread per entrant and owned campsite from registrations, bookings and shared
+ * lottery entrants. Deduplication keeps an entrant registered through two lists in one row.
+ * The owner filter prevents a collaborator from seeing another owner's campsite messages.
+ */
+internal fun ownerMessageThreads(
+    ownerID: String?,
+    campsites: List<Campsite>,
+    entrants: List<Entrant>,
+    lotteries: List<SharedLottery>,
+): List<Pair<Campsite, Entrant>> {
+    if (ownerID == null) return emptyList()
+    val entrantsByID = entrants.associateBy { it.getUserID() }
+    val listedBySite = entrants.flatMap { entrant ->
+        listOf(WAITING_LIST, ACTIVE_CAMPSITES, RESERVED_CAMPSITES)
+            .flatMap { entrant.getCampsiteLists()[it].orEmpty() }
+            .distinct().map { it to entrant.getUserID() }
+    }.groupBy({ it.first }, { it.second })
+    val lotteriesByID = lotteries.associateBy { it.id }
+    return campsites.asSequence()
+        .filter { it.getOwnerID() == ownerID }
+        .sortedBy { it.getName() }
+        .flatMap { site ->
+            (listedBySite[site.campsiteID].orEmpty() +
+                (site.sharedLotteryID?.let(lotteriesByID::get)?.entrants.orEmpty()))
+                .distinct().mapNotNull(entrantsByID::get)
+                .sortedBy { it.name.ifBlank { it.username } }
+                .asSequence().map { site to it }
+        }.toList()
+}
 
 @Composable
 fun CampsiteChatScreen(
@@ -65,19 +100,13 @@ fun CampsiteChatScreen(
     var campsiteID by rememberSaveable(ownerID) { mutableStateOf<String?>(null) }
     var entrantID by rememberSaveable(ownerID) { mutableStateOf<String?>(null) }
 
-    // Reserved Campsites is the confirmed list. The same entrant can have a thread at each site.
-    val entrantsByCampsite = appState.entrants.entrants.flatMap { entrant ->
-        entrant.getCampsiteLists()[RESERVED_CAMPSITES].orEmpty().distinct().map { it to entrant }
-    }.groupBy({ it.first }, { it.second })
-    val reservations = appState.campsites.campsites
-        .filter { ownerID != null && it.getOwnerID() == ownerID }
-        .sortedBy { it.getName() }
-        .flatMap { campsite ->
-            entrantsByCampsite[campsite.campsiteID].orEmpty()
-                .sortedBy { it.name.ifBlank { it.username } }
-                .map { entrant -> campsite to entrant }
-        }
-    val selection = reservations.firstOrNull { (campsite, entrant) ->
+    // Registration can place an entrant on the waiting or active list before they reserve.
+    // Keep one conversation per entrant and campsite across all three stages.
+    val conversations = ownerMessageThreads(
+        ownerID, appState.campsites.campsites, appState.entrants.entrants,
+        appState.campsites.sharedLotteries.all()
+    )
+    val selection = conversations.firstOrNull { (campsite, entrant) ->
         campsite.campsiteID == campsiteID && entrant.getUserID() == entrantID
     }
     val closeThread = {
@@ -111,11 +140,11 @@ fun CampsiteChatScreen(
             Button(onClick = { navController.popBackStack() }) { Text("Back") }
             Text("Messages", fontSize = 20.sp, fontWeight = FontWeight.Medium, color = Color.Black)
         }
-        if (reservations.isEmpty()) {
-            Text("No entrants with confirmed reservations.", modifier = Modifier.padding(top = 12.dp), color = Color.Black)
+        if (conversations.isEmpty()) {
+            Text("No registered entrants yet.", modifier = Modifier.padding(top = 12.dp), color = Color.Black)
         }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(reservations) { (campsite, entrant) ->
+            items(conversations) { (campsite, entrant) ->
                 Surface(
                     onClick = {
                         campsiteID = campsite.campsiteID
@@ -199,7 +228,7 @@ private fun OwnerChatThread(
             }
         }
 
-        // Chat Input Bar for Campsite Owner to message user reserving campsite
+        // Chat Input Bar for the campsite owner to message a registered entrant
         Surface(
             modifier = Modifier.fillMaxWidth(),
             color = Color.White,

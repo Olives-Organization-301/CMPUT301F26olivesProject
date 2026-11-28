@@ -21,7 +21,11 @@ import org.junit.Test
 import java.time.LocalDate
 import java.time.LocalDateTime
 
-/** Tests the registration window, shared signup, and winner choice requested on [SharedLotteryRepository]. */
+/**
+ * Tests registration, shared signup and winner choice. The prompt "work on 2.04.08"
+ * added tests for another owner's offered campsite, opting in, and read-only
+ * participation in a lottery coordinated by another owner.
+ */
 class SharedLotteryTest {
     @get:Rule
     val compose = createComposeRule()
@@ -92,6 +96,67 @@ class SharedLotteryTest {
     }
 
     @Test
+    fun ownerCanSelectAnotherOwnersOfferedCampsite() {
+        val soon = lotteryNow().toLocalDate().plusDays(2)
+        val pine = campsite("pine", "Pine Camp", soon)
+        val cedar = Campsite("Cedar Camp", "other-owner", "cedar", mutableListOf(4), 50f,
+            coordinates = mutableListOf(), lotteryStartDate = soon.atStartOfDay(),
+            lotteryEndDate = soon.plusDays(3).atTime(23, 59, 59)).apply {
+            allowSharedLottery = true
+        }
+        val repo = mockk<SharedLotteryRepository>()
+        every { repo.save(null, "owner", listOf("pine", "cedar"), any(), any(), null, 5) } returns Tasks.forResult(true)
+        val state = state(listOf(pine, cedar), repo).apply {
+            userID = "owner"
+            role = "owner"
+        }
+        compose.setContent { CampsiteOwnerMainScreen(rememberNavController(), state) }
+        compose.onAllNodes(hasText("Menu"))[0].performClick()
+        compose.onNodeWithText("Lottery").performClick()
+        compose.onNodeWithTag("lotterySite_cedar").performClick()
+        compose.onNodeWithText("Save lottery").performClick()
+        compose.runOnIdle {
+            verify(exactly = 1) { repo.save(null, "owner", listOf("pine", "cedar"), any(), any(), null, 5) }
+        }
+    }
+
+    @Test
+    fun campsiteOwnerCanOfferTheirSiteForAnotherOwnersLottery() {
+        val soon = lotteryNow().toLocalDate().plusDays(2)
+        val pine = campsite("pine", "Pine Camp", soon)
+        val repo = mockk<SharedLotteryRepository>(relaxed = true)
+        val state = state(listOf(pine), repo).apply { userID = "owner"; role = "owner" }
+        every { state.campsites.setSharedLotteryOffer("pine", "owner", true) } returns Tasks.forResult(true)
+        compose.setContent { CampsiteOwnerMainScreen(rememberNavController(), state) }
+        compose.onAllNodes(hasText("Menu"))[0].performClick()
+        compose.onNodeWithText("Lottery").performClick()
+        compose.onNodeWithTag("offerSharedLottery").performClick()
+        compose.runOnIdle {
+            verify(exactly = 1) { state.campsites.setSharedLotteryOffer("pine", "owner", true) }
+        }
+    }
+
+    @Test
+    fun participatingOwnerCanViewButCannotEditCoordinatorsLottery() {
+        val soon = lotteryNow().toLocalDate().plusDays(2)
+        val pine = campsite("pine", "Pine Camp", soon).apply { sharedLotteryID = "shared" }
+        val group = fixture().copy(
+            ownerID = "other-owner", ownerIDs = listOf("other-owner", "owner"),
+            campsiteIDs = listOf("cedar", "pine"), opens = soon.atStartOfDay(),
+            closes = soon.plusDays(3).atTime(23, 59, 59), drawn = false
+        )
+        val repo = mockk<SharedLotteryRepository>(relaxed = true) {
+            every { find("shared") } returns group
+        }
+        val state = state(listOf(pine), repo).apply { userID = "owner"; role = "owner" }
+        compose.setContent { CampsiteOwnerMainScreen(rememberNavController(), state) }
+        compose.onAllNodes(hasText("Menu"))[0].performClick()
+        compose.onNodeWithText("Lottery").performClick()
+        compose.onNodeWithText("Managed by the owner who created this shared lottery").assertExists()
+        compose.onNodeWithText("Save lottery").assertDoesNotExist()
+    }
+
+    @Test
     fun winnerMustAgreeToSelectedCampsiteRulesBeforeBooking() {
         val date = lotteryNow().toLocalDate().plusDays(1)
         val pine = campsite("pine", "Pine Camp", date).apply {
@@ -139,7 +204,7 @@ class SharedLotteryTest {
         every { campsites.campsites } returns sites
         every { campsites.sharedLotteries } returns repo
         every { campsites.getCampsitesForOwner("owner", any()) } answers {
-            secondArg<(List<Campsite>) -> Unit>()(sites)
+            secondArg<(List<Campsite>) -> Unit>()(sites.filter { it.getOwnerID() == "owner" })
         }
         val owners = mockk<DatabaseCampsiteOwners>(relaxed = true)
         every { owners.searchCampsiteOwner("owner", any()) } answers {

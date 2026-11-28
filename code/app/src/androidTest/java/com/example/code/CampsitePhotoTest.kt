@@ -82,9 +82,11 @@ class CampsitePhotoTest {
             compose.waitUntil(10_000) {
                 val image = try {
                     compose.onNodeWithTag("campsite-photo").captureToImage()
-                } catch (_: ComposeTimeoutException) {
-                    // An emulator can miss the redraw requested by the window capture.
-                    return@waitUntil false
+                } catch (error: Throwable) {
+                    // PixelCopy occasionally fails to capture an otherwise visible emulator frame.
+                    if (error is ComposeTimeoutException ||
+                        error.message?.contains("PixelCopy") == true) return@waitUntil false
+                    throw error
                 }
                 val pixel = image.toPixelMap()[image.width / 2, image.height / 2]
                 if (!matches(pixel)) return@waitUntil false
