@@ -631,16 +631,18 @@ class DatabaseCampsites(private val db: FirebaseFirestore = Firebase.firestore) 
     //chat here: https://claude.ai/share/cdf52d32-f73c-4fc2-b19e-b7015e307051
 
     internal fun removeReviewRating(review: Review): Task<Void> =
-        reviews(review.campsiteID).document(review.reviewID).update("rating", 0)
+        reviews(review.campsiteID).document(review.reviewID)
+            .update("rating", FieldValue.delete())
+            .onSuccessTask { refreshCampsiteRating(review.campsiteID) }
 
-    internal fun deleteReview(review: Review): Task<Void>{
+    internal fun deleteReview(review: Review): Task<Void> {
         val reviewRef = reviews(review.campsiteID).document(review.reviewID)
-        return reviewRef.collection("replies").get().continueWithTask{ task ->
-                val batch = db.batch()
-                task.result?.documents?.forEach{batch.delete(it.reference) }
-                batch.delete(reviewRef)
-                batch.commit()
-        }
+        return reviewRef.collection("replies").get().continueWithTask { task ->
+            val batch = db.batch()
+            task.result?.documents?.forEach { batch.delete(it.reference) }
+            batch.delete(reviewRef)
+            batch.commit()
+        }.onSuccessTask { refreshCampsiteRating(review.campsiteID) }
     }
 
 

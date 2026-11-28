@@ -62,6 +62,11 @@ import kotlinx.coroutines.withContext
 import androidx.compose.foundation.clickable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.produceState
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /*
 the following admin theme colors code (light and dark) was
@@ -109,6 +114,7 @@ private val AdminDarkColors = AdminThemeColors( // another one for dark mode
 
 data class Profile(val id: String, val name: String, val role: String)
 data class PendingRemoval(val message: String, val onConfirm: () -> Unit)
+data class LogEntry(val heading: String, val body: String, val meta: String)
 
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
@@ -129,6 +135,28 @@ fun AdminMainSearchScreen(
 
     val profiles = ownerDb.campsiteOwners.map { Profile(it.getUserID(), it.username.ifBlank { it.email.ifBlank { it.getUserID() } }, "Campsite Owner") } +
             entrantDb.entrants.map { Profile(it.getUserID(), it.username.ifBlank { it.email.ifBlank { it.getUserID() } }, "Entrant") }
+    val names = profiles.associate { it.id to it.name }
+    val dateFormat = remember { SimpleDateFormat("MMM d, yyyy h:mm a", Locale.getDefault()) }
+
+    // claude used to create the log functions for admin, found at this chat: https://claude.ai/share/cdf52d32-f73c-4fc2-b19e-b7015e307051
+    val notificationLogs = appState.alerts.alerts.map {
+        LogEntry(it.title, it.body, "To: ${names[it.recipient] ?: it.recipient}")
+    }
+
+    val messageLogs = appState.chat.messages
+        .filter { it.fromOwner }
+        .sortedByDescending { it.sentAt }
+        .map {
+            LogEntry(
+                heading = "${names[it.ownerID] ?: it.sender.ifBlank { it.ownerID }} → ${names[it.entrantID] ?: it.entrantID}",
+                body = it.text,
+                meta = listOfNotNull(
+                    it.campsiteName.takeIf { n -> n.isNotBlank() },
+                    it.sentAt.takeIf { t -> t > 0 }?.let { t -> dateFormat.format(Date(t)) },
+                    if (it.automated) "Automated" else null
+                ).joinToString(" · ")
+            )
+        }
 
     fun deleteProfile(profile: Profile){
         if(profile.role == "Campsite Owner"){
@@ -147,7 +175,7 @@ fun AdminMainSearchScreen(
     LaunchedEffect(selectedTop) {
         if (selectedTop == "Campsites" || selectedTop == "Images" || selectedTop == "Reviews"){
         campsiteDb.fetchAllCampsites { _ -> }
-        } else if (selectedTop == "User Database") {
+        } else if (selectedTop == "User Database" || selectedTop == "Logs") {
             entrantDb.fetchAllEntrants { _ -> }
             ownerDb.fetchAllOwners { _ -> }
         }
@@ -236,6 +264,13 @@ fun AdminMainSearchScreen(
                             colors = colors,
                             modifier = Modifier.weight(1f)
                         )
+
+                        "Logs" -> LogsTab(
+                            notifications = notificationLogs,
+                            messages = messageLogs,
+                            colors = colors,
+                            modifier = Modifier.weight(1f)
+                        )
                     }
                 }
             }
@@ -257,15 +292,15 @@ fun TopTabs(selected: String, onSelect: (String) -> Unit, colors: AdminThemeColo
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ){
-        listOf("User Database", "Campsites", "Images", "Reviews").forEach { tab ->
+        listOf("User Database", "Campsites", "Images", "Reviews", "Logs").forEach { tab ->
             val isSelected = selected == tab
             Button(
                 onClick = { onSelect(tab) },
                 modifier = Modifier
-                    .weight(1f)
                     .height(48.dp),
                 shape = RoundedCornerShape(24.dp),
                 colors = ButtonDefaults.buttonColors(
@@ -551,20 +586,78 @@ fun ReviewsTab(
                         colors = cardColors
                     ) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text("${r.authorName}: ★ ${r.rating}", fontWeight = FontWeight.Bold, color = colors.title)
+                            Text(
+                                if (r.rating > 0) "${r.authorName}: ${r.rating}/10" else r.authorName,
+                                fontWeight = FontWeight.Bold,
+                                color = colors.title
+                            )
                             Text(r.review, fontSize = 14.sp, color = colors.subtitle)
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                RemoveButton("Remove rating", onClick = {
-                                    askRemove("Remove the rating from ${r.authorName}'s review?") {
-                                        campsiteDb.removeReviewRating(r)
-                                    }
-                                }, colors = colors)
+                                if (r.rating > 0) {
+                                    RemoveButton("Remove rating", onClick = {
+                                        askRemove("Remove the rating from ${r.authorName}'s review?") {
+                                            campsiteDb.removeReviewRating(r)
+                                        }
+                                    }, colors = colors)
+                                }
                                 RemoveButton("Remove review", onClick = {
                                     askRemove("Remove ${r.authorName}'s review?") {
                                         campsiteDb.deleteReview(r)
                                     }
                                 }, colors = colors)
                             }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// LogsTab made using claude.ai chat with this link: https://claude.ai/share/cdf52d32-f73c-4fc2-b19e-b7015e307051
+@Composable
+fun LogsTab(
+    notifications: List<LogEntry>,
+    messages: List<LogEntry>,
+    colors: AdminThemeColors,
+    modifier: Modifier = Modifier
+) {
+    var showMessages by remember { mutableStateOf(false) }
+    val entries = if (showMessages) messages else notifications
+
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("Notifications" to false, "Messages" to true).forEach { (label, isMessages) ->
+                val isSelected = showMessages == isMessages
+                Button(
+                    onClick = { showMessages = isMessages },
+                    shape = RoundedCornerShape(20.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isSelected) colors.primaryButton else colors.secondaryButton.copy(alpha = 0.3f),
+                        contentColor = if (isSelected) colors.primaryText else colors.title
+                    )
+                ) { Text(label, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+            }
+        }
+
+        LazyColumn(
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(vertical = 4.dp)
+        ) {
+            if (entries.isEmpty()) {
+                item { EmptyState(if (showMessages) "No messages logged" else "No notifications logged", colors) }
+            }
+            items(entries) { entry ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(containerColor = colors.title.copy(alpha = 0.05f))
+                ) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(entry.heading, fontWeight = FontWeight.Bold, color = colors.title)
+                        Text(entry.body, fontSize = 14.sp, color = colors.title)
+                        if (entry.meta.isNotBlank()) {
+                            Text(entry.meta, fontSize = 12.sp, color = colors.subtitle)
                         }
                     }
                 }
