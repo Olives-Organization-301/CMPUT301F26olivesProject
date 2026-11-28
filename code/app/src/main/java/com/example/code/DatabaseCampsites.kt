@@ -357,6 +357,21 @@ class DatabaseCampsites(private val db: FirebaseFirestore = Firebase.firestore) 
             "timestamp" to System.currentTimeMillis()
         )
 
+    //claude.ai used for creating the removeCampsiteImage function and it's accompanying methods
+    //In the main kotlin functions.
+    //chat here: https://claude.ai/share/cdf52d32-f73c-4fc2-b19e-b7015e307051
+
+    fun removeCampsiteImage(campsiteID: String): Task<Void>{
+        val batch = db.batch()
+        batch.update(
+            campsitesRef.document(campsiteID),
+            mapOf("detailsImage" to null, "thumbnailImage" to null)
+        )
+        batch.delete(campsiteImageRef(campsiteID))
+        return batch.commit()
+    }
+
+
     fun updateCampsiteName(campsite: Campsite, newName: String) {
         try {
             val index = _campsites.indexOfFirst { it.campsiteID == campsite.campsiteID }
@@ -628,6 +643,26 @@ class DatabaseCampsites(private val db: FirebaseFirestore = Firebase.firestore) 
             } else posted
         }
     }
+
+    //claude.ai used to create remove campsite ratings and reviews and it's following functions
+    //in the main methods.
+    //chat here: https://claude.ai/share/cdf52d32-f73c-4fc2-b19e-b7015e307051
+
+    internal fun removeReviewRating(review: Review): Task<Void> =
+        reviews(review.campsiteID).document(review.reviewID)
+            .update("rating", FieldValue.delete())
+            .onSuccessTask { refreshCampsiteRating(review.campsiteID) }
+
+    internal fun deleteReview(review: Review): Task<Void> {
+        val reviewRef = reviews(review.campsiteID).document(review.reviewID)
+        return reviewRef.collection("replies").get().continueWithTask { task ->
+            val batch = db.batch()
+            task.result?.documents?.forEach { batch.delete(it.reference) }
+            batch.delete(reviewRef)
+            batch.commit()
+        }.onSuccessTask { refreshCampsiteRating(review.campsiteID) }
+    }
+
 
     internal fun observeReviewReplies(review: Review, onResult: (List<ReviewReply>?) -> Unit) =
         reviews(review.campsiteID).document(review.reviewID).collection("replies").orderBy("createdAt")

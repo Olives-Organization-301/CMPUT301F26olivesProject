@@ -3,6 +3,7 @@ package com.example.code
 
 import android.os.Build
 import androidx.annotation.RequiresApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -18,6 +19,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -47,9 +51,22 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.sp
 import com.example.code.classes.AppState
 import com.example.code.classes.Campsite
+import com.example.code.classes.Review
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import androidx.compose.foundation.clickable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.produceState
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /*
 the following admin theme colors code (light and dark) was
@@ -97,6 +114,7 @@ private val AdminDarkColors = AdminThemeColors( // another one for dark mode
 
 data class Profile(val id: String, val name: String, val role: String)
 data class PendingRemoval(val message: String, val onConfirm: () -> Unit)
+data class LogEntry(val heading: String, val body: String, val meta: String)
 
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
@@ -117,6 +135,28 @@ fun AdminMainSearchScreen(
 
     val profiles = ownerDb.campsiteOwners.map { Profile(it.getUserID(), it.username.ifBlank { it.email.ifBlank { it.getUserID() } }, "Campsite Owner") } +
             entrantDb.entrants.map { Profile(it.getUserID(), it.username.ifBlank { it.email.ifBlank { it.getUserID() } }, "Entrant") }
+    val names = profiles.associate { it.id to it.name }
+    val dateFormat = remember { SimpleDateFormat("MMM d, yyyy h:mm a", Locale.getDefault()) }
+
+    // claude used to create the log functions for admin, found at this chat: https://claude.ai/share/cdf52d32-f73c-4fc2-b19e-b7015e307051
+    val notificationLogs = appState.alerts.alerts.map {
+        LogEntry(it.title, it.body, "To: ${names[it.recipient] ?: it.recipient}")
+    }
+
+    val messageLogs = appState.chat.messages
+        .filter { it.fromOwner }
+        .sortedByDescending { it.sentAt }
+        .map {
+            LogEntry(
+                heading = "${names[it.ownerID] ?: it.sender.ifBlank { it.ownerID }} → ${names[it.entrantID] ?: it.entrantID}",
+                body = it.text,
+                meta = listOfNotNull(
+                    it.campsiteName.takeIf { n -> n.isNotBlank() },
+                    it.sentAt.takeIf { t -> t > 0 }?.let { t -> dateFormat.format(Date(t)) },
+                    if (it.automated) "Automated" else null
+                ).joinToString(" · ")
+            )
+        }
 
     fun deleteProfile(profile: Profile){
         if(profile.role == "Campsite Owner"){
@@ -133,9 +173,9 @@ fun AdminMainSearchScreen(
     }
 
     LaunchedEffect(selectedTop) {
-        if (selectedTop == "Campsites") {
-            campsiteDb.fetchAllCampsites { _ -> }
-        } else if (selectedTop == "User Database") {
+        if (selectedTop == "Campsites" || selectedTop == "Images" || selectedTop == "Reviews"){
+        campsiteDb.fetchAllCampsites { _ -> }
+        } else if (selectedTop == "User Database" || selectedTop == "Logs") {
             entrantDb.fetchAllEntrants { _ -> }
             ownerDb.fetchAllOwners { _ -> }
         }
@@ -205,6 +245,32 @@ fun AdminMainSearchScreen(
                             colors = colors,
                             modifier = Modifier.weight(1f)
                         )
+
+                        "Images" -> ImagesTab(
+                            campsites = campsiteDb.campsites.filter { it.getName().contains(query, ignoreCase = true) },
+                            onRemove = { campsite ->
+                                askRemove("Remove the photo for \"${campsite.getName()}\"?") {
+                                    campsiteDb.removeCampsiteImage(campsite.campsiteID)
+                                }
+                            },
+                            colors = colors,
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        "Reviews" -> ReviewsTab(
+                            campsites = campsiteDb.campsites.filter { it.getName().contains(query, ignoreCase = true) },
+                            campsiteDb = campsiteDb,
+                            askRemove = askRemove,
+                            colors = colors,
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        "Logs" -> LogsTab(
+                            notifications = notificationLogs,
+                            messages = messageLogs,
+                            colors = colors,
+                            modifier = Modifier.weight(1f)
+                        )
                     }
                 }
             }
@@ -226,15 +292,15 @@ fun TopTabs(selected: String, onSelect: (String) -> Unit, colors: AdminThemeColo
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ){
-        listOf("User Database", "Campsites").forEach { tab ->
+        listOf("User Database", "Campsites", "Images", "Reviews", "Logs").forEach { tab ->
             val isSelected = selected == tab
             Button(
                 onClick = { onSelect(tab) },
                 modifier = Modifier
-                    .weight(1f)
                     .height(48.dp),
                 shape = RoundedCornerShape(24.dp),
                 colors = ButtonDefaults.buttonColors(
@@ -243,7 +309,7 @@ fun TopTabs(selected: String, onSelect: (String) -> Unit, colors: AdminThemeColo
                 ),
                 contentPadding = PaddingValues(horizontal = 8.dp)
             ){
-                Text(tab, maxLines = 1, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                Text(tab, maxLines = 1, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -400,6 +466,200 @@ fun CampsiteCard(campsite: Campsite, onRemove: () -> Unit, colors: AdminThemeCol
                     }
                     Spacer(Modifier.width(8.dp))
                     RemoveButton("Remove", onClick = onRemove, colors = colors)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ImagesTab(
+    campsites: List<Campsite>,
+    onRemove: (Campsite) -> Unit,
+    colors: AdminThemeColors,
+    modifier: Modifier = Modifier
+) {
+    val withPhotos = campsites.filter { !it.detailsPhoto().isNullOrBlank() }
+    if (withPhotos.isEmpty()) {
+        EmptyState("No uploaded images", colors)
+        return
+    }
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(2),
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(vertical = 4.dp)
+    ) {
+        items(withPhotos, key = { it.campsiteID }) { campsite ->
+            val photo = campsite.detailsPhoto().orEmpty()
+            // Decode off the main thread; the photos are 1280px wide
+            val bitmap by produceState<ImageBitmap?>(null, photo) {
+                value = withContext(Dispatchers.Default) { decodeBase64ToImageBitmap(photo) }
+            }
+            Card(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = colors.title.copy(alpha = 0.05f))
+            ) {
+                Column {
+                    bitmap?.let {
+                        Image(
+                            bitmap = it,
+                            contentDescription = campsite.getName(),
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxWidth().height(120.dp)
+                        )
+                    }
+                    Text(
+                        campsite.getName(),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        color = colors.title,
+                        maxLines = 1,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                    )
+                    Box(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                        RemoveButton("Remove", onClick = { onRemove(campsite) }, colors = colors)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@RequiresApi(Build.VERSION_CODES.O)
+@Composable
+fun ReviewsTab(
+    campsites: List<Campsite>,
+    campsiteDb: DatabaseCampsites,
+    askRemove: (String, () -> Unit) -> Unit,
+    colors: AdminThemeColors,
+    modifier: Modifier = Modifier
+) {
+    var selected by remember { mutableStateOf<Campsite?>(null) }
+    val current = selected
+    val cardColors = CardDefaults.cardColors(containerColor = colors.title.copy(alpha = 0.05f))
+
+    if (current == null) {
+        LazyColumn(
+            modifier = modifier,
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(vertical = 4.dp)
+        ) {
+            if (campsites.isEmpty()) item { EmptyState("No campsites found", colors) }
+            items(campsites, key = { it.campsiteID }) { c ->
+                Card(
+                    modifier = Modifier.fillMaxWidth().clickable { selected = c },
+                    shape = RoundedCornerShape(24.dp),
+                    colors = cardColors
+                ) {
+                    Text(
+                        c.getName(),
+                        fontWeight = FontWeight.Bold,
+                        color = colors.title,
+                        modifier = Modifier.padding(16.dp)
+                    )
+                }
+            }
+        }
+    } else {
+        var reviews by remember(current.campsiteID) { mutableStateOf<List<Review>>(emptyList()) }
+        DisposableEffect(current.campsiteID) {
+            val registration = campsiteDb.observeReviews(current.campsiteID) { reviews = it ?: emptyList() }
+            onDispose { registration.remove() }
+        }
+
+        Column(modifier = modifier) {
+            TextButton(onClick = { selected = null }) {
+                Text("← Back to campsites", color = colors.title)
+            }
+            Text("Reviews for ${current.getName()}", fontWeight = FontWeight.Bold, color = colors.title)
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(vertical = 12.dp)
+            ) {
+                if (reviews.isEmpty()) item { EmptyState("No reviews yet", colors) }
+                items(reviews, key = { it.reviewID }) { r ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(24.dp),
+                        colors = cardColors
+                    ) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                if (r.rating > 0) "${r.authorName}: ${r.rating}/10" else r.authorName,
+                                fontWeight = FontWeight.Bold,
+                                color = colors.title
+                            )
+                            Text(r.review, fontSize = 14.sp, color = colors.subtitle)
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                if (r.rating > 0) {
+                                    RemoveButton("Remove rating", onClick = {
+                                        askRemove("Remove the rating from ${r.authorName}'s review?") {
+                                            campsiteDb.removeReviewRating(r)
+                                        }
+                                    }, colors = colors)
+                                }
+                                RemoveButton("Remove review", onClick = {
+                                    askRemove("Remove ${r.authorName}'s review?") {
+                                        campsiteDb.deleteReview(r)
+                                    }
+                                }, colors = colors)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// LogsTab made using claude.ai chat with this link: https://claude.ai/share/cdf52d32-f73c-4fc2-b19e-b7015e307051
+@Composable
+fun LogsTab(
+    notifications: List<LogEntry>,
+    messages: List<LogEntry>,
+    colors: AdminThemeColors,
+    modifier: Modifier = Modifier
+) {
+    var showMessages by remember { mutableStateOf(false) }
+    val entries = if (showMessages) messages else notifications
+
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("Notifications" to false, "Messages" to true).forEach { (label, isMessages) ->
+                val isSelected = showMessages == isMessages
+                Button(
+                    onClick = { showMessages = isMessages },
+                    shape = RoundedCornerShape(20.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isSelected) colors.primaryButton else colors.secondaryButton.copy(alpha = 0.3f),
+                        contentColor = if (isSelected) colors.primaryText else colors.title
+                    )
+                ) { Text(label, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+            }
+        }
+
+        LazyColumn(
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(vertical = 4.dp)
+        ) {
+            if (entries.isEmpty()) {
+                item { EmptyState(if (showMessages) "No messages logged" else "No notifications logged", colors) }
+            }
+            items(entries) { entry ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(containerColor = colors.title.copy(alpha = 0.05f))
+                ) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(entry.heading, fontWeight = FontWeight.Bold, color = colors.title)
+                        Text(entry.body, fontSize = 14.sp, color = colors.title)
+                        if (entry.meta.isNotBlank()) {
+                            Text(entry.meta, fontSize = 12.sp, color = colors.subtitle)
+                        }
+                    }
                 }
             }
         }

@@ -14,6 +14,27 @@ class DatabaseAlerts() {
     private val _alerts = mutableStateListOf<Alert>()
     val alerts: List<Alert> get() = _alerts
 
+    init {
+        // Real-time listener syncing every alert from Firestore
+        alertsRef.addSnapshotListener { snapshots, error ->
+            if (error != null) {
+                android.util.Log.e("DB", "alerts listener failed", error)
+                return@addSnapshotListener
+            }
+            if (snapshots == null) return@addSnapshotListener
+            val list = snapshots.documents.mapNotNull { doc ->
+                try {
+                    doc.toObject(Alert::class.java)
+                } catch (e: Exception) {
+                    android.util.Log.e("DB", "could not read alert ${doc.id}", e)
+                    null
+                }
+            }
+            _alerts.clear()
+            _alerts.addAll(list)
+        }
+    }
+
     fun addAlert(alert: Alert){
         _alerts.add(alert)
         alertsRef.document(alert.alertID).set(alert)
