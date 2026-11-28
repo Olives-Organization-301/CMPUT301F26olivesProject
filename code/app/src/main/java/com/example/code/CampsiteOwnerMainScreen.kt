@@ -68,6 +68,7 @@ import androidx.navigation.NavController
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -1420,24 +1421,63 @@ private fun pickDate(context: Context, minDateMillis: Long?, onSelected: (Long) 
     dialog.show()
 }
 
+
+// Following function implemented using claude
+// link: https://claude.ai/share/d8be7657-48d6-449a-b318-31bc2c5f345d
+/* Prompt:
+The notification dialog in campsite owner main screen doesnt work as intended, its supposed to make a new chat message object to every entrant in the waitlist, like whats done in entrant messages screen
+how do i fix this
+* */
 @Composable
 fun NotificationDialog(
     campsite: PreviewCampsite,
     onDismiss: () -> Unit,
     ownerName: String,
     appState: AppState
-){
+) {
+    val context = LocalContext.current
     var alertTitle by remember { mutableStateOf("") }
     var alertBody by remember { mutableStateOf("") }
     var showSentAlerts by remember { mutableStateOf(false) }
-    var sentAlerts by remember { mutableStateOf<List<Alert>>(emptyList()) }
+    val format = remember { SimpleDateFormat("MMM d, h:mm a", Locale.getDefault()) }
 
-    fun CreateAlert(campsite: PreviewCampsite, owner: String, title: String, body: String){
-        for(entrant in campsite.waitingList){
-            val alertID = UUID.randomUUID()
-            val newAlert = Alert(alertID.toString(), title, body, entrant.id, owner)
-            appState.alerts.addAlert(newAlert)
+    // Everyone on this campsite's waitlist. PreviewCampsite.waitingList is always empty,
+    // so read the live Campsite (and its shared lottery, if it belongs to one).
+    fun waitlistEntrantIDs(): List<String> {
+        val live = appState.campsites.campsites.firstOrNull { it.campsiteID == campsite.campsiteID }
+        val own = live?.getWaitingList().orEmpty()
+        val sharedID = live?.sharedLotteryID ?: campsite.sharedLotteryID
+        val shared = sharedID?.let { appState.campsites.sharedLotteries.find(it) }?.entrants.orEmpty()
+        return (own + shared).distinct()
+    }
+
+    // One ChatMessage per entrant, same as the entrant Messages screen expects
+    fun sendToWaitlist(title: String, body: String): Int {
+        val entrantIDs = waitlistEntrantIDs()
+        if (entrantIDs.isEmpty()) return 0
+        val ownerID = appState.userID.orEmpty()
+        val now = System.currentTimeMillis()
+        val text = if (title.isBlank()) body.trim() else "${title.trim()}\n${body.trim()}"
+
+        entrantIDs.forEach { entrantID ->
+            appState.chat.addMessage(
+                ChatMessage(
+                    messageID = UUID.randomUUID().toString(),
+                    campsiteID = campsite.campsiteID,
+                    campsiteName = campsite.name,
+                    sender = ownerName,
+                    timestamp = Date(now).toString(),
+                    text = text,
+                    fromOwner = true,
+                    entrantID = entrantID,
+                    ownerID = ownerID,
+                    automated = false,
+                    type = MESSAGE_TEXT,
+                    sentAt = now
+                )
+            )
         }
+        return entrantIDs.size
     }
 
     AlertDialog(
@@ -1448,14 +1488,13 @@ fun NotificationDialog(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                OutlinedButton(onClick = {
-                    appState.alerts.fetchSentBy(ownerName) { sentAlerts = it }
-                    showSentAlerts = true
-                }) { Text("View sent notifications") }
+                OutlinedButton(onClick = { showSentAlerts = true }) {
+                    Text("View sent notifications")
+                }
                 OutlinedTextField(
                     value = alertTitle,
                     onValueChange = { alertTitle = it },
-                    label = { Text("Title") },
+                    label = { Text("Title (optional)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -1469,11 +1508,17 @@ fun NotificationDialog(
         },
         confirmButton = {
             Button(
+                enabled = alertBody.isNotBlank(),
                 onClick = {
-                    CreateAlert(campsite, ownerName, alertTitle, alertBody)
-                    alertTitle = ""
-                    alertBody = ""
-                    onDismiss()
+                    val count = sendToWaitlist(alertTitle, alertBody)
+                    if (count == 0) {
+                        Toast.makeText(context, "No entrants on the waitlist", Toast.LENGTH_LONG).show()
+                    } else {
+                        Toast.makeText(context, "Sent to $count entrant(s)", Toast.LENGTH_SHORT).show()
+                        alertTitle = ""
+                        alertBody = ""
+                        onDismiss()
+                    }
                 }
             ) {
                 Text("Send Alert")
@@ -1487,17 +1532,45 @@ fun NotificationDialog(
     )
 
     if (showSentAlerts) {
+        // Group the per-entrant copies back into one row per send
+        val entrantNames = appState.entrants.entrants.associate {
+            it.getUserID() to it.name.ifBlank { it.username }
+        }
+        val sent = appState.chat.messages
+            .filter {
+                it.campsiteID == campsite.campsiteID &&
+                        it.ownerID == appState.userID &&
+                        it.fromOwner && !it.automated
+            }
+            .groupBy { it.sentAt to it.text }
+            .map { (key, group) -> Triple(key.first, key.second, group.map { it.entrantID }) }
+            .sortedByDescending { it.first }
+
         AlertDialog(
             onDismissRequest = { showSentAlerts = false },
             title = { Text("Notifications sent") },
             text = {
-                if (sentAlerts.isEmpty()) Text("No notifications have been sent.")
-                else LazyColumn(Modifier.heightIn(max = 360.dp)) {
-                    items(sentAlerts) { alert ->
-                        Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-                            Text(alert.title, fontWeight = FontWeight.Bold)
-                            Text(alert.body)
-                            Text("To: ${alert.recipient}", fontSize = 12.sp, color = Color.Gray)
+                if (sent.isEmpty()) {
+                    Text("No notifications have been sent.")
+                } else {
+                    LazyColumn(Modifier.heightIn(max = 360.dp)) {
+                        items(sent, key = { "${it.first}-${it.second.hashCode()}" }) { (sentAt, text, recipients) ->
+                            Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                                Text(text, fontWeight = FontWeight.Bold)
+                                Text(
+                                    format.format(Date(sentAt)),
+                                    fontSize = 12.sp,
+                                    color = Color.Gray
+                                )
+                                Text(
+                                    "To: " + recipients.joinToString {
+                                        entrantNames[it]?.ifBlank { null } ?: it
+                                    },
+                                    fontSize = 12.sp,
+                                    color = Color.Gray
+                                )
+                            }
+                            HorizontalDivider()
                         }
                     }
                 }
