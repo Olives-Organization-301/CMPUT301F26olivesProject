@@ -13,7 +13,9 @@ import com.google.android.gms.tasks.Tasks
 import com.google.firebase.firestore.DocumentReference
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.QuerySnapshot
+import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.firestore
 import java.time.LocalDateTime
 import kotlin.random.Random
@@ -29,11 +31,12 @@ import kotlin.random.Random
 
 // From Gabe; I edited Campsite Details in order to change the dates of the campsites, so it requires this API (Sorry)
 @RequiresApi(Build.VERSION_CODES.O)
-class DatabaseCampsites {
-    private val db = Firebase.firestore
+class DatabaseCampsites(private val db: FirebaseFirestore = Firebase.firestore) {
     private val campsitesRef = db.collection("campsites")
     private val imagesRef = db.collection("images")
     private val _campsites = mutableStateListOf<Campsite>()
+    internal val sharedLotteries by lazy { SharedLotteryRepository(db) }
+    internal val lotteryDraws by lazy { LotteryDrawRepository(db, ::parseCampsiteDocument, sharedLotteries::parse) }
 
     val campsites: List<Campsite> get() = _campsites
 
@@ -146,7 +149,7 @@ class DatabaseCampsites {
             // Older campsites never saved their lottery dates. Give them the same default as a new
             // campsite (a 7-day lottery starting now) and save it once, so the dates stop changing.
             if (migrateLegacyFields && start == null && end == null) {
-                start = LocalDateTime.now().withNano(0)
+                start = lotteryNow().withNano(0)
                 end = start.plusDays(7)
                 campsitesRef.document(doc.id)
                     .update(
@@ -179,6 +182,10 @@ class DatabaseCampsites {
                 // Fold them into the waiting list and drop the old field once, so it stops existing.
                 val legacyActive = (doc.get("activeLotteryList") as? List<*>)?.filterIsInstance<String>()
                 campsite.setWaitingList((waiting + legacyActive.orEmpty()).distinct())
+                campsite.waitlistCapacity = (doc.get("waitlistCapacity") as? Number)?.toInt()?.takeIf { it > 0 }
+                campsite.lotteryDrawnAt = (doc.get("lotteryDrawnAt") as? Number)?.toLong()
+                campsite.lotteryNotificationsPending = doc.getBoolean("lotteryNotificationsPending") == true
+                campsite.sharedLotteryID = doc.getString("lotteryID")?.takeIf { it.isNotBlank() }
                 if (legacyActive != null && migrateLegacyFields) {
                     val update = mutableMapOf<String, Any>("activeLotteryList" to FieldValue.delete())
                     if (legacyActive.isNotEmpty()) {
@@ -244,13 +251,25 @@ class DatabaseCampsites {
             }
     }
 
-    fun addCampsite(campsite: Campsite): Task<Void> {
+    /**
+     * Creates a campsite and its optional photo. When [saveRulesAsOwnerDefault] is true,
+     * the same batch saves the published rules as the owner's template for new listings.
+     * See [AddEditCampsite] for the Codex prompt that introduced the template.
+     */
+    fun addCampsite(campsite: Campsite, saveRulesAsOwnerDefault: Boolean = false): Task<Void> {
         if (_campsites.none { it.campsiteID == campsite.campsiteID }) {
             _campsites.add(campsite)
         }
         val batch = db.batch()
         val campsiteID = campsite.campsiteID
         batch.set(campsitesRef.document(campsiteID), campsite.toMap())
+        if (saveRulesAsOwnerDefault) {
+            batch.set(
+                db.collection("CampsiteOwners").document(campsite.getOwnerID()),
+                mapOf("defaultCampsiteRules" to campsite.getRules()),
+                SetOptions.merge()
+            )
+        }
         campsite.detailsPhoto()?.takeIf { it.isNotBlank() }?.let { photo ->
             batch.set(
                 campsiteImageRef(campsiteID),
@@ -262,7 +281,8 @@ class DatabaseCampsites {
     }
 
     /** # Database Campsites
-     *  Implementation of US 02.01.02: Saving campsite details provided by the campsite owner.
+     *  Saves the owner's edits to an existing listing, including its published rules.
+     *  The template for new listings is saved by [addCampsite].
      *
      *  Prompt: "US 02.01.02 As a campsite owner, I want to provide campsite details including
      *  name, location, description (amenities), maximum occupancy, map location, optional image, and tags."
@@ -276,18 +296,28 @@ class DatabaseCampsites {
         maxOccupancy: Int,
         latitude: Double?,
         longitude: Double?,
-        tags: List<String>
-    ): Task<Void> = campsitesRef.document(campsiteID).update(
-        mapOf(
+        tags: List<String>,
+        rules: List<String>,
+        availableStayRange: Pair<LocalDateTime, LocalDateTime>? = null,
+    ): Task<Void> {
+        val fields = mutableMapOf<String, Any>(
             "name" to name,
             "description" to description,
             "maxOccupancy" to listOf(maxOccupancy),
             "tags" to tags,
+            "rules" to rules,
             "coordinates" to listOf(
                 Coordinates("Canada", "", location, location, latitude, longitude).toMap()
             )
         )
-    )
+        if (availableStayRange != null) {
+            fields["vacationStartTimes"] = listOf(mapOf(
+                "start" to availableStayRange.first.toString(),
+                "end" to availableStayRange.second.toString()
+            ))
+        }
+        return campsitesRef.document(campsiteID).update(fields)
+    }
 
     /** A null image leaves both fields untouched. An empty image removes the saved photo. */
     fun updateCampsiteListing(campsiteID: String, name: String, image: String?): Task<Void> {
@@ -373,27 +403,28 @@ class DatabaseCampsites {
      *  Conversation: https://claude.ai/share/ae294592-b4fe-497b-86a9-a45c32b331e2
      *  Date: Nov 20, 2026
      */
-    fun addToWaitingList(
+    internal fun addToWaitingList(
         campsite: Campsite,
         entrantID: String,
-        onComplete: (Boolean) -> Unit = {}
+        onComplete: (WaitlistJoinResult) -> Unit = {}
     ) {
         val ref = campsitesRef.document(campsite.campsiteID)
         db.runTransaction { transaction ->
             val current = parseCampsiteDocument(transaction.get(ref), migrateLegacyFields = false)
-                ?: return@runTransaction false
-            if (current.isLotteryDrawn() || current.isReadyToDraw(LocalDateTime.now())) {
-                return@runTransaction false
+                ?: return@runTransaction WaitlistJoinResult.FAILED
+            if (current.sharedLotteryID != null) return@runTransaction WaitlistJoinResult.FAILED
+            val result = current.waitlistJoinResult(entrantID, lotteryNow())
+            if (result == WaitlistJoinResult.JOINED && !current.entrantInList(entrantID)) {
+                transaction.update(ref, "waitingList", FieldValue.arrayUnion(entrantID))
             }
-            transaction.update(ref, "waitingList", FieldValue.arrayUnion(entrantID))
-            true
-        }.addOnSuccessListener { joined ->
-            if (joined) campsite.addEntrant(entrantID)
-            onComplete(joined)
+            result
+        }.addOnSuccessListener { result ->
+            if (result == WaitlistJoinResult.JOINED) campsite.addEntrant(entrantID)
+            onComplete(result)
         }
             .addOnFailureListener { e ->
                 android.util.Log.e("DB", "addToWaitingList failed for ${campsite.campsiteID}", e)
-                onComplete(false)
+                onComplete(WaitlistJoinResult.FAILED)
             }
     }
 
@@ -408,8 +439,17 @@ class DatabaseCampsites {
         entrantID: String,
         onComplete: (Boolean) -> Unit = {}
     ) {
-        campsite.removeEntrant(entrantID)
-        removeFromWaitingList(campsite.campsiteID, entrantID, onComplete)
+        val groupID = campsite.sharedLotteryID
+        if (groupID != null) {
+            sharedLotteries.updateEntry(groupID, entrantID, join = false).addOnCompleteListener {
+                onComplete(it.isSuccessful && it.result == WaitlistJoinResult.JOINED)
+            }
+            return
+        }
+        removeFromWaitingList(campsite.campsiteID, entrantID) { removed ->
+            if (removed) campsite.removeEntrant(entrantID)
+            onComplete(removed)
+        }
     }
 
     /** Same as above, but only needs the campsite's ID (for when the Campsite object isn't loaded). */
@@ -418,10 +458,32 @@ class DatabaseCampsites {
         entrantID: String,
         onComplete: (Boolean) -> Unit = {}
     ) {
-        _campsites.firstOrNull { it.campsiteID == campsiteID }?.removeEntrant(entrantID)
-        campsitesRef.document(campsiteID)
-            .update("waitingList", FieldValue.arrayRemove(entrantID))
-            .addOnSuccessListener { onComplete(true) }
+        val groupID = _campsites.firstOrNull { it.campsiteID == campsiteID }?.sharedLotteryID
+        if (groupID != null) {
+            sharedLotteries.updateEntry(groupID, entrantID, join = false).addOnCompleteListener {
+                onComplete(it.isSuccessful && it.result == WaitlistJoinResult.JOINED)
+            }
+            return
+        }
+        val ref = campsitesRef.document(campsiteID)
+        db.runTransaction { transaction ->
+            val snapshot = transaction.get(ref)
+            val current = parseCampsiteDocument(snapshot, migrateLegacyFields = false)
+                ?: return@runTransaction false
+            if (current.sharedLotteryID != null ||
+                registrationGate(current.getStartDate(), current.getEndDate(), current.isLotteryDrawn(), lotteryNow()) != WaitlistJoinResult.JOINED) {
+                return@runTransaction false
+            }
+            val updates = mutableMapOf<String, Any>("waitingList" to FieldValue.arrayRemove(entrantID))
+            if (snapshot.contains("activeLotteryList")) {
+                updates["activeLotteryList"] = FieldValue.arrayRemove(entrantID)
+            }
+            transaction.update(ref, updates)
+            true
+        }.addOnSuccessListener { removed ->
+            if (removed) _campsites.firstOrNull { it.campsiteID == campsiteID }?.removeEntrant(entrantID)
+            onComplete(removed)
+        }
             .addOnFailureListener { e ->
                 android.util.Log.e("DB", "removeFromWaitingList failed for $campsiteID", e)
                 onComplete(false)
@@ -483,38 +545,27 @@ class DatabaseCampsites {
         }
     }
 
-    internal fun updateLotteryDates(campsiteID: String, ownerID: String, start: LocalDateTime, end: LocalDateTime): Task<Boolean> {
+    /** Saves the dates and optional cap together after checking the live waitlist. */
+    internal fun updateLotteryListing(
+        campsiteID: String,
+        ownerID: String,
+        start: LocalDateTime,
+        end: LocalDateTime,
+        capacity: Int?,
+    ): Task<Boolean> {
         val ref = campsitesRef.document(campsiteID)
         return db.runTransaction { transaction ->
             val campsite = parseCampsiteDocument(transaction.get(ref), migrateLegacyFields = false)
                 ?: return@runTransaction false
-            if (campsite.getOwnerID() != ownerID || campsite.isLotteryDrawn() || !start.isBefore(end)) {
+            if (campsite.getOwnerID() != ownerID || campsite.sharedLotteryID != null ||
+                !campsite.canEditLottery(start, end, capacity, lotteryNow())) {
                 return@runTransaction false
             }
-            transaction.update(ref, "lotteryStartDate", start.toString(), "lotteryEndDate", end.toString())
-            true
-        }
-    }
-
-    /** Commits the draw and its chat messages together, once per campsite. */
-    internal fun drawClosedLottery(campsiteID: String, ownerID: String): Task<Boolean> {
-        val campsiteRef = campsitesRef.document(campsiteID)
-        return db.runTransaction { transaction ->
-            val campsite = parseCampsiteDocument(transaction.get(campsiteRef), migrateLegacyFields = false)
-                ?: return@runTransaction false
-            if (campsite.getOwnerID() != ownerID ||
-                !campsite.isReadyToDraw(LocalDateTime.now())
-            ) return@runTransaction false
-
-            campsite.generateFinalList()
-            transaction.update(campsiteRef, mapOf(
-                "finalList" to campsite.getFinalList(),
-                "locationWinners" to campsite.getLocationWinners()
+            transaction.update(ref, mapOf(
+                "lotteryStartDate" to start.toString(),
+                "lotteryEndDate" to end.toString(),
+                "waitlistCapacity" to capacity
             ))
-            lotteryResultMessages(campsite, System.currentTimeMillis()).forEach { message ->
-                val ref = db.collection("messages").document()
-                transaction.set(ref, message.copy(messageID = ref.id))
-            }
             true
         }
     }
@@ -526,9 +577,35 @@ class DatabaseCampsites {
             onResult(if (error != null) null else snapshot?.documents?.map { doc ->
                 Review(doc.id, doc.getString("entrantID").orEmpty(), campsiteID,
                     doc.getLong("rating")?.toInt() ?: 0, doc.getString("review").orEmpty(),
-                    doc.getString("authorName").orEmpty())
+                    doc.getString("authorName").orEmpty()).apply {
+                    @Suppress("UNCHECKED_CAST")
+                    upvotedEntrants = (doc.get("upvotedEntrants") as? List<String>).orEmpty().toMutableList()
+                    @Suppress("UNCHECKED_CAST")
+                    downvotedEntrants = (doc.get("downvotedEntrants") as? List<String>).orEmpty().toMutableList()
+                }
             })
         }
+
+    /** Recomputes the campsite's rating (out of 5) as the mean of all its reviews and saves it.
+     *  Reviews store their rating out of 10, so each one is halved. */
+    internal fun refreshCampsiteRating(campsiteID: String): Task<Void> =
+        reviews(campsiteID).get().continueWithTask { task ->
+            val ratings = task.result.documents.mapNotNull { it.getLong("rating") }.filter { it > 0 }
+            val average = if (ratings.isEmpty()) null
+                else Math.round(ratings.average() / 2.0 * 10.0) / 10f // one decimal place
+            _campsites.firstOrNull { it.campsiteID == campsiteID }?.setRating(average)
+            campsitesRef.document(campsiteID).update("rating", average)
+        }
+
+    /** Sets this entrant's vote on a review: 1 = upvote, -1 = downvote, 0 = remove their vote.
+     *  An entrant can only be in one of the two lists at a time. */
+    internal fun voteOnReview(review: Review, entrantID: String, vote: Int): Task<Void> {
+        val ref = reviews(review.campsiteID).document(review.reviewID)
+        return ref.update(mapOf(
+            "upvotedEntrants" to if (vote == 1) FieldValue.arrayUnion(entrantID) else FieldValue.arrayRemove(entrantID),
+            "downvotedEntrants" to if (vote == -1) FieldValue.arrayUnion(entrantID) else FieldValue.arrayRemove(entrantID)
+        ))
+    }
 
     internal fun postReview(review: Review): Task<Boolean> {
         val ref = reviews(review.campsiteID).document(review.entrantID)
@@ -537,9 +614,15 @@ class DatabaseCampsites {
             transaction.set(ref, mapOf(
                 "entrantID" to review.entrantID, "authorName" to review.authorName,
                 "rating" to review.rating, "review" to review.review,
+                "upvotedEntrants" to emptyList<String>(), "downvotedEntrants" to emptyList<String>(),
                 "createdAt" to FieldValue.serverTimestamp()
             ))
             true
+        }.continueWithTask { posted ->
+            // Once the review is saved, update the campsite's aggregate rating to include it
+            if (posted.isSuccessful && posted.result == true) {
+                refreshCampsiteRating(review.campsiteID).continueWith { true }
+            } else posted
         }
     }
 

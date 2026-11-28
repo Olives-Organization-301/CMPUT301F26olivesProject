@@ -1,6 +1,10 @@
 package com.example.code
 
 import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.Instant
+import java.time.ZoneOffset
 import kotlinx.coroutines.delay
 import java.time.format.DateTimeParseException
 import android.Manifest
@@ -16,6 +20,7 @@ import android.provider.Settings
 import androidx.annotation.RequiresApi
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.app.NotificationCompat
@@ -26,6 +31,7 @@ import com.example.code.classes.Campsite
 import com.example.code.classes.ChatMessage
 import com.example.code.classes.Entrant
 import androidx.core.content.edit
+import kotlin.time.Duration.Companion.milliseconds
 
 // Kinds of chat messages
 // A Normal Chat Message
@@ -53,8 +59,74 @@ internal fun lotteryResultMessages(campsite: Campsite, now: Long): List<ChatMess
         }
     }
 
+@RequiresApi(Build.VERSION_CODES.O)
 internal fun Campsite.isReadyToDraw(now: java.time.LocalDateTime): Boolean =
     getEndDate()?.let { !now.isBefore(it) } == true && !isLotteryDrawn()
+
+/**
+ * Listing dates have no offset. Use Alberta's UTC−06:00 from November 2026 even on
+ * devices whose time zone database still switches Edmonton back to UTC−07:00.
+ */
+@RequiresApi(Build.VERSION_CODES.O)
+internal fun lotteryNow(now: Instant = Instant.now()): LocalDateTime {
+    val zone = if (now.isBefore(Instant.parse("2026-11-01T06:00:00Z"))) {
+        ZoneId.of("America/Edmonton")
+    } else {
+        ZoneOffset.ofHours(-6)
+    }
+    return LocalDateTime.ofInstant(now, zone)
+}
+
+@RequiresApi(Build.VERSION_CODES.O)
+@Composable
+internal fun registrationClock() = produceState(lotteryNow()) {
+    while (true) {
+        delay(1_000)
+        value = lotteryNow()
+    }
+}
+
+internal enum class WaitlistJoinResult { JOINED, FULL, NOT_OPEN, CLOSED, FAILED }
+
+/**
+ * US 02.04.03. Registration includes its opening instant and excludes its closing instant.
+ * Both listing types use this check for the entry UI and the join transaction.
+ * See [SharedLotteryRepository] for the original Codex prompts.
+ */
+internal fun registrationGate(
+    start: LocalDateTime?,
+    end: LocalDateTime?,
+    drawn: Boolean,
+    now: LocalDateTime,
+): WaitlistJoinResult = when {
+    drawn || end?.let { !now.isBefore(it) } == true -> WaitlistJoinResult.CLOSED
+    start?.let { now.isBefore(it) } == true -> WaitlistJoinResult.NOT_OPEN
+    else -> WaitlistJoinResult.JOINED
+}
+
+@RequiresApi(Build.VERSION_CODES.O)
+internal fun Campsite.waitlistJoinResult(entrantID: String, now: LocalDateTime): WaitlistJoinResult =
+    waitlistAdmission(registrationGate(getStartDate(), getEndDate(), isLotteryDrawn(), now),
+        getWaitingList(), waitlistCapacity, entrantID)
+
+internal fun waitlistAdmission(
+    gate: WaitlistJoinResult,
+    entrants: List<String>,
+    capacity: Int?,
+    entrantID: String,
+): WaitlistJoinResult = when {
+    gate != WaitlistJoinResult.JOINED -> gate
+    entrantID in entrants -> WaitlistJoinResult.JOINED
+    capacity != null && entrants.size >= capacity -> WaitlistJoinResult.FULL
+    else -> WaitlistJoinResult.JOINED
+}
+
+@RequiresApi(Build.VERSION_CODES.O)
+internal fun Campsite.canEditLottery(start: LocalDateTime, end: LocalDateTime, capacity: Int?, now: LocalDateTime): Boolean =
+    !isLotteryDrawn() && getEndDate()?.let { now.isBefore(it) } != false &&
+        start.isBefore(end) && now.isBefore(end) &&
+        (getWaitingList().isEmpty() || (getStartDate()?.let { start == it } ?: !now.isBefore(start))) &&
+        (capacity == null || capacity > 0 && capacity >= getWaitingList().size)
 
 // ---------------------------------------------------------------------------------------------
 // Confirming / declining a won location (the two buttons in ReserveDatesDialog)
@@ -77,11 +149,13 @@ internal fun latestReservation(messages: List<ChatMessage>, locationIndex: Int):
             (it.type == RESERVATION_CONFIRMED || it.type == RESERVATION_DECLINED)
     }.maxByOrNull { it.sentAt }
 
+@RequiresApi(Build.VERSION_CODES.O)
 internal fun ChatMessage.reservationDates(): List<LocalDate> =
     stayDates.mapNotNull { date ->
         try { LocalDate.parse(date) } catch (_: DateTimeParseException) { null }
     }
 
+@RequiresApi(Build.VERSION_CODES.O)
 internal fun reservationHasEnded(messages: List<ChatMessage>, today: LocalDate): Boolean {
     val confirmed = messages.filter { it.locationIndex >= 0 }
         .map { it.locationIndex }.distinct().mapNotNull { latestReservation(messages, it) }
@@ -93,6 +167,7 @@ internal fun reservationHasEnded(messages: List<ChatMessage>, today: LocalDate):
 }
 
 /** Reconciles expired stays while the entrant is signed in, including after a relaunch. */
+@RequiresApi(Build.VERSION_CODES.O)
 @Composable
 internal fun ReservationHistoryEffect(appState: AppState) {
     val entrantID = appState.userID
@@ -111,17 +186,19 @@ internal fun ReservationHistoryEffect(appState: AppState) {
                     appState.entrants.archiveReservation(entrant, id, revision)
                 }
             }
-            delay(30_000)
+            delay(30_000.milliseconds)
         }
     }
 }
 
+@RequiresApi(Build.VERSION_CODES.O)
 fun confirmReservation(
     appState: AppState,
     campsite: Campsite,
     entrant: Entrant,
     locationIndex: Int,
     dates: List<LocalDate>,
+    acknowledgedRules: List<String>,
     onComplete: (Boolean) -> Unit
 ) {
     val storedDates = dates.distinct().sorted().map(LocalDate::toString)
@@ -129,7 +206,7 @@ fun confirmReservation(
         campsite, entrant.getUserID(), RESERVATION_CONFIRMED, locationIndex,
         System.currentTimeMillis(), "You reserved spots for location ${locationIndex + 1} for ${campsite.getName()}"
     ).copy(stayDates = storedDates)
-    appState.entrants.confirmStay(entrant, message, onComplete)
+    appState.entrants.confirmStay(entrant, message, acknowledgedRules, onComplete)
 }
 
 /** "Decline reservation": sends the automated "You declined..." message (which also becomes a

@@ -18,6 +18,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
@@ -165,15 +166,15 @@ class EntrantMessagesTest {
         every { entrants.searchEntrants(any(), any()) } answers {
             secondArg<(Entrant?) -> Unit>()(if (firstArg<String>() == entrant.getUserID()) entrant else null)
         }
-        every { entrants.confirmStay(any(), any(), any()) } answers {
+        every { entrants.confirmStay(any(), any(), any(), any()) } answers {
             val current = firstArg<Entrant>()
             val message = secondArg<ChatMessage>()
             val latest = latestReservation(chat.conversation(message.campsiteID, message.entrantID), message.locationIndex)
-            if (latest?.stayDates != message.stayDates) chat.addMessage(message)
+            if (latest?.stayDates != message.stayDates) chat.addMessage(message.copy(rulesAcknowledged = true))
             current.removeCampsite(ACTIVE_CAMPSITES, message.campsiteID)
             current.removeCampsite(WAITING_LIST, message.campsiteID)
             current.addCampsite(RESERVED_CAMPSITES, message.campsiteID)
-            thirdArg<(Boolean) -> Unit>()(true)
+            arg<(Boolean) -> Unit>(3)(true)
         }
         every { entrants.moveEntrantCampsite(any(), any(), any(), any(), any()) } answers {
             val e = firstArg<Entrant>()
@@ -356,6 +357,7 @@ class EntrantMessagesTest {
         composeTestRule.onNodeWithTag("reserveDay_2026-12-12").performClick()
         composeTestRule.onNodeWithText("2 day(s) selected").assertIsDisplayed()
         composeTestRule.onNodeWithText("Confirm reservation").assertIsEnabled().performClick()
+        composeTestRule.onNodeWithText("Agree").performClick()
         composeTestRule.waitForIdle()
     }
 
@@ -493,6 +495,7 @@ class EntrantMessagesTest {
         composeTestRule.onNodeWithTag("reserveDay_2026-12-12").performClick()
         composeTestRule.onNodeWithText("2 day(s) selected").assertIsDisplayed()
         composeTestRule.onNodeWithText("Confirm reservation").performClick()
+        composeTestRule.onNodeWithText("Agree").performClick()
         composeTestRule.waitForIdle()
 
         // Location 1 is picked, location 2 is still open
@@ -504,6 +507,35 @@ class EntrantMessagesTest {
         // Reserving moved the campsite into the entrant's Reserved Campsites
         assertTrue("c_2" in entrant.getCampsiteLists()[RESERVED_CAMPSITES].orEmpty())
         assertFalse("c_2" in entrant.getCampsiteLists()[ACTIVE_CAMPSITES].orEmpty())
+    }
+
+    @Test
+    fun singleCampsiteBookingRequiresRuleAcknowledgement() {
+        val lastRule = "Pack out all waste."
+        val rules = List(30) { index -> "Follow the site rules for area ${index + 1}." } + lastRule
+        c4.setRules(rules)
+        val entrant = entrantExample()
+        val state = fakeAppState(entrant)
+        openMessages(state)
+        openChat(c4)
+        openCalendar(1)
+        composeTestRule.onNodeWithTag("reserveDay_2026-12-11").performClick()
+        composeTestRule.onNodeWithText("Confirm reservation").performClick()
+        composeTestRule.onNodeWithText("Agree").assertIsNotEnabled()
+        composeTestRule.onNodeWithText("Decline").performClick()
+
+        composeTestRule.onNodeWithText("1 day(s) selected").assertIsDisplayed()
+        verify(exactly = 0) { state.entrants.confirmStay(any(), any(), any(), any()) }
+        assertFalse(inList(entrant, RESERVED_CAMPSITES, c4))
+
+        composeTestRule.onNodeWithText("Confirm reservation").performClick()
+        composeTestRule.onNodeWithText(lastRule).performScrollTo()
+        composeTestRule.onNodeWithText("Agree").assertIsEnabled().performClick()
+        composeTestRule.onNodeWithText(reservedText(1, c4)).assertIsDisplayed()
+        verify(exactly = 1) { state.entrants.confirmStay(entrant, any(), eq(rules), any()) }
+        assertTrue(state.chat.messages.any {
+            it.type == RESERVATION_CONFIRMED && it.campsiteID == c4.campsiteID && it.rulesAcknowledged
+        })
     }
 
     // US 01.10.01, US 01.03.02
@@ -728,6 +760,7 @@ class EntrantMessagesTest {
         composeTestRule.onNodeWithText("Change Dates").performClick()
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithText("Confirm reservation").performClick()
+        composeTestRule.onNodeWithText("Agree").performClick()
         composeTestRule.waitForIdle()
         composeTestRule.onAllNodesWithText(reservedText(1, c4)).assertCountEquals(1)
         verify(exactly = 1) {

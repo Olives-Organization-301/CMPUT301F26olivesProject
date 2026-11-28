@@ -14,10 +14,12 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.navigation.compose.rememberNavController
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -36,6 +38,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import java.time.LocalDate
 import java.time.LocalDateTime
+import com.google.android.gms.tasks.Tasks
+import org.junit.Assert.assertEquals
 import java.time.YearMonth
 import kotlin.math.abs
 
@@ -76,7 +80,7 @@ class EntrantCampsiteDetailsTest {
         }
         every { campsites.addToWaitingList(any<Campsite>(), any(), any()) } answers {
             firstArg<Campsite>().addEntrant(secondArg())
-            thirdArg<(Boolean) -> Unit>()(true)
+            thirdArg<(WaitlistJoinResult) -> Unit>()(WaitlistJoinResult.JOINED)
         }
         // Called from the details screen (has the Campsite object)
         every { campsites.removeFromWaitingList(any<Campsite>(), any(), any()) } answers {
@@ -150,7 +154,8 @@ class EntrantCampsiteDetailsTest {
         id: String,
         name: String,
         country: String,
-        lotteryStart: LocalDateTime
+        lotteryStart: LocalDateTime,
+        scheduled: Boolean = false,
     ) = Campsite(
         name = name,
         ownerID = "owner_1",
@@ -159,7 +164,7 @@ class EntrantCampsiteDetailsTest {
         price = 50.0f,
         rating = 4.5f,
         coordinates = mutableListOf(Coordinates(country, "", "", "")),
-        lotteryStartDate = lotteryStart,
+        lotteryStartDate = lotteryStart.takeIf { scheduled || !it.isAfter(lotteryNow()) },
         lotteryEndDate = lotteryStart.plusDays(5)
     )
 
@@ -220,9 +225,13 @@ class EntrantCampsiteDetailsTest {
 
     // ---------- Assertion helpers ----------
 
-    // Join → the success popup is the only popup, then close it
-    private fun joinAndCheckPopup(name: String) {
+    private fun joinAndCheckPopup(name: String, lastRule: String? = null) {
         composeTestRule.onNodeWithText("Join Waiting List").performClick()
+        if (lastRule != null) {
+            composeTestRule.onNodeWithText("Agree").assertIsNotEnabled()
+            composeTestRule.onNodeWithText(lastRule).performScrollTo()
+        }
+        composeTestRule.onNodeWithText("Agree").performClick()
         composeTestRule.waitForIdle()
 
         composeTestRule.onNodeWithText("You're on the waiting list!").assertIsDisplayed()
@@ -269,6 +278,74 @@ class EntrantCampsiteDetailsTest {
     }
 
     // ---------- Tests ----------
+
+    @Test
+    fun upcomingRegistrationShowsTheOpeningDateAndCannotBeJoined() {
+        val opens = lotteryNow().plusDays(1)
+        val site = testSite("upcoming", "Banff Upcoming", "Canada", opens, scheduled = true)
+        val user = userTest()
+        val state = fakeAppState(user, listOf(site))
+        startApp(state)
+        openCampsite("Banff", site.getName())
+
+        composeTestRule.onNodeWithText("Registration not open").assertIsNotEnabled()
+        composeTestRule.onNodeWithText("Registration opens ${opens.toLocalDate()} (Alberta time)").assertIsDisplayed()
+        verify(exactly = 0) { state.campsites.addToWaitingList(site, any(), any()) }
+    }
+
+    @Test
+    fun enteringASharedLotteryFromOneCampsiteAlsoRegistersOnTheOther() {
+        val user = userTest()
+        val previousEntries = user.getCampsiteLists()[ACTIVE_CAMPSITES].orEmpty().toList()
+        val sites = allCampsites()
+        val pine = sites[0].apply { sharedLotteryID = "shared" }
+        val cedar = sites[2].apply { sharedLotteryID = "shared" }
+        val now = lotteryNow()
+        var listing = SharedLottery(
+            "shared", "owner_1", listOf(pine.campsiteID, cedar.campsiteID),
+            now.minusDays(1), now.plusDays(2), 2, 1, emptyList(), emptyList(), false, emptyMap()
+        )
+        val state = fakeAppState(user, sites)
+        val shared = mockk<SharedLotteryRepository>()
+        every { state.campsites.sharedLotteries } returns shared
+        every { shared.find("shared") } answers { listing }
+        every { shared.updateEntry("shared", user.getUserID(), true) } answers {
+            listing = listing.copy(entrants = listOf(user.getUserID()))
+            Tasks.forResult(WaitlistJoinResult.JOINED)
+        }
+        startApp(state)
+        openCampsite("Yosemite", cedar.getName())
+        composeTestRule.onNodeWithText("Join Shared Lottery").performClick()
+        composeTestRule.onNodeWithText("Agree").performClick()
+        composeTestRule.onNodeWithText("OK").performClick()
+        closeDetails()
+        openCampsite("Banff", pine.getName())
+
+        composeTestRule.onNodeWithText("Leave Active Lottery").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Waitlist: 1/2").assertIsDisplayed()
+        composeTestRule.runOnIdle {
+            assertEquals(previousEntries + pine.campsiteID, user.getCampsiteLists()[ACTIVE_CAMPSITES])
+            verify(exactly = 1) { shared.updateEntry("shared", user.getUserID(), true) }
+            verify(exactly = 0) { state.campsites.addToWaitingList(any(), any(), any()) }
+        }
+    }
+
+    @Test
+    fun fullWaitlistShowsCapacityAndDisablesJoining() {
+        val user = userTest()
+        val sites = allCampsites()
+        val site = sites[0].apply {
+            waitlistCapacity = 1
+            addEntrant("already-registered")
+        }
+        val state = fakeAppState(user, sites)
+        startApp(state)
+        openCampsite("Banff", site.getName())
+
+        composeTestRule.onNodeWithText("Waitlist: 1/1").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Waitlist is full").assertIsNotEnabled()
+        verify(exactly = 0) { state.campsites.addToWaitingList(site, any(), any()) }
+    }
     // Every test joins two campsites: Banff (c_1) and Yosemite (c_3).
     // Banff is the one that gets left; Yosemite must never be touched.
 
@@ -280,6 +357,8 @@ class EntrantCampsiteDetailsTest {
         val user = userTest()
         val sites = allCampsites()
         val banff = sites[0]
+        val lastRule = "Take all of your rubbish with you."
+        banff.setRules(List(30) { "Keep noise down at night." } + lastRule)
         val yosemite = sites[2]
         val appState = fakeAppState(user, sites)
         startApp(appState)
@@ -291,7 +370,12 @@ class EntrantCampsiteDetailsTest {
         composeTestRule.onNodeWithText("Join Active Lottery", substring = true).assertDoesNotExist()
         composeTestRule.onNodeWithText("Leave Waiting List").assertDoesNotExist()
 
-        joinAndCheckPopup(banff.getName())
+        composeTestRule.onNodeWithText("Join Waiting List").performClick()
+        composeTestRule.onNodeWithText("Decline").performClick()
+        verify(exactly = 0) { appState.campsites.addToWaitingList(banff, any(), any()) }
+        assertNotJoined(user, banff)
+
+        joinAndCheckPopup(banff.getName(), lastRule)
         closeDetails()
         joinFromSearch("Yosemite", yosemite)
 
@@ -656,6 +740,7 @@ class EntrantCampsiteDetailsTest {
         composeTestRule.onNodeWithText("Join Waiting List").assertDoesNotExist()
 
         composeTestRule.onNodeWithText("Join Active Lottery").performClick()
+        composeTestRule.onNodeWithText("Agree").performClick()
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithText("You're in the active lottery!").assertIsDisplayed()
         composeTestRule.onNodeWithText("OK").performClick()
